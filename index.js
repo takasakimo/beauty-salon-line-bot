@@ -28,6 +28,8 @@ pgClient.connect()
 
 // 静的ファイルの提供（LIFF用） - 最初に設定
 app.use('/liff', express.static(path.join(__dirname, 'liff')));
+// ルートパスでもLIFFにアクセスできるように
+app.use('/', express.static(path.join(__dirname, 'liff')));
 
 // CORSヘッダー設定（LIFF用）
 app.use((req, res, next) => {
@@ -334,8 +336,8 @@ app.get('/api/staff/:id', async (req, res) => {
     }
 });
 
-// ルートパス
-app.get('/', (req, res) => {
+// テスト用エンドポイント
+app.get('/test', (req, res) => {
     res.send('Beauty Salon LINE Bot with LIFF is running!');
 });
 
