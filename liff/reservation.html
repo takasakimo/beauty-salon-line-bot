@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>予約 - らくポチビューティー</title>
+    
+    <!-- LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/reservation.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ローディング画面 -->
+    <div id="loading" class="loading-screen">
+        <div class="spinner"></div>
+        <p>読み込み中...</p>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="header">
+        <button class="back-button" onclick="history.back()">←</button>
+        <h1 class="header-title">予約</h1>
+        <div class="header-spacer"></div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main id="main-content" class="main-content" style="display: none;">
+        <!-- ステップインジケーター -->
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <span class="step-number">1</span>
+                <span class="step-label">メニュー</span>
+            </div>
+            <div class="step" id="step2">
+                <span class="step-number">2</span>
+                <span class="step-label">スタッフ</span>
+            </div>
+            <div class="step" id="step3">
+                <span class="step-number">3</span>
+                <span class="step-label">日時</span>
+            </div>
+            <div class="step" id="step4">
+                <span class="step-number">4</span>
+                <span class="step-label">確認</span>
+            </div>
+        </div>
+
+        <!-- ステップ1: メニュー選択 -->
+        <div id="menu-selection" class="reservation-step">
+            <h2>メニューを選択</h2>
+            <div id="menu-list" class="menu-list">
+                <!-- メニューがここに動的に追加されます -->
+            </div>
+        </div>
+
+        <!-- ステップ2: スタッフ選択 -->
+        <div id="staff-selection" class="reservation-step" style="display: none;">
+            <h2>スタッフを選択</h2>
+            <div id="staff-list" class="staff-list">
+                <!-- スタッフがここに動的に追加されます -->
+            </div>
+        </div>
+
+        <!-- ステップ3: 日時選択 -->
+        <div id="datetime-selection" class="reservation-step" style="display: none;">
+            <h2>日時を選択</h2>
+            
+            <div class="date-selector">
+                <label>日付を選択</label>
+                <input type="date" id="reservation-date" min="" max="">
+            </div>
+
+            <div class="time-selector" id="time-selector" style="display: none;">
+                <label>時間を選択</label>
+                <div id="time-slots" class="time-slots">
+                    <!-- 時間スロットがここに動的に追加されます -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ステップ4: 確認画面 -->
+        <div id="confirmation" class="reservation-step" style="display: none;">
+            <h2>予約内容の確認</h2>
+            
+            <div class="confirmation-card">
+                <div class="confirmation-item">
+                    <span class="confirmation-label">メニュー：</span>
+                    <span id="confirm-menu"></span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">料金：</span>
+                    <span id="confirm-price"></span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">所要時間：</span>
+                    <span id="confirm-duration"></span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">スタッフ：</span>
+                    <span id="confirm-staff"></span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">日時：</span>
+                    <span id="confirm-datetime"></span>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="confirmReservation()">予約を確定する</button>
+            <button class="btn btn-secondary" onclick="goToStep(3)">戻る</button>
+        </div>
+
+        <!-- 完了画面 -->
+        <div id="completion" class="reservation-step" style="display: none;">
+            <div class="completion-container">
+                <div class="completion-icon">✅</div>
+                <h2>予約が完了しました！</h2>
+                <p class="completion-message">
+                    ご予約ありがとうございます。<br>
+                    予約内容はLINEメッセージでもお送りしました。
+                </p>
+                <div id="completion-details" class="confirmation-card">
+                    <!-- 予約詳細がここに表示されます -->
+                </div>
+                <button class="btn btn-primary" onclick="window.location.href='./index.html'">ホームに戻る</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script src="./js/liff-init.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/reservation.js"></script>
+</body>
+</html>
