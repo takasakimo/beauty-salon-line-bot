@@ -30,6 +30,8 @@ pgClient.connect()
 app.use('/liff', express.static(path.join(__dirname, 'liff')));
 // ルートパスでもLIFFにアクセスできるように
 app.use('/', express.static(path.join(__dirname, 'liff')));
+// 管理画面用
+app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
 // CORSヘッダー設定（LIFF用）
 app.use((req, res, next) => {
@@ -333,6 +335,136 @@ app.get('/api/staff/:id', async (req, res) => {
     } catch (error) {
         console.error('Error fetching staff:', error);
         res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ===========================
+// 管理画面用APIエンドポイント
+// ===========================
+
+// 管理画面用：全顧客取得
+app.get('/api/admin/customers', async (req, res) => {
+    try {
+        const query = 'SELECT * FROM customers ORDER BY registered_date DESC';
+        const result = await pgClient.query(query);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching all customers:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// 管理画面用：全予約取得（日付フィルター付き）
+app.get('/api/admin/reservations', async (req, res) => {
+    try {
+        const { date } = req.query;
+        let query = `
+            SELECT r.*, c.real_name as customer_name, m.name as menu_name, m.price, m.duration, s.name as staff_name
+            FROM reservations r
+            LEFT JOIN customers c ON r.customer_id = c.line_user_id
+            JOIN menus m ON r.menu_id = m.menu_id
+            JOIN staff s ON r.staff_id = s.staff_id
+        `;
+        
+        if (date) {
+            query += ` WHERE DATE(r.reservation_date) = $1`;
+            query += ` ORDER BY r.reservation_date ASC`;
+            const result = await pgClient.query(query, [date]);
+            res.json(result.rows);
+        } else {
+            query += ` ORDER BY r.reservation_date DESC`;
+            const result = await pgClient.query(query);
+            res.json(result.rows);
+        }
+    } catch (error) {
+        console.error('Error fetching admin reservations:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// 管理画面用：統計データ取得
+app.get('/api/admin/statistics', async (req, res) => {
+    try {
+        // 顧客数
+        const customerQuery = 'SELECT COUNT(*) as total FROM customers';
+        const customerResult = await pgClient.query(customerQuery);
+        
+        // 今月の売上
+        const salesQuery = `
+            SELECT SUM(m.price) as total
+            FROM reservations r
+            JOIN menus m ON r.menu_id = m.menu_id
+            WHERE r.status = 'confirmed'
+            AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
+        `;
+        const salesResult = await pgClient.query(salesQuery);
+        
+        res.json({
+            totalCustomers: parseInt(customerResult.rows[0].total),
+            monthlySales: salesResult.rows[0].total || 0
+        });
+    } catch (error) {
+        console.error('Error fetching statistics:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// 管理画面用：メニュー更新
+app.put('/api/menus/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, price, duration } = req.body;
+        
+        const updateQuery = `
+            UPDATE menus 
+            SET name = $2, price = $3, duration = $4
+            WHERE menu_id = $1
+            RETURNING *
+        `;
+        const result = await pgClient.query(updateQuery, [id, name, price, duration]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Menu not found' });
+        }
+        
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error updating menu:', error);
+        res.status(500).json({ error: 'Update failed' });
+    }
+});
+
+// 管理画面用：メニュー追加
+app.post('/api/menus', async (req, res) => {
+    try {
+        const { name, price, duration } = req.body;
+        
+        const insertQuery = `
+            INSERT INTO menus (name, price, duration)
+            VALUES ($1, $2, $3)
+            RETURNING *
+        `;
+        const result = await pgClient.query(insertQuery, [name, price, duration]);
+        
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error creating menu:', error);
+        res.status(500).json({ error: 'Creation failed' });
+    }
+});
+
+// 管理画面用：メニュー削除
+app.delete('/api/menus/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const deleteQuery = 'DELETE FROM menus WHERE menu_id = $1';
+        await pgClient.query(deleteQuery, [id]);
+        
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error deleting menu:', error);
+        res.status(500).json({ error: 'Deletion failed' });
     }
 });
 

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>予約管理 - らくポチビューティー管理画面</title>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/admin-common.css">
+    <link rel="stylesheet" href="./css/reservations.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- サイドバー -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>らくポチビューティー</h2>
+            <p>管理画面</p>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="./dashboard.html" class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span>ダッシュボード</span>
+            </a>
+            <a href="./reservations.html" class="nav-item active">
+                <span class="nav-icon">📅</span>
+                <span>予約管理</span>
+            </a>
+            <a href="./customers.html" class="nav-item">
+                <span class="nav-icon">👥</span>
+                <span>顧客管理</span>
+            </a>
+            <a href="./menus.html" class="nav-item">
+                <span class="nav-icon">💇‍♀️</span>
+                <span>メニュー管理</span>
+            </a>
+            <a href="./staff.html" class="nav-item">
+                <span class="nav-icon">👨‍💼</span>
+                <span>スタッフ管理</span>
+            </a>
+            <a href="./analytics.html" class="nav-item">
+                <span class="nav-icon">📈</span>
+                <span>売上分析</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button onclick="logout()" class="btn btn-logout">
+                ログアウト
+            </button>
+        </div>
+    </aside>
+    
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+        <!-- ヘッダー -->
+        <header class="content-header">
+            <h1>予約管理</h1>
+            <div class="header-actions">
+                <span id="current-date"></span>
+                <button class="btn btn-primary" onclick="openNewReservationModal()">
+                    + 新規予約登録
+                </button>
+            </div>
+        </header>
+        
+        <!-- 予約管理コンテンツ -->
+        <div class="reservation-management">
+            <!-- ビュー切り替え -->
+            <div class="view-switcher">
+                <button class="view-btn active" onclick="switchView('calendar')">
+                    📅 カレンダー表示
+                </button>
+                <button class="view-btn" onclick="switchView('list')">
+                    📋 リスト表示
+                </button>
+            </div>
+            
+            <!-- 日付選択 -->
+            <div class="date-navigation">
+                <button class="btn btn-secondary" onclick="previousDate()">←</button>
+                <input type="date" id="selected-date" onchange="loadReservations()">
+                <button class="btn btn-secondary" onclick="nextDate()">→</button>
+                <button class="btn btn-secondary" onclick="goToToday()">今日</button>
+            </div>
+            
+            <!-- カレンダービュー -->
+            <div id="calendar-view" class="view-container">
+                <div class="time-schedule">
+                    <div class="time-header">
+                        <div class="time-column">時間</div>
+                        <div class="staff-column">田中美香</div>
+                        <div class="staff-column">佐藤雅子</div>
+                        <div class="staff-column">山田花子</div>
+                    </div>
+                    <div id="time-slots" class="time-slots">
+                        <!-- タイムスロットが動的に生成されます -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- リストビュー -->
+            <div id="list-view" class="view-container" style="display: none;">
+                <div class="filter-bar">
+                    <select id="status-filter" onchange="filterReservations()">
+                        <option value="all">すべてのステータス</option>
+                        <option value="confirmed">確定</option>
+                        <option value="cancelled">キャンセル</option>
+                        <option value="completed">完了</option>
+                    </select>
+                    <select id="staff-filter" onchange="filterReservations()">
+                        <option value="all">すべてのスタッフ</option>
+                        <option value="1">田中美香</option>
+                        <option value="2">佐藤雅子</option>
+                        <option value="3">山田花子</option>
+                    </select>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>予約ID</th>
+                                <th>日時</th>
+                                <th>顧客名</th>
+                                <th>メニュー</th>
+                                <th>スタッフ</th>
+                                <th>料金</th>
+                                <th>ステータス</th>
+                                <th>アクション</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reservation-list">
+                            <tr>
+                                <td colspan="8" class="text-center">データを読み込み中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- 新規予約モーダル -->
+    <div id="new-reservation-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>新規予約登録</h2>
+                <button class="modal-close" onclick="closeNewReservationModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="reservation-form">
+                    <div class="form-group">
+                        <label for="customer-select">顧客 <span class="required">*</span></label>
+                        <select id="customer-select" required>
+                            <option value="">選択してください</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="menu-select">メニュー <span class="required">*</span></label>
+                            <select id="menu-select" required>
+                                <option value="">選択してください</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="staff-select">スタッフ <span class="required">*</span></label>
+                            <select id="staff-select" required>
+                                <option value="">選択してください</option>
+                                <option value="1">田中美香</option>
+                                <option value="2">佐藤雅子</option>
+                                <option value="3">山田花子</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="reservation-date">日付 <span class="required">*</span></label>
+                            <input type="date" id="reservation-date" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="reservation-time">時間 <span class="required">*</span></label>
+                            <select id="reservation-time" required>
+                                <option value="">選択してください</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="reservation-notes">備考</label>
+                        <textarea id="reservation-notes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeNewReservationModal()">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveReservation()">予約登録</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="./js/admin-common.js"></script>
+    <script src="./js/reservations.js"></script>
+</body>
+</html>

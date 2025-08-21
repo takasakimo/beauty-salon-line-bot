@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メニュー管理 - らくポチビューティー管理画面</title>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/admin-common.css">
+    <link rel="stylesheet" href="./css/menus.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- サイドバー -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>らくポチビューティー</h2>
+            <p>管理画面</p>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="./dashboard.html" class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span>ダッシュボード</span>
+            </a>
+            <a href="./reservations.html" class="nav-item">
+                <span class="nav-icon">📅</span>
+                <span>予約管理</span>
+            </a>
+            <a href="./customers.html" class="nav-item">
+                <span class="nav-icon">👥</span>
+                <span>顧客管理</span>
+            </a>
+            <a href="./menus.html" class="nav-item active">
+                <span class="nav-icon">💇‍♀️</span>
+                <span>メニュー管理</span>
+            </a>
+            <a href="./staff.html" class="nav-item">
+                <span class="nav-icon">👨‍💼</span>
+                <span>スタッフ管理</span>
+            </a>
+            <a href="./analytics.html" class="nav-item">
+                <span class="nav-icon">📈</span>
+                <span>売上分析</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button onclick="logout()" class="btn btn-logout">
+                ログアウト
+            </button>
+        </div>
+    </aside>
+    
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+        <!-- ヘッダー -->
+        <header class="content-header">
+            <h1>メニュー管理</h1>
+            <div class="header-actions">
+                <span id="current-date"></span>
+                <button class="btn btn-primary" onclick="openAddMenuModal()">
+                    + 新規メニュー追加
+                </button>
+            </div>
+        </header>
+        
+        <!-- メニュー一覧 -->
+        <div class="menu-management">
+            <!-- カテゴリーフィルター -->
+            <div class="filter-section">
+                <div class="filter-tabs">
+                    <button class="filter-tab active" onclick="filterMenus('all')">
+                        すべて
+                        <span class="tab-count" id="count-all">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterMenus('cut')">
+                        カット
+                        <span class="tab-count" id="count-cut">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterMenus('color')">
+                        カラー
+                        <span class="tab-count" id="count-color">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterMenus('perm')">
+                        パーマ
+                        <span class="tab-count" id="count-perm">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterMenus('treatment')">
+                        トリートメント
+                        <span class="tab-count" id="count-treatment">0</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- メニューテーブル -->
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>メニュー名</th>
+                            <th>カテゴリー</th>
+                            <th>価格</th>
+                            <th>所要時間</th>
+                            <th>ステータス</th>
+                            <th>予約数</th>
+                            <th>アクション</th>
+                        </tr>
+                    </thead>
+                    <tbody id="menu-list">
+                        <tr>
+                            <td colspan="8" class="text-center">データを読み込み中...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+    
+    <!-- メニュー追加/編集モーダル -->
+    <div id="menu-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">新規メニュー追加</h2>
+                <button class="modal-close" onclick="closeMenuModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="menu-form">
+                    <input type="hidden" id="menu-id">
+                    
+                    <div class="form-group">
+                        <label for="menu-name">メニュー名 <span class="required">*</span></label>
+                        <input type="text" id="menu-name" name="name" required 
+                               placeholder="例: カット">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="menu-category">カテゴリー <span class="required">*</span></label>
+                            <select id="menu-category" name="category" required>
+                                <option value="">選択してください</option>
+                                <option value="cut">カット</option>
+                                <option value="color">カラー</option>
+                                <option value="perm">パーマ</option>
+                                <option value="treatment">トリートメント</option>
+                                <option value="other">その他</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="menu-status">ステータス <span class="required">*</span></label>
+                            <select id="menu-status" name="status" required>
+                                <option value="active">有効</option>
+                                <option value="inactive">無効</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="menu-price">価格（税込） <span class="required">*</span></label>
+                            <input type="number" id="menu-price" name="price" required 
+                                   min="0" step="100" placeholder="例: 4000">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="menu-duration">所要時間（分） <span class="required">*</span></label>
+                            <input type="number" id="menu-duration" name="duration" required 
+                                   min="15" step="15" placeholder="例: 60">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="menu-description">説明</label>
+                        <textarea id="menu-description" name="description" rows="4" 
+                                  placeholder="メニューの詳細説明を入力"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="menu-notes">備考</label>
+                        <input type="text" id="menu-notes" name="notes" 
+                               placeholder="スタッフ向けの注意事項など">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeMenuModal()">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveMenu()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 削除確認モーダル -->
+    <div id="delete-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>削除確認</h2>
+                <button class="modal-close" onclick="closeDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>このメニューを削除しますか？</p>
+                <p class="warning-text">⚠️ この操作は取り消せません</p>
+                <div class="delete-info" id="delete-menu-info">
+                    <!-- 削除対象のメニュー情報 -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="./js/admin-common.js"></script>
+    <script src="./js/menus.js"></script>
+</body>
+</html>
