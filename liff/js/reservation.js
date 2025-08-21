@@ -13,15 +13,45 @@ let reservationData = {
 // 現在のステップ
 let currentStep = 1;
 
+// LIFF初期化を待つ
+function waitForLiff() {
+    return new Promise((resolve) => {
+        const checkLiff = setInterval(() => {
+            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+                clearInterval(checkLiff);
+                resolve();
+            }
+        }, 100);
+        
+        // 10秒でタイムアウト
+        setTimeout(() => {
+            clearInterval(checkLiff);
+            resolve();
+        }, 10000);
+    });
+}
+
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', async function() {
-    // LIFF初期化を待つ
-    setTimeout(async () => {
-        if (typeof userProfile === 'undefined' || !userProfile) {
-            alert('ログイン情報が取得できませんでした。');
+    try {
+        // LIFF初期化を待つ
+        await waitForLiff();
+        
+        // userProfileが設定されるまで待つ
+        let waitCount = 0;
+        while ((!window.userProfile || !window.userProfile.userId) && waitCount < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            waitCount++;
+        }
+        
+        if (!window.userProfile || !window.userProfile.userId) {
+            console.error('ユーザー情報が取得できませんでした');
+            alert('ログイン情報が取得できませんでした。\nホーム画面から再度お試しください。');
             window.location.href = './index.html';
             return;
         }
+        
+        console.log('User Profile in reservation:', window.userProfile);
         
         // コンテンツを表示
         document.getElementById('loading').style.display = 'none';
@@ -32,13 +62,28 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         // 日付選択の最小値・最大値を設定
         setDateLimits();
-    }, 1500);
+        
+    } catch (error) {
+        console.error('初期化エラー:', error);
+        alert('ページの初期化に失敗しました。\n' + error.message);
+    }
 });
 
 // メニュー一覧を読み込み
 async function loadMenus() {
     try {
-        const menus = await MenuAPI.list();
+        const response = await fetch('/api/menus', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('メニューの取得に失敗しました');
+        }
+        
+        const menus = await response.json();
         const menuList = document.getElementById('menu-list');
         menuList.innerHTML = '';
         
@@ -87,7 +132,18 @@ function selectMenu(menu) {
 // スタッフ一覧を読み込み
 async function loadStaff() {
     try {
-        const staffList = await StaffAPI.list();
+        const response = await fetch('/api/staff', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('スタッフ情報の取得に失敗しました');
+        }
+        
+        const staffList = await response.json();
         const staffContainer = document.getElementById('staff-list');
         staffContainer.innerHTML = '';
         
@@ -145,6 +201,9 @@ function setDateLimits() {
     const maxDate = new Date();
     maxDate.setMonth(maxDate.getMonth() + 2); // 2ヶ月先まで
     
+    // 明日から予約可能にする
+    today.setDate(today.getDate() + 1);
+    
     dateInput.min = formatDate(today);
     dateInput.max = formatDate(maxDate);
     
@@ -169,11 +228,18 @@ async function loadTimeSlots() {
     
     try {
         // 空き時間を取得
-        const availableSlots = await ReservationAPI.getAvailableSlots(
-            selectedDate, 
-            reservationData.menu_id
-        );
+        const response = await fetch(`/api/reservations/available-slots?date=${selectedDate}&menu_id=${reservationData.menu_id}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
         
+        if (!response.ok) {
+            throw new Error('空き時間の取得に失敗しました');
+        }
+        
+        const availableSlots = await response.json();
         const timeSlotsContainer = document.getElementById('time-slots');
         timeSlotsContainer.innerHTML = '';
         
@@ -253,11 +319,25 @@ async function confirmReservation() {
         reservationDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
         
         // 予約を作成
-        const result = await ReservationAPI.create({
-            staff_id: reservationData.staff_id,
-            menu_id: reservationData.menu_id,
-            reservation_date: reservationDateTime.toISOString()
+        const response = await fetch('/api/reservations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.userProfile.userId}`
+            },
+            body: JSON.stringify({
+                customer_id: window.userProfile.userId,
+                staff_id: reservationData.staff_id,
+                menu_id: reservationData.menu_id,
+                reservation_date: reservationDateTime.toISOString()
+            })
         });
+        
+        if (!response.ok) {
+            throw new Error('予約の作成に失敗しました');
+        }
+        
+        const result = await response.json();
         
         if (result.success) {
             // 完了画面を表示
@@ -266,11 +346,11 @@ async function confirmReservation() {
             // LINE通知を送信（オプション）
             sendLineNotification();
         } else {
-            throw new Error('予約の作成に失敗しました');
+            throw new Error(result.error || '予約の作成に失敗しました');
         }
     } catch (error) {
         console.error('予約確定エラー:', error);
-        alert('予約の確定に失敗しました。もう一度お試しください。');
+        alert('予約の確定に失敗しました。もう一度お試しください。\n' + error.message);
         confirmButton.disabled = false;
         confirmButton.textContent = '予約を確定する';
     }
@@ -313,11 +393,15 @@ function showCompletion() {
 // LINE通知を送信（オプション）
 async function sendLineNotification() {
     // LIFFのsendMessagesを使用して通知
-    if (liff.isInClient()) {
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
         try {
+            const date = new Date(reservationData.reservation_date);
+            const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+            const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
+            
             await liff.sendMessages([{
                 type: 'text',
-                text: `✅ 予約が完了しました！\n\n【予約内容】\nメニュー: ${reservationData.menu_name}\nスタッフ: ${reservationData.staff_name}\n日時: ${reservationData.reservation_date} ${reservationData.reservation_time}\n\nご来店をお待ちしております。`
+                text: `✅ 予約が完了しました！\n\n【予約内容】\nメニュー: ${reservationData.menu_name}\nスタッフ: ${reservationData.staff_name}\n日時: ${dateString} ${reservationData.reservation_time}\n\nご来店をお待ちしております。`
             }]);
         } catch (error) {
             console.error('LINE通知エラー:', error);
