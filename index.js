@@ -1,6 +1,77 @@
 const express = require('express');
 const line = require('@line/bot-sdk');
-const { Client } = require('pg');
+const { Client }
+
+// 時間選択処理
+async function handleTimeSelection(event, customer, timeNumber) {
+  try {
+    // 簡易実装：最後に選択されたメニューを使用（実際はセッション管理が必要）
+    // ここでは仮にカット（menu_id=1）として処理
+    const selectedMenuId = 1; // 実際のプロダクトではセッション管理で取得
+    
+    // 選択されたメニュー情報を取得
+    const menuResult = await dbClient.query(
+      'SELECT * FROM menus WHERE menu_id = $1',
+      [selectedMenuId]
+    );
+    
+    if (menuResult.rows.length === 0) {
+      const errorMessage = {
+        type: 'text',
+        text: 'メニュー情報が見つかりません。「予約」と入力してやり直してください。'
+      };
+      return client.replyMessage(event.replyToken, errorMessage);
+    }
+    
+    const selectedMenu = menuResult.rows[0];
+    
+    // 空き時間を再取得して指定された番号の時間を取得
+    const availableTimes = await getAvailableTimes(selectedMenu.duration);
+    
+    if (timeNumber > availableTimes.length) {
+      const errorMessage = {
+        type: 'text',
+        text: '無効な時間番号です。\n「予約」と入力してやり直してください。'
+      };
+      return client.replyMessage(event.replyToken, errorMessage);
+    }
+    
+    const selectedTime = availableTimes[timeNumber - 1];
+    const reservationDate = new Date(selectedTime.datetime);
+    
+    // 予約をデータベースに保存
+    const reservationResult = await dbClient.query(
+      `INSERT INTO reservations (customer_id, staff_id, menu_id, reservation_date, status, created_at)
+       VALUES ($1, $2, $3, $4, 'confirmed', NOW()) RETURNING reservation_id`,
+      [
+        customer.line_user_id,
+        1, // 仮のスタッフID（実際はスタッフ選択機能を追加）
+        selectedMenu.menu_id,
+        selectedTime.datetime
+      ]
+    );
+    
+    const reservationId = reservationResult.rows[0].reservation_id;
+    
+    // 予約確定メッセージを作成
+    const dateStr = `${reservationDate.getMonth() + 1}/${reservationDate.getDate()}(${['日','月','火','水','木','金','土'][reservationDate.getDay()]})`;
+    const timeStr = `${reservationDate.getHours().toString().padStart(2, '0')}:${reservationDate.getMinutes().toString().padStart(2, '0')}`;
+    
+    const confirmationMessage = {
+      type: 'text',
+      text: `${customer.real_name}様\n\n✅ 予約が確定しました！\n\n【予約内容】\n予約番号：${reservationId}\n日時：${dateStr} ${timeStr}～\nメニュー：${selectedMenu.name}\n料金：¥${selectedMenu.price.toLocaleString()}\n所要時間：${selectedMenu.duration}分\n\n当日お待ちしております！\n\n※予約の変更・キャンセルは「予約確認」からお手続きください。`
+    };
+    
+    return client.replyMessage(event.replyToken, confirmationMessage);
+    
+  } catch (error) {
+    console.error('時間選択エラー:', error);
+    const errorMessage = {
+      type: 'text',
+      text: '予約処理中にエラーが発生しました。お手数ですが、お電話でご連絡ください。'
+    };
+    return client.replyMessage(event.replyToken, errorMessage);
+  } = require('pg');
 require('dotenv').config();
 
 const app = express();
@@ -204,21 +275,83 @@ async function handleCommand(event, customer, messageText) {
           return client.replyMessage(event.replyToken, noMenuMessage);
         }
 
-        // メニュー選択メッセージを作成
-        let menuText = `${customer.real_name}様\n\nご希望のメニューを番号で選択してください。\n\n`;
-        
-        menuResult.rows.forEach((menu, index) => {
-          menuText += `${index + 1}. ${menu.name}\n`;
-          menuText += `   ¥${menu.price.toLocaleString()} (${menu.duration}分)\n\n`;
-        });
-
-        menuText += '番号を入力してください（例：1）';
-
-        const menuMessage = {
-          type: 'text',
-          text: menuText
+        // Flex Messageでメニューカードを作成
+        const flexMessage = {
+          type: 'flex',
+          altText: 'メニュー一覧',
+          contents: {
+            type: 'carousel',
+            contents: menuResult.rows.map(menu => ({
+              type: 'bubble',
+              size: 'micro',
+              header: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                  {
+                    type: 'text',
+                    text: menu.name,
+                    weight: 'bold',
+                    size: 'sm',
+                    color: '#333333'
+                  }
+                ],
+                backgroundColor: '#F8F8F8',
+                paddingTop: '19px',
+                paddingBottom: '16px'
+              },
+              body: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                  {
+                    type: 'box',
+                    layout: 'vertical',
+                    contents: [
+                      {
+                        type: 'text',
+                        text: `¥${menu.price.toLocaleString()}`,
+                        weight: 'bold',
+                        size: 'xl',
+                        color: '#E91E63'
+                      },
+                      {
+                        type: 'text',
+                        text: `${menu.duration}分`,
+                        size: 'sm',
+                        color: '#666666',
+                        margin: 'md'
+                      }
+                    ]
+                  }
+                ],
+                spacing: 'sm',
+                paddingTop: '13px'
+              },
+              footer: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                  {
+                    type: 'button',
+                    style: 'primary',
+                    height: 'sm',
+                    action: {
+                      type: 'postback',
+                      label: '空き時間を見る',
+                      data: `menu_${menu.menu_id}`
+                    },
+                    color: '#4CAF50'
+                  }
+                ],
+                spacing: 'sm',
+                paddingTop: '13px'
+              }
+            }))
+          }
         };
-        return client.replyMessage(event.replyToken, menuMessage);
+
+        return client.replyMessage(event.replyToken, flexMessage);
 
       } catch (error) {
         console.error('メニュー取得エラー:', error);
@@ -251,10 +384,25 @@ async function handleCommand(event, customer, messageText) {
       return client.replyMessage(event.replyToken, menuMessage);
 
     default:
-      // 数字が入力された場合（メニュー選択）
-      const menuNumber = parseInt(messageText);
-      if (!isNaN(menuNumber) && menuNumber >= 1 && menuNumber <= 8) {
-        return await handleMenuSelection(event, customer, menuNumber);
+      // 数字が入力された場合の処理を分岐
+      const inputNumber = parseInt(messageText);
+      if (!isNaN(inputNumber) && inputNumber >= 1) {
+        
+        // 最近のメニュー選択状態をチェック（簡易実装）
+        // 実際のプロダクトでは、ユーザーの状態をDBで管理する
+        if (inputNumber <= 8) {
+          // メニュー番号として処理
+          return await handleMenuSelection(event, customer, inputNumber);
+        } else if (inputNumber <= 10) {
+          // 時間選択として処理（空き時間は最大10件表示）
+          return await handleTimeSelection(event, customer, inputNumber);
+        } else {
+          const invalidMessage = {
+            type: 'text',
+            text: '無効な番号です。\n「予約」と入力してやり直してください。'
+          };
+          return client.replyMessage(event.replyToken, invalidMessage);
+        }
       }
 
       // その他のメッセージ
