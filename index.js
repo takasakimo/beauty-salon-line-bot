@@ -26,11 +26,7 @@ pgClient.connect()
     .then(() => console.log('PostgreSQL connected'))
     .catch(err => console.error('PostgreSQL connection error:', err));
 
-// ミドルウェア設定
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// 静的ファイルの提供（LIFF用）
+// 静的ファイルの提供（LIFF用） - 最初に設定
 app.use('/liff', express.static(path.join(__dirname, 'liff')));
 
 // CORSヘッダー設定（LIFF用）
@@ -44,6 +40,42 @@ app.use((req, res, next) => {
         next();
     }
 });
+
+// ===========================
+// LINE Webhook（先に設定）
+// ===========================
+app.post('/webhook', line.middleware(config), async (req, res) => {
+    try {
+        const results = await Promise.all(req.body.events.map(handleEvent));
+        res.json(results);
+    } catch (err) {
+        console.error('Webhook error:', err);
+        res.status(500).end();
+    }
+});
+
+async function handleEvent(event) {
+    if (event.type !== 'message' || event.message.type !== 'text') {
+        return null;
+    }
+
+    const userId = event.source.userId;
+    const messageText = event.message.text;
+
+    // LIFFへ誘導するメッセージ
+    const liffUrl = `https://liff.line.me/2007971454-kL9LXL2O`;
+    
+    return lineClient.replyMessage(event.replyToken, {
+        type: 'text',
+        text: `LIFFアプリをご利用ください。\n${liffUrl}\n\nまたは、リッチメニューからアクセスしてください。`
+    });
+}
+
+// ===========================
+// ミドルウェア設定（Webhook後に設定）
+// ===========================
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ===========================
 // API エンドポイント
@@ -301,36 +333,6 @@ app.get('/api/staff/:id', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-
-// ===========================
-// LINE Webhook（既存機能保持）
-// ===========================
-app.post('/webhook', line.middleware(config), async (req, res) => {
-    try {
-        const results = await Promise.all(req.body.events.map(handleEvent));
-        res.json(results);
-    } catch (err) {
-        console.error('Webhook error:', err);
-        res.status(500).end();
-    }
-});
-
-async function handleEvent(event) {
-    if (event.type !== 'message' || event.message.type !== 'text') {
-        return null;
-    }
-
-    const userId = event.source.userId;
-    const messageText = event.message.text;
-
-    // LIFFへ誘導するメッセージ
-    const liffUrl = `https://liff.line.me/2007971454-kL9LXL2O`;
-    
-    return lineClient.replyMessage(event.replyToken, {
-        type: 'text',
-        text: `LIFFアプリをご利用ください。\n${liffUrl}\n\nまたは、リッチメニューからアクセスしてください。`
-    });
-}
 
 // ルートパス
 app.get('/', (req, res) => {
