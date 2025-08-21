@@ -1,0 +1,405 @@
+// グローバル変数
+let allReservations = [];
+let upcomingReservations = [];
+let pastReservations = [];
+let currentTab = 'upcoming';
+let cancelTargetId = null;
+
+// LIFF初期化を待つ
+function waitForLiff() {
+    return new Promise((resolve) => {
+        const checkLiff = setInterval(() => {
+            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+                clearInterval(checkLiff);
+                resolve();
+            }
+        }, 100);
+        
+        // 10秒でタイムアウト
+        setTimeout(() => {
+            clearInterval(checkLiff);
+            resolve();
+        }, 10000);
+    });
+}
+
+// ページ読み込み時の初期化
+document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        // LIFF初期化を待つ
+        await waitForLiff();
+        
+        // userProfileが設定されるまで待つ
+        let waitCount = 0;
+        while ((!window.userProfile || !window.userProfile.userId) && waitCount < 50) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            waitCount++;
+        }
+        
+        if (!window.userProfile || !window.userProfile.userId) {
+            console.error('ユーザー情報が取得できませんでした');
+            alert('ログイン情報が取得できませんでした。\nホーム画面から再度お試しください。');
+            window.location.href = './index.html';
+            return;
+        }
+        
+        console.log('User Profile in history:', window.userProfile);
+        
+        // 予約履歴を読み込み
+        await loadReservations();
+        
+        // コンテンツを表示
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        
+    } catch (error) {
+        console.error('初期化エラー:', error);
+        alert('ページの初期化に失敗しました。\n' + error.message);
+    }
+});
+
+// 予約履歴を読み込み
+async function loadReservations() {
+    try {
+        const response = await fetch(`/api/reservations/user/${window.userProfile.userId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.userProfile.userId}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('予約履歴の取得に失敗しました');
+        }
+        
+        allReservations = await response.json();
+        
+        // 現在時刻で分類
+        const now = new Date();
+        upcomingReservations = [];
+        pastReservations = [];
+        
+        allReservations.forEach(reservation => {
+            const reservationDate = new Date(reservation.reservation_date);
+            if (reservationDate > now && reservation.status === 'confirmed') {
+                upcomingReservations.push(reservation);
+            } else {
+                pastReservations.push(reservation);
+            }
+        });
+        
+        // 日付でソート
+        upcomingReservations.sort((a, b) => new Date(a.reservation_date) - new Date(b.reservation_date));
+        pastReservations.sort((a, b) => new Date(b.reservation_date) - new Date(a.reservation_date));
+        
+        // カウントを更新
+        document.getElementById('upcoming-count').textContent = upcomingReservations.length;
+        document.getElementById('past-count').textContent = pastReservations.length;
+        
+        // 表示
+        displayUpcomingReservations();
+        calculateStats();
+        
+    } catch (error) {
+        console.error('予約履歴読み込みエラー:', error);
+        alert('予約履歴の読み込みに失敗しました。');
+    }
+}
+
+// 今後の予約を表示
+function displayUpcomingReservations() {
+    const listContainer = document.getElementById('upcoming-list');
+    const emptyState = document.getElementById('no-upcoming');
+    
+    if (upcomingReservations.length === 0) {
+        listContainer.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    listContainer.innerHTML = '';
+    
+    upcomingReservations.forEach(reservation => {
+        const card = createReservationCard(reservation, false);
+        listContainer.appendChild(card);
+    });
+}
+
+// 過去の履歴を表示
+function displayPastReservations() {
+    const listContainer = document.getElementById('past-list');
+    const emptyState = document.getElementById('no-past');
+    
+    if (pastReservations.length === 0) {
+        listContainer.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+    
+    emptyState.style.display = 'none';
+    listContainer.innerHTML = '';
+    
+    pastReservations.forEach(reservation => {
+        const card = createReservationCard(reservation, true);
+        listContainer.appendChild(card);
+    });
+}
+
+// 予約カードを作成
+function createReservationCard(reservation, isPast) {
+    const card = document.createElement('div');
+    card.className = `reservation-card ${isPast ? 'past' : ''} ${reservation.status === 'cancelled' ? 'cancelled' : ''}`;
+    
+    const date = new Date(reservation.reservation_date);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+    const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
+    const timeString = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+    
+    // ステータス表示
+    let statusBadge = '';
+    if (reservation.status === 'cancelled') {
+        statusBadge = '<span class="status-badge cancelled">キャンセル済</span>';
+    } else if (isPast) {
+        statusBadge = '<span class="status-badge completed">完了</span>';
+    } else {
+        statusBadge = '<span class="status-badge confirmed">予約確定</span>';
+    }
+    
+    card.innerHTML = `
+        ${statusBadge}
+        <div class="reservation-date">${dateString}</div>
+        <div class="reservation-time">${timeString}</div>
+        <div class="reservation-details">
+            <div class="detail-row">
+                <span class="detail-label">メニュー</span>
+                <span class="detail-value">${reservation.menu_name}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">担当</span>
+                <span class="detail-value">${reservation.staff_name}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">料金</span>
+                <span class="detail-value">¥${reservation.price.toLocaleString()}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">所要時間</span>
+                <span class="detail-value">${reservation.duration}分</span>
+            </div>
+        </div>
+        ${createCardActions(reservation, isPast)}
+    `;
+    
+    return card;
+}
+
+// カードアクションを作成
+function createCardActions(reservation, isPast) {
+    if (reservation.status === 'cancelled') {
+        return ''; // キャンセル済みはアクションなし
+    }
+    
+    if (isPast) {
+        // 過去の予約：再予約ボタン
+        return `
+            <div class="card-actions">
+                <button class="btn-rebook" onclick="rebookReservation(${reservation.reservation_id})">
+                    もう一度予約する
+                </button>
+            </div>
+        `;
+    } else {
+        // 今後の予約：キャンセルボタン
+        const reservationDate = new Date(reservation.reservation_date);
+        const now = new Date();
+        const hoursDiff = (reservationDate - now) / (1000 * 60 * 60);
+        
+        // 24時間前まではキャンセル可能
+        if (hoursDiff > 24) {
+            return `
+                <div class="card-actions">
+                    <button class="btn-cancel" onclick="openCancelModal(${reservation.reservation_id})">
+                        キャンセル
+                    </button>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="card-actions">
+                    <p style="color: #999; font-size: 12px;">※24時間前を過ぎたためキャンセルできません</p>
+                </div>
+            `;
+        }
+    }
+}
+
+// タブ切り替え
+function switchTab(tab) {
+    currentTab = tab;
+    
+    // タブのアクティブ状態を更新
+    document.querySelectorAll('.history-tab').forEach(t => {
+        t.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // セクションの表示切り替え
+    if (tab === 'upcoming') {
+        document.getElementById('upcoming-reservations').style.display = 'block';
+        document.getElementById('past-reservations').style.display = 'none';
+        document.getElementById('stats-section').style.display = 'none';
+        displayUpcomingReservations();
+    } else {
+        document.getElementById('upcoming-reservations').style.display = 'none';
+        document.getElementById('past-reservations').style.display = 'block';
+        document.getElementById('stats-section').style.display = 'block';
+        displayPastReservations();
+    }
+}
+
+// 統計を計算
+function calculateStats() {
+    // 完了した予約のみカウント
+    const completedReservations = allReservations.filter(r => 
+        r.status === 'confirmed' && new Date(r.reservation_date) < new Date()
+    );
+    
+    // 総来店回数
+    document.getElementById('total-visits').textContent = completedReservations.length;
+    
+    // よく利用するメニュー
+    const menuCounts = {};
+    completedReservations.forEach(r => {
+        menuCounts[r.menu_name] = (menuCounts[r.menu_name] || 0) + 1;
+    });
+    const favoriteMenu = Object.keys(menuCounts).sort((a, b) => menuCounts[b] - menuCounts[a])[0];
+    document.getElementById('favorite-menu').textContent = favoriteMenu || '-';
+    
+    // 担当スタッフ
+    const staffCounts = {};
+    completedReservations.forEach(r => {
+        staffCounts[r.staff_name] = (staffCounts[r.staff_name] || 0) + 1;
+    });
+    const favoriteStaff = Object.keys(staffCounts).sort((a, b) => staffCounts[b] - staffCounts[a])[0];
+    document.getElementById('favorite-staff').textContent = favoriteStaff || '-';
+    
+    // 累計金額
+    const totalAmount = completedReservations.reduce((sum, r) => sum + (r.price || 0), 0);
+    document.getElementById('total-amount').textContent = `¥${totalAmount.toLocaleString()}`;
+}
+
+// キャンセルモーダルを開く
+function openCancelModal(reservationId) {
+    cancelTargetId = reservationId;
+    const reservation = upcomingReservations.find(r => r.reservation_id === reservationId);
+    
+    if (!reservation) return;
+    
+    const date = new Date(reservation.reservation_date);
+    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+    const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
+    const timeString = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+    
+    document.getElementById('cancel-reservation-info').innerHTML = `
+        <div class="detail-row">
+            <span class="detail-label">日時</span>
+            <span class="detail-value">${dateString} ${timeString}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">メニュー</span>
+            <span class="detail-value">${reservation.menu_name}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">担当</span>
+            <span class="detail-value">${reservation.staff_name}</span>
+        </div>
+    `;
+    
+    document.getElementById('cancel-modal').style.display = 'flex';
+}
+
+// キャンセルモーダルを閉じる
+function closeCancelModal() {
+    document.getElementById('cancel-modal').style.display = 'none';
+    cancelTargetId = null;
+}
+
+// キャンセルを確定
+async function confirmCancel() {
+    if (!cancelTargetId) return;
+    
+    const confirmButton = event.target;
+    confirmButton.disabled = true;
+    confirmButton.textContent = 'キャンセル中...';
+    
+    try {
+        const response = await fetch(`/api/reservations/${cancelTargetId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.userProfile.userId}`
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('キャンセルに失敗しました');
+        }
+        
+        alert('予約をキャンセルしました');
+        closeCancelModal();
+        
+        // リロード
+        await loadReservations();
+        
+        // LINE通知
+        if (liff.isInClient && liff.isInClient()) {
+            const reservation = upcomingReservations.find(r => r.reservation_id === cancelTargetId);
+            if (reservation) {
+                const date = new Date(reservation.reservation_date);
+                const dateString = `${date.getMonth() + 1}月${date.getDate()}日 ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+                
+                try {
+                    await liff.sendMessages([{
+                        type: 'text',
+                        text: `❌ 予約をキャンセルしました\n\n日時: ${dateString}\nメニュー: ${reservation.menu_name}`
+                    }]);
+                } catch (error) {
+                    console.error('LINE通知エラー:', error);
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('キャンセルエラー:', error);
+        alert('予約のキャンセルに失敗しました。\n' + error.message);
+        confirmButton.disabled = false;
+        confirmButton.textContent = 'キャンセルする';
+    }
+}
+
+// 再予約
+function rebookReservation(reservationId) {
+    const reservation = pastReservations.find(r => r.reservation_id === reservationId);
+    if (!reservation) return;
+    
+    // メニュー情報をセッションストレージに保存
+    sessionStorage.setItem('rebookMenu', JSON.stringify({
+        menu_id: reservation.menu_id,
+        menu_name: reservation.menu_name,
+        staff_id: reservation.staff_id,
+        staff_name: reservation.staff_name
+    }));
+    
+    // 予約ページへ
+    window.location.href = './reservation.html';
+}
+
+// モーダルの外側クリックで閉じる
+document.addEventListener('click', function(event) {
+    const modal = document.getElementById('cancel-modal');
+    if (event.target === modal) {
+        closeCancelModal();
+    }
+});

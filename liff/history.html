@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>予約履歴 - らくポチビューティー</title>
+    
+    <!-- LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/history.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ローディング画面 -->
+    <div id="loading" class="loading-screen">
+        <div class="spinner"></div>
+        <p>読み込み中...</p>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="header">
+        <button class="back-button" onclick="window.location.href='./index.html'">←</button>
+        <h1 class="header-title">予約履歴</h1>
+        <div class="header-spacer"></div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main id="main-content" class="main-content" style="display: none;">
+        <!-- タブ切り替え -->
+        <div class="history-tabs">
+            <button class="history-tab active" onclick="switchTab('upcoming')">
+                今後の予約
+                <span class="tab-badge" id="upcoming-count">0</span>
+            </button>
+            <button class="history-tab" onclick="switchTab('past')">
+                過去の履歴
+                <span class="tab-badge" id="past-count">0</span>
+            </button>
+        </div>
+
+        <!-- 今後の予約 -->
+        <div id="upcoming-reservations" class="reservation-section">
+            <div id="upcoming-list" class="reservation-list">
+                <!-- 予約カードがここに動的に追加されます -->
+            </div>
+            <div id="no-upcoming" class="empty-state" style="display: none;">
+                <div class="empty-icon">📅</div>
+                <p>予約がありません</p>
+                <button class="btn btn-primary" onclick="window.location.href='./reservation.html'">
+                    新規予約する
+                </button>
+            </div>
+        </div>
+
+        <!-- 過去の履歴 -->
+        <div id="past-reservations" class="reservation-section" style="display: none;">
+            <div id="past-list" class="reservation-list">
+                <!-- 履歴カードがここに動的に追加されます -->
+            </div>
+            <div id="no-past" class="empty-state" style="display: none;">
+                <div class="empty-icon">📖</div>
+                <p>履歴がありません</p>
+                <p class="empty-subtitle">ご利用いただくと、こちらに履歴が表示されます</p>
+            </div>
+        </div>
+
+        <!-- 統計情報（過去の履歴タブ時のみ表示） -->
+        <div id="stats-section" class="stats-section" style="display: none;">
+            <h3>ご利用統計</h3>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-visits">0</div>
+                    <div class="stat-label">総来店回数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="favorite-menu">-</div>
+                    <div class="stat-label">よく利用するメニュー</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="favorite-staff">-</div>
+                    <div class="stat-label">担当スタッフ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-amount">¥0</div>
+                    <div class="stat-label">累計金額</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- キャンセル確認モーダル -->
+    <div id="cancel-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>予約のキャンセル</h3>
+                <button class="modal-close" onclick="closeCancelModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>この予約をキャンセルしますか？</p>
+                <div id="cancel-reservation-info" class="cancel-info">
+                    <!-- キャンセル対象の予約情報 -->
+                </div>
+                <div class="warning-message">
+                    ⚠️ キャンセル後は元に戻せません
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCancelModal()">戻る</button>
+                <button class="btn btn-danger" onclick="confirmCancel()">キャンセルする</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="./js/liff-init.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/history.js"></script>
+</body>
+</html>
