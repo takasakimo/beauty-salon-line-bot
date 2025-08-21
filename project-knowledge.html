@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>らくポチビューティー - プロジェクトナレッジ v4.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #FF6B6B 0%, #FFB6C1 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #FF6B6B 0%, #FFB6C1 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .logo {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { text-shadow: 2px 2px 4px rgba(0,0,0,0.3), 0 0 10px rgba(255,255,255,0.5); }
+            to { text-shadow: 2px 2px 4px rgba(0,0,0,0.3), 0 0 20px rgba(255,255,255,0.8); }
+        }
+        
+        h1 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+            font-weight: normal;
+        }
+        
+        .version {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            min-height: 600px;
+        }
+        
+        .sidebar {
+            background: #f8f9fa;
+            padding: 20px;
+            border-right: 1px solid #dee2e6;
+        }
+        
+        .menu-item {
+            padding: 12px 20px;
+            margin: 5px 0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .menu-item:hover {
+            background: #FFB6C1;
+            color: white;
+            transform: translateX(5px);
+        }
+        
+        .menu-item.active {
+            background: #FF6B6B;
+            color: white;
+            border-color: #FF6B6B;
+        }
+        
+        .content {
+            padding: 30px;
+            overflow-y: auto;
+            max-height: 800px;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+            display: none;
+        }
+        
+        .section.active {
+            display: block;
+        }
+        
+        .section-title {
+            font-size: 1.8em;
+            color: #FF6B6B;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #FFB6C1;
+        }
+        
+        .subsection {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #FF6B6B;
+        }
+        
+        .subsection-title {
+            font-size: 1.3em;
+            color: #FF6B6B;
+            margin-bottom: 15px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .feature-card {
+            padding: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+        }
+        
+        .feature-card h3 {
+            color: #FF6B6B;
+            margin-bottom: 10px;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin: 5px;
+        }
+        
+        .status-done {
+            background: #28a745;
+            color: white;
+        }
+        
+        .status-progress {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .status-pending {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .architecture-diagram {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        
+        .flow-chart {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .flow-item {
+            padding: 15px;
+            background: #FFB6C1;
+            color: white;
+            border-radius: 10px;
+            margin: 10px;
+            text-align: center;
+            min-width: 150px;
+        }
+        
+        .arrow {
+            font-size: 2em;
+            color: #FF6B6B;
+            margin: 0 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        th {
+            background: #FF6B6B;
+            color: white;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            color: #856404;
+        }
+        
+        .alert-info {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            color: #0c5460;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">💅 らくポチビューティー 💅</div>
+            <h1>LINE予約管理システム プロジェクトナレッジ</h1>
+            <div class="version">Version 4.0 - 2024年8月21日更新</div>
+        </header>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="menu-item active" onclick="showSection('overview')">📋 概要</div>
+                <div class="menu-item" onclick="showSection('architecture')">🏗️ システム構成</div>
+                <div class="menu-item" onclick="showSection('features')">✨ 機能一覧</div>
+                <div class="menu-item" onclick="showSection('database')">💾 データベース</div>
+                <div class="menu-item" onclick="showSection('api')">🔌 API設計</div>
+                <div class="menu-item" onclick="showSection('progress')">📊 開発進捗</div>
+                <div class="menu-item" onclick="showSection('setup')">🚀 環境構築</div>
+                <div class="menu-item" onclick="showSection('commands')">💻 コマンド集</div>
+                <div class="menu-item" onclick="showSection('troubleshoot')">🔧 トラブル対応</div>
+            </div>
+            
+            <div class="content">
+                <!-- 概要セクション -->
+                <div class="section active" id="overview">
+                    <h2 class="section-title">📋 プロジェクト概要</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">システム概要</h3>
+                        <p><strong>名称：</strong>らくポチビューティー</p>
+                        <p><strong>目的：</strong>小規模美容室向けのLINE予約管理システム</p>
+                        <p><strong>特徴：</strong>ホットペッパー風の使いやすいUI、完全LINE完結型</p>
+                        <p><strong>開発開始：</strong>2024年8月20日</p>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">技術スタック</h3>
+                        <div class="feature-grid">
+                            <div class="feature-card">
+                                <h3>フロントエンド</h3>
+                                <p>LINE Messaging API</p>
+                                <p>Flex Message</p>
+                                <p>リッチメニュー</p>
+                            </div>
+                            <div class="feature-card">
+                                <h3>バックエンド</h3>
+                                <p>Node.js 18+</p>
+                                <p>Express.js</p>
+                                <p>MVCパターン</p>
+                            </div>
+                            <div class="feature-card">
+                                <h3>データベース</h3>
+                                <p>PostgreSQL</p>
+                                <p>5テーブル構成</p>
+                                <p>正規化設計</p>
+                            </div>
+                            <div class="feature-card">
+                                <h3>インフラ</h3>
+                                <p>Heroku</p>
+                                <p>Git</p>
+                                <p>環境変数管理</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- システム構成セクション -->
+                <div class="section" id="architecture">
+                    <h2 class="section-title">🏗️ システム構成</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">ディレクトリ構造</h3>
+                        <pre>
+beauty-salon-line-bot/
+├── index.js                     # メインサーバー
+├── package.json                 # パッケージ管理
+├── .env                        # 環境変数
+├── .gitignore                  # Git除外設定
+├── init-db.js                  # DB初期化
+├── add-sample-data.js          # サンプルデータ
+│
+├── config/                     # 設定ファイル
+│   ├── database.js            # DB接続設定
+│   └── line.js                # LINE API設定
+│
+├── controllers/                # コントローラー層
+│   ├── lineController.js      # LINE Webhook
+│   ├── customerController.js   # 顧客管理
+│   ├── reservationController.js # 予約管理
+│   └── menuController.js       # メニュー管理
+│
+├── utils/                      # ユーティリティ
+│   └── flexMessage.js         # Flex Message生成
+│
+└── views/                      # 管理画面（予定）
+    └── admin/
+        └── dashboard.html      # ダッシュボード
+                        </pre>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">システムフロー</h3>
+                        <div class="flow-chart">
+                            <div class="flow-item">LINE</div>
+                            <span class="arrow">→</span>
+                            <div class="flow-item">Webhook</div>
+                            <span class="arrow">→</span>
+                            <div class="flow-item">Controller</div>
+                            <span class="arrow">→</span>
+                            <div class="flow-item">Database</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 機能一覧セクション -->
+                <div class="section" id="features">
+                    <h2 class="section-title">✨ 機能一覧</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">実装済み機能</h3>
+                        <table>
+                            <tr>
+                                <th>機能名</th>
+                                <th>説明</th>
+                                <th>ステータス</th>
+                            </tr>
+                            <tr>
+                                <td>顧客登録</td>
+                                <td>友だち追加時の自動登録</td>
+                                <td><span class="status-badge status-done">完了</span></td>
+                            </tr>
+                            <tr>
+                                <td>予約作成</td>
+                                <td>メニュー選択→時間選択→確認</td>
+                                <td><span class="status-badge status-done">完了</span></td>
+                            </tr>
+                            <tr>
+                                <td>予約確認</td>
+                                <td>現在の予約一覧表示</td>
+                                <td><span class="status-badge status-done">完了</span></td>
+                            </tr>
+                            <tr>
+                                <td>マイページ</td>
+                                <td>登録情報の確認</td>
+                                <td><span class="status-badge status-done">完了</span></td>
+                            </tr>
+                            <tr>
+                                <td>リッチメニュー</td>
+                                <td>4分割メニュー表示</td>
+                                <td><span class="status-badge status-done">完了</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">今後実装予定</h3>
+                        <table>
+                            <tr>
+                                <th>機能名</th>
+                                <th>説明</th>
+                                <th>ステータス</th>
+                            </tr>
+                            <tr>
+                                <td>予約変更・キャンセル</td>
+                                <td>予約の変更とキャンセル機能</td>
+                                <td><span class="status-badge status-pending">予定</span></td>
+                            </tr>
+                            <tr>
+                                <td>リマインダー通知</td>
+                                <td>予約前日の自動通知</td>
+                                <td><span class="status-badge status-pending">予定</span></td>
+                            </tr>
+                            <tr>
+                                <td>スタンプカード</td>
+                                <td>デジタルスタンプカード</td>
+                                <td><span class="status-badge status-pending">予定</span></td>
+                            </tr>
+                            <tr>
+                                <td>写真管理</td>
+                                <td>施術前後の写真保存</td>
+                                <td><span class="status-badge status-pending">予定</span></td>
+                            </tr>
+                            <tr>
+                                <td>Web管理画面</td>
+                                <td>スタッフ用管理画面</td>
+                                <td><span class="status-badge status-pending">予定</span></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- データベースセクション -->
+                <div class="section" id="database">
+                    <h2 class="section-title">💾 データベース設計</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">テーブル構成</h3>
+                        
+                        <h4>1. customers（顧客）</h4>
+                        <table>
+                            <tr>
+                                <th>カラム名</th>
+                                <th>型</th>
+                                <th>説明</th>
+                            </tr>
+                            <tr>
+                                <td>line_user_id</td>
+                                <td>VARCHAR(255) PK</td>
+                                <td>LINE ユーザーID</td>
+                            </tr>
+                            <tr>
+                                <td>real_name</td>
+                                <td>VARCHAR(100)</td>
+                                <td>実名</td>
+                            </tr>
+                            <tr>
+                                <td>phone_number</td>
+                                <td>VARCHAR(15)</td>
+                                <td>電話番号</td>
+                            </tr>
+                            <tr>
+                                <td>registered_date</td>
+                                <td>TIMESTAMP</td>
+                                <td>登録日時</td>
+                            </tr>
+                        </table>
+                        
+                        <h4>2. reservations（予約）</h4>
+                        <table>
+                            <tr>
+                                <th>カラム名</th>
+                                <th>型</th>
+                                <th>説明</th>
+                            </tr>
+                            <tr>
+                                <td>reservation_id</td>
+                                <td>SERIAL PK</td>
+                                <td>予約ID</td>
+                            </tr>
+                            <tr>
+                                <td>customer_id</td>
+                                <td>VARCHAR(255) FK</td>
+                                <td>顧客ID</td>
+                            </tr>
+                            <tr>
+                                <td>staff_id</td>
+                                <td>INTEGER FK</td>
+                                <td>スタッフID</td>
+                            </tr>
+                            <tr>
+                                <td>menu_id</td>
+                                <td>INTEGER FK</td>
+                                <td>メニューID</td>
+                            </tr>
+                            <tr>
+                                <td>reservation_date</td>
+                                <td>TIMESTAMP</td>
+                                <td>予約日時</td>
+                            </tr>
+                            <tr>
+                                <td>status</td>
+                                <td>VARCHAR(20)</td>
+                                <td>ステータス</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- API設計セクション -->
+                <div class="section" id="api">
+                    <h2 class="section-title">🔌 API設計</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">LINE Webhook エンドポイント</h3>
+                        <pre>
+POST /webhook
+├── follow event → 新規顧客登録
+├── message event
+│   ├── "予約" → 予約フロー開始
+│   ├── "予約確認" → 予約一覧表示
+│   ├── "マイページ" → 顧客情報表示
+│   └── "メニュー" → メニュー一覧表示
+└── postback event → ボタンアクション処理
+                        </pre>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">内部API（実装予定）</h3>
+                        <pre>
+GET    /api/reservations      # 予約一覧取得
+POST   /api/reservations      # 新規予約作成
+PUT    /api/reservations/:id  # 予約更新
+DELETE /api/reservations/:id  # 予約削除
+
+GET    /api/customers         # 顧客一覧取得
+GET    /api/customers/:id     # 顧客詳細取得
+PUT    /api/customers/:id     # 顧客情報更新
+
+GET    /api/menus            # メニュー一覧取得
+GET    /api/staff            # スタッフ一覧取得
+                        </pre>
+                    </div>
+                </div>
+                
+                <!-- 開発進捗セクション -->
+                <div class="section" id="progress">
+                    <h2 class="section-title">📊 開発進捗</h2>
+                    
+                    <div class="alert alert-success">
+                        <strong>現在のステータス：</strong>基本機能実装完了、MVCパターンへのリファクタリング完了
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">完了タスク</h3>
+                        <ul>
+                            <li>✅ LINE Developers設定</li>
+                            <li>✅ Heroku環境構築</li>
+                            <li>✅ PostgreSQLデータベース作成</li>
+                            <li>✅ 顧客登録機能実装</li>
+                            <li>✅ 予約作成機能実装</li>
+                            <li>✅ Flex Message実装</li>
+                            <li>✅ リッチメニュー設定</li>
+                            <li>✅ MVCパターンへのリファクタリング</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">今後のタスク</h3>
+                        <ul>
+                            <li>⬜ 予約変更・キャンセル機能</li>
+                            <li>⬜ リマインダー通知実装</li>
+                            <li>⬜ Web管理画面作成</li>
+                            <li>⬜ スタンプカード機能</li>
+                            <li>⬜ 写真管理機能</li>
+                            <li>⬜ アフターケアフォロー機能</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- 環境構築セクション -->
+                <div class="section" id="setup">
+                    <h2 class="section-title">🚀 環境構築手順</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">必要な環境</h3>
+                        <ul>
+                            <li>Node.js 18以上</li>
+                            <li>VSCode</li>
+                            <li>Heroku CLI</li>
+                            <li>Git</li>
+                            <li>LINE Developersアカウント</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">セットアップ手順</h3>
+                        <pre>
+# 1. リポジトリのクローン
+git clone [repository-url]
+cd beauty-salon-line-bot
+
+# 2. 依存関係のインストール
+npm install
+
+# 3. 環境変数の設定（.envファイル作成）
+LINE_CHANNEL_ACCESS_TOKEN=your_token
+LINE_CHANNEL_SECRET=your_secret
+DATABASE_URL=your_database_url
+
+# 4. データベース初期化
+node init-db.js
+node add-sample-data.js
+
+# 5. ローカルサーバー起動
+npm start
+
+# 6. Herokuへデプロイ
+heroku create app-name
+heroku addons:create heroku-postgresql:essential-0
+git push heroku main
+                        </pre>
+                    </div>
+                </div>
+                
+                <!-- コマンド集セクション -->
+                <div class="section" id="commands">
+                    <h2 class="section-title">💻 よく使うコマンド集</h2>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">開発コマンド</h3>
+                        <pre>
+# サーバー起動
+npm start
+npm run dev  # nodemon使用
+
+# データベース操作
+node init-db.js          # テーブル作成
+node add-sample-data.js   # サンプルデータ投入
+
+# Git操作
+git add .
+git commit -m "message"
+git push origin main
+git push heroku main
+                        </pre>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">Herokuコマンド</h3>
+                        <pre>
+# ログ確認
+heroku logs --tail
+
+# 環境変数設定
+heroku config:set KEY=value
+
+# データベース接続
+heroku pg:psql
+
+# アプリ再起動
+heroku restart
+
+# アプリ情報確認
+heroku info
+                        </pre>
+                    </div>
+                </div>
+                
+                <!-- トラブルシューティングセクション -->
+                <div class="section" id="troubleshoot">
+                    <h2 class="section-title">🔧 トラブルシューティング</h2>
+                    
+                    <div class="alert alert-warning">
+                        <strong>注意：</strong>ファイル名の大文字小文字に気をつけてください（特にLinux環境）
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">よくあるエラーと対処法</h3>
+                        
+                        <h4>1. モジュールが見つからない</h4>
+                        <pre>
+Error: Cannot find module './controllers/lineController'
+
+# 対処法
+1. ファイル名の大文字小文字を確認
+2. git ls-files でGitの追跡状況確認
+3. git add -f [file] で強制追加
+4. git push heroku main で再デプロイ
+                        </pre>
+                        
+                        <h4>2. データベース接続エラー</h4>
+                        <pre>
+Error: Connection refused
+
+# 対処法
+1. heroku config で DATABASE_URL確認
+2. .env ファイルの設定確認
+3. heroku pg:psql で直接接続テスト
+                        </pre>
+                        
+                        <h4>3. H10エラー（アプリクラッシュ）</h4>
+                        <pre>
+Error: H10 - App crashed
+
+# 対処法
+1. heroku logs --tail でエラー詳細確認
+2. package.json の start スクリプト確認
+3. PORT環境変数の設定確認
+                        </pre>
+                    </div>
+                    
+                    <div class="subsection">
+                        <h3 class="subsection-title">デバッグTips</h3>
+                        <ul>
+                            <li>console.log()を活用してデバッグ</li>
+                            <li>heroku local でローカル環境でHeroku設定をテスト</li>
+                            <li>ngrokを使ってローカル環境でWebhookテスト</li>
+                            <li>LINE Official Account ManagerでWebhook履歴確認</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showSection(sectionId) {
+            // すべてのセクションを非表示
+            const sections = document.querySelectorAll('.section');
+            sections.forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // すべてのメニューアイテムから active を削除
+            const menuItems = document.querySelectorAll('.menu-item');
+            menuItems.forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // 選択されたセクションを表示
+            document.getElementById(sectionId).classList.add('active');
+            
+            // 選択されたメニューアイテムに active を追加
+            event.target.classList.add('active');
+        }
+        
+        // ページ読み込み時のアニメーション
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.feature-card');
+            cards.forEach((card, index) => {
+                card.style.animation = `fadeIn 0.5s ease-in-out ${index * 0.1}s`;
+            });
+        });
+    </script>
+    
+    <style>
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</body>
+</html>
