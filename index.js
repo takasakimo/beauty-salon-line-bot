@@ -195,7 +195,7 @@ async function handleCommand(event, customer, messageText) {
 
   switch (command) {
     case '予約':
-      return await showMenuCarousel(event, customer);
+      return await showMenuTable(event, customer);
 
     case '予約確認':
       return await showReservations(event, customer);
@@ -220,8 +220,8 @@ async function handleCommand(event, customer, messageText) {
   }
 }
 
-// メニューカルーセル表示（ホットペッパー風）
-async function showMenuCarousel(event, customer) {
+// メニュー表形式で表示（ぺらいち）
+async function showMenuTable(event, customer) {
   try {
     // メニュー一覧を取得
     const menuResult = await dbClient.query(
@@ -236,79 +236,136 @@ async function showMenuCarousel(event, customer) {
       return client.replyMessage(event.replyToken, noMenuMessage);
     }
 
-    // 最初の10個のメニューのみでCarousel作成（LINE制限対策）
-    const menuItems = menuResult.rows.slice(0, 10);
-    
-    // Flex Messageでメニューカードを作成
+    // Flex Messageでメニュー表を作成（1ページ）
     const flexMessage = {
       type: 'flex',
-      altText: 'メニュー一覧',
+      altText: 'メニュー表',
       contents: {
-        type: 'carousel',
-        contents: menuItems.map(menu => ({
-          type: 'bubble',
-          size: 'micro',
-          header: {
-            type: 'box',
-            layout: 'vertical',
-            contents: [
+        type: 'bubble',
+        size: 'giga',
+        header: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: '💇 メニュー表',
+              weight: 'bold',
+              size: 'xl',
+              color: '#FFFFFF',
+              align: 'center'
+            },
+            {
+              type: 'text',
+              text: 'ご希望のメニューをお選びください',
+              size: 'sm',
+              color: '#FFFFFF',
+              align: 'center',
+              margin: 'md'
+            }
+          ],
+          backgroundColor: '#FF6B6B',
+          paddingAll: '20px'
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            // メニューヘッダー
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: 'メニュー',
+                  weight: 'bold',
+                  size: 'sm',
+                  color: '#666666',
+                  flex: 3
+                },
+                {
+                  type: 'text',
+                  text: '料金',
+                  weight: 'bold',
+                  size: 'sm',
+                  color: '#666666',
+                  align: 'center',
+                  flex: 2
+                },
+                {
+                  type: 'text',
+                  text: '時間',
+                  weight: 'bold',
+                  size: 'sm',
+                  color: '#666666',
+                  align: 'center',
+                  flex: 1
+                }
+              ],
+              backgroundColor: '#F0F0F0',
+              paddingAll: '10px',
+              margin: 'none'
+            },
+            {
+              type: 'separator',
+              margin: 'none'
+            },
+            // メニューリスト
+            ...menuResult.rows.map((menu, index) => [
               {
-                type: 'text',
-                text: menu.name,
-                weight: 'bold',
-                size: 'sm',
-                wrap: true
-              }
-            ],
-            backgroundColor: '#FF6B6B',
-            paddingTop: '19px',
-            paddingBottom: '16px',
-            paddingStart: '12px',
-            paddingEnd: '12px'
-          },
-          body: {
-            type: 'box',
-            layout: 'vertical',
-            contents: [
-              {
-                type: 'text',
-                text: `¥${menu.price.toLocaleString()}`,
-                weight: 'bold',
-                size: 'xl',
-                color: '#FF6B6B'
-              },
-              {
-                type: 'text',
-                text: `所要時間: ${menu.duration}分`,
-                size: 'sm',
-                color: '#999999',
-                margin: 'md'
-              }
-            ],
-            spacing: 'sm',
-            paddingTop: '13px'
-          },
-          footer: {
-            type: 'box',
-            layout: 'vertical',
-            contents: [
-              {
-                type: 'button',
-                style: 'primary',
-                height: 'sm',
-                color: '#FF6B6B',
+                type: 'box',
+                layout: 'horizontal',
+                contents: [
+                  {
+                    type: 'text',
+                    text: menu.name,
+                    size: 'sm',
+                    wrap: true,
+                    flex: 3
+                  },
+                  {
+                    type: 'text',
+                    text: `¥${menu.price.toLocaleString()}`,
+                    size: 'sm',
+                    align: 'center',
+                    flex: 2
+                  },
+                  {
+                    type: 'text',
+                    text: `${menu.duration}分`,
+                    size: 'sm',
+                    align: 'center',
+                    flex: 1
+                  }
+                ],
+                paddingAll: '10px',
                 action: {
                   type: 'postback',
-                  label: '空き時間を見る',
                   data: `action=select_menu&menu_id=${menu.menu_id}`,
                   displayText: `${menu.name}を選択`
-                }
+                },
+                backgroundColor: index % 2 === 0 ? '#FFFFFF' : '#FAFAFA'
               }
-            ],
-            spacing: 'sm',
-            paddingTop: '13px'
-          }
-        }))
+            ]).flat()
+          ],
+          paddingAll: '0px'
+        },
+        footer: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: 'メニューをタップして選択してください',
+              size: 'xs',
+              color: '#999999',
+              align: 'center'
+            }
+          ],
+          backgroundColor: '#F0F0F0',
+          paddingAll: '10px'
+        }
       }
     };
 
@@ -324,7 +381,7 @@ async function showMenuCarousel(event, customer) {
   }
 }
 
-// メニュー一覧表示
+// メニュー一覧表示（テキスト版）
 async function showMenuList(event) {
   try {
     const menuResult = await dbClient.query(
@@ -431,13 +488,25 @@ async function handlePostback(event) {
     switch (action) {
       case 'select_menu':
         const menuId = data.get('menu_id');
-        return await showAvailableTimes(event, customer, menuId);
+        return await showTimeSelection(event, customer, menuId);
 
       case 'select_time':
         const selectedMenuId = data.get('menu_id');
         const selectedDateTime = data.get('datetime');
-        const staffId = data.get('staff_id');
-        return await confirmReservation(event, customer, selectedMenuId, selectedDateTime, staffId);
+        return await showConfirmation(event, customer, selectedMenuId, selectedDateTime);
+
+      case 'confirm_reservation':
+        const confirmMenuId = data.get('menu_id');
+        const confirmDateTime = data.get('datetime');
+        const staffId = data.get('staff_id') || 1;
+        return await confirmReservation(event, customer, confirmMenuId, confirmDateTime, staffId);
+
+      case 'cancel_reservation':
+        const cancelMessage = {
+          type: 'text',
+          text: '予約をキャンセルしました。\n「予約」と入力して最初からやり直してください。'
+        };
+        return client.replyMessage(event.replyToken, cancelMessage);
 
       default:
         return Promise.resolve(null);
@@ -453,8 +522,8 @@ async function handlePostback(event) {
   }
 }
 
-// 空き時間表示
-async function showAvailableTimes(event, customer, menuId) {
+// 時間選択画面
+async function showTimeSelection(event, customer, menuId) {
   try {
     // メニュー情報を取得
     const menuResult = await dbClient.query(
@@ -472,7 +541,7 @@ async function showAvailableTimes(event, customer, menuId) {
 
     const menu = menuResult.rows[0];
 
-    // 空き時間を取得（簡易版：明日から7日間の固定時間）
+    // 空き時間を取得
     const availableTimes = await getAvailableTimeSlots(menu.duration);
 
     if (availableTimes.length === 0) {
@@ -483,35 +552,334 @@ async function showAvailableTimes(event, customer, menuId) {
       return client.replyMessage(event.replyToken, noTimeMessage);
     }
 
-    // Quick Replyで時間選択ボタンを作成
-    const quickReplyItems = availableTimes.slice(0, 13).map(slot => {
-      const date = new Date(slot.datetime);
-      const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
-      const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-      
-      return {
-        type: 'action',
-        action: {
-          type: 'postback',
-          label: `${dateStr} ${timeStr}`,
-          data: `action=select_time&menu_id=${menuId}&datetime=${slot.datetime}&staff_id=1`,
-          displayText: `${dateStr} ${timeStr}を選択`
+    // Flex Messageで時間選択画面を作成
+    const flexMessage = {
+      type: 'flex',
+      altText: '予約時間選択',
+      contents: {
+        type: 'bubble',
+        size: 'giga',
+        header: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: '📅 予約時間選択',
+              weight: 'bold',
+              size: 'xl',
+              color: '#FFFFFF',
+              align: 'center'
+            },
+            {
+              type: 'text',
+              text: menu.name,
+              size: 'md',
+              color: '#FFFFFF',
+              align: 'center',
+              margin: 'sm'
+            },
+            {
+              type: 'text',
+              text: `¥${menu.price.toLocaleString()} (${menu.duration}分)`,
+              size: 'sm',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          ],
+          backgroundColor: '#4ECDC4',
+          paddingAll: '20px'
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: '空き時間から選択してください',
+              size: 'sm',
+              color: '#666666',
+              margin: 'md',
+              align: 'center'
+            },
+            {
+              type: 'separator',
+              margin: 'md'
+            },
+            // 時間スロットをボタンで表示（最大20個）
+            ...availableTimes.slice(0, 20).map(slot => {
+              const date = new Date(slot.datetime);
+              const dateStr = `${date.getMonth() + 1}/${date.getDate()}(${['日','月','火','水','木','金','土'][date.getDay()]})`;
+              const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+              
+              return {
+                type: 'button',
+                action: {
+                  type: 'postback',
+                  label: `${dateStr} ${timeStr}～`,
+                  data: `action=select_time&menu_id=${menuId}&datetime=${slot.datetime}`,
+                  displayText: `${dateStr} ${timeStr}を選択`
+                },
+                style: 'secondary',
+                margin: 'sm',
+                height: 'sm'
+              };
+            })
+          ],
+          paddingAll: '20px'
+        },
+        footer: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'button',
+              action: {
+                type: 'message',
+                label: '戻る',
+                text: '予約'
+              },
+              style: 'link',
+              height: 'sm'
+            }
+          ],
+          paddingAll: '10px'
         }
-      };
-    });
-
-    const timeSelectionMessage = {
-      type: 'text',
-      text: `【${menu.name}】\n¥${menu.price.toLocaleString()} (${menu.duration}分)\n\n空き時間を選択してください：`,
-      quickReply: {
-        items: quickReplyItems
       }
     };
 
-    return client.replyMessage(event.replyToken, timeSelectionMessage);
+    return client.replyMessage(event.replyToken, flexMessage);
 
   } catch (error) {
-    console.error('空き時間表示エラー:', error);
+    console.error('時間選択表示エラー:', error);
+    const errorMessage = {
+      type: 'text',
+      text: 'エラーが発生しました。'
+    };
+    return client.replyMessage(event.replyToken, errorMessage);
+  }
+}
+
+// 確認画面表示
+async function showConfirmation(event, customer, menuId, datetime) {
+  try {
+    // メニュー情報を取得
+    const menuResult = await dbClient.query(
+      'SELECT * FROM menus WHERE menu_id = $1',
+      [menuId]
+    );
+
+    if (menuResult.rows.length === 0) {
+      const errorMessage = {
+        type: 'text',
+        text: 'メニュー情報が見つかりません。'
+      };
+      return client.replyMessage(event.replyToken, errorMessage);
+    }
+
+    const menu = menuResult.rows[0];
+    const reservationDate = new Date(datetime);
+    const dateStr = `${reservationDate.getMonth() + 1}/${reservationDate.getDate()}(${['日','月','火','水','木','金','土'][reservationDate.getDay()]})`;
+    const timeStr = `${reservationDate.getHours().toString().padStart(2, '0')}:${reservationDate.getMinutes().toString().padStart(2, '0')}`;
+
+    // 終了時刻を計算
+    const endTime = new Date(reservationDate);
+    endTime.setMinutes(endTime.getMinutes() + menu.duration);
+    const endTimeStr = `${endTime.getHours().toString().padStart(2, '0')}:${endTime.getMinutes().toString().padStart(2, '0')}`;
+
+    // Flex Messageで確認画面を作成
+    const flexMessage = {
+      type: 'flex',
+      altText: '予約内容確認',
+      contents: {
+        type: 'bubble',
+        size: 'kilo',
+        header: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: '✅ 予約内容確認',
+              weight: 'bold',
+              size: 'xl',
+              color: '#FFFFFF',
+              align: 'center'
+            }
+          ],
+          backgroundColor: '#FF6B6B',
+          paddingAll: '20px'
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            {
+              type: 'text',
+              text: '以下の内容で予約を確定します',
+              size: 'sm',
+              color: '#666666',
+              margin: 'md',
+              align: 'center',
+              wrap: true
+            },
+            {
+              type: 'separator',
+              margin: 'lg'
+            },
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: 'お名前',
+                  size: 'sm',
+                  color: '#666666',
+                  flex: 2
+                },
+                {
+                  type: 'text',
+                  text: customer.real_name,
+                  size: 'sm',
+                  flex: 3,
+                  wrap: true
+                }
+              ],
+              margin: 'lg'
+            },
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: '日付',
+                  size: 'sm',
+                  color: '#666666',
+                  flex: 2
+                },
+                {
+                  type: 'text',
+                  text: dateStr,
+                  size: 'sm',
+                  flex: 3
+                }
+              ],
+              margin: 'md'
+            },
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: '時間',
+                  size: 'sm',
+                  color: '#666666',
+                  flex: 2
+                },
+                {
+                  type: 'text',
+                  text: `${timeStr}～${endTimeStr}`,
+                  size: 'sm',
+                  flex: 3
+                }
+              ],
+              margin: 'md'
+            },
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: 'メニュー',
+                  size: 'sm',
+                  color: '#666666',
+                  flex: 2
+                },
+                {
+                  type: 'text',
+                  text: menu.name,
+                  size: 'sm',
+                  flex: 3,
+                  wrap: true
+                }
+              ],
+              margin: 'md'
+            },
+            {
+              type: 'box',
+              layout: 'horizontal',
+              contents: [
+                {
+                  type: 'text',
+                  text: '料金',
+                  size: 'sm',
+                  color: '#666666',
+                  flex: 2
+                },
+                {
+                  type: 'text',
+                  text: `¥${menu.price.toLocaleString()}`,
+                  size: 'sm',
+                  flex: 3,
+                  weight: 'bold',
+                  color: '#FF6B6B'
+                }
+              ],
+              margin: 'md'
+            },
+            {
+              type: 'separator',
+              margin: 'lg'
+            }
+          ],
+          paddingAll: '20px'
+        },
+        footer: {
+          type: 'box',
+          layout: 'horizontal',
+          contents: [
+            {
+              type: 'button',
+              action: {
+                type: 'postback',
+                label: 'キャンセル',
+                data: 'action=cancel_reservation'
+              },
+              style: 'secondary',
+              flex: 1,
+              height: 'sm'
+            },
+            {
+              type: 'separator',
+              margin: 'sm'
+            },
+            {
+              type: 'button',
+              action: {
+                type: 'postback',
+                label: '予約確定',
+                data: `action=confirm_reservation&menu_id=${menuId}&datetime=${datetime}&staff_id=1`
+              },
+              style: 'primary',
+              flex: 1,
+              height: 'sm',
+              color: '#FF6B6B'
+            }
+          ],
+          spacing: 'sm',
+          paddingAll: '10px'
+        }
+      }
+    };
+
+    return client.replyMessage(event.replyToken, flexMessage);
+
+  } catch (error) {
+    console.error('確認画面表示エラー:', error);
     const errorMessage = {
       type: 'text',
       text: 'エラーが発生しました。'
