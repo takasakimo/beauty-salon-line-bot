@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>マイページ - らくポチビューティー</title>
+    
+    <!-- LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/mypage.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ローディング画面 -->
+    <div id="loading" class="loading-screen">
+        <div class="spinner"></div>
+        <p>読み込み中...</p>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="header">
+        <button class="back-button" onclick="window.location.href='./index.html'">←</button>
+        <h1 class="header-title">マイページ</h1>
+        <div class="header-spacer"></div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main id="main-content" class="main-content" style="display: none;">
+        <!-- プロフィールカード -->
+        <div class="profile-card">
+            <div class="profile-avatar">
+                <img id="profile-image" src="" alt="プロフィール画像">
+            </div>
+            <div class="profile-info">
+                <h2 id="profile-name"></h2>
+                <p id="profile-status">会員</p>
+            </div>
+        </div>
+
+        <!-- スタンプカード -->
+        <div class="stamp-card">
+            <h3>スタンプカード</h3>
+            <div class="stamp-grid">
+                <div class="stamp-item filled">✓</div>
+                <div class="stamp-item filled">✓</div>
+                <div class="stamp-item filled">✓</div>
+                <div class="stamp-item">4</div>
+                <div class="stamp-item">5</div>
+                <div class="stamp-item">6</div>
+                <div class="stamp-item">7</div>
+                <div class="stamp-item">8</div>
+                <div class="stamp-item">9</div>
+                <div class="stamp-item special">🎁</div>
+            </div>
+            <p class="stamp-message">あと7回のご来店で特典をプレゼント！</p>
+        </div>
+
+        <!-- 次回予約 -->
+        <div class="section-card" id="next-reservation-section" style="display: none;">
+            <h3>次回のご予約</h3>
+            <div class="reservation-info" id="next-reservation">
+                <!-- 予約情報が動的に挿入されます -->
+            </div>
+        </div>
+
+        <!-- 情報セクション -->
+        <div class="section-card">
+            <h3>お客様情報</h3>
+            <div class="info-list">
+                <div class="info-item">
+                    <span class="info-label">お名前</span>
+                    <span class="info-value" id="customer-name"></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">電話番号</span>
+                    <span class="info-value" id="customer-phone"></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">登録日</span>
+                    <span class="info-value" id="customer-registered"></span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">総来店回数</span>
+                    <span class="info-value" id="visit-count">3回</span>
+                </div>
+            </div>
+            <button class="btn btn-secondary" onclick="editProfile()">情報を編集</button>
+        </div>
+
+        <!-- メニューボタン -->
+        <div class="action-buttons">
+            <button class="action-button" onclick="window.location.href='./reservation.html'">
+                <span class="action-icon">📅</span>
+                <span>新規予約</span>
+            </button>
+            <button class="action-button" onclick="window.location.href='./history.html'">
+                <span class="action-icon">📖</span>
+                <span>予約履歴</span>
+            </button>
+            <button class="action-button" onclick="window.location.href='./menu.html'">
+                <span class="action-icon">💇‍♀️</span>
+                <span>メニュー一覧</span>
+            </button>
+        </div>
+
+        <!-- 編集モーダル -->
+        <div id="edit-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>お客様情報の編集</h3>
+                    <button class="modal-close" onclick="closeEditModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-form">
+                        <div class="form-group">
+                            <label for="edit-name">お名前</label>
+                            <input type="text" id="edit-name" name="name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-phone">電話番号</label>
+                            <input type="tel" id="edit-phone" name="phone" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeEditModal()">キャンセル</button>
+                    <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script src="./js/liff-init.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/mypage.js"></script>
+</body>
+</html>
