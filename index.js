@@ -190,11 +190,44 @@ async function handleCommand(event, customer, messageText) {
 
   switch (command) {
     case '予約':
-      const reservationMessage = {
-        type: 'text',
-        text: `${customer.real_name}様\n\n予約機能はまだ準備中です。\nしばらくお待ちください。`
-      };
-      return client.replyMessage(event.replyToken, reservationMessage);
+      try {
+        // メニュー一覧を取得
+        const menuResult = await dbClient.query(
+          'SELECT menu_id, name, price, duration FROM menus ORDER BY menu_id'
+        );
+
+        if (menuResult.rows.length === 0) {
+          const noMenuMessage = {
+            type: 'text',
+            text: '申し訳ございません。現在利用可能なメニューがありません。'
+          };
+          return client.replyMessage(event.replyToken, noMenuMessage);
+        }
+
+        // メニュー選択メッセージを作成
+        let menuText = `${customer.real_name}様\n\nご希望のメニューを番号で選択してください。\n\n`;
+        
+        menuResult.rows.forEach((menu, index) => {
+          menuText += `${index + 1}. ${menu.name}\n`;
+          menuText += `   ¥${menu.price.toLocaleString()} (${menu.duration}分)\n\n`;
+        });
+
+        menuText += '番号を入力してください（例：1）';
+
+        const menuMessage = {
+          type: 'text',
+          text: menuText
+        };
+        return client.replyMessage(event.replyToken, menuMessage);
+
+      } catch (error) {
+        console.error('メニュー取得エラー:', error);
+        const errorMessage = {
+          type: 'text',
+          text: 'メニュー情報の取得中にエラーが発生しました。しばらく時間をおいてから再度お試しください。'
+        };
+        return client.replyMessage(event.replyToken, errorMessage);
+      }
 
     case '予約確認':
       const checkMessage = {
