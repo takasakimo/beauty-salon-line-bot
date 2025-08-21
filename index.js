@@ -1,6 +1,126 @@
 const express = require('express');
 const line = require('@line/bot-sdk');
-const { Client } = require('pg');
+const { Client }
+
+// メニュー選択処理
+async function handleMenuSelection(event, customer, menuNumber) {
+  try {
+    // 選択されたメニューを取得
+    const menuResult = await dbClient.query(
+      'SELECT menu_id, name, price, duration FROM menus ORDER BY menu_id LIMIT 1 OFFSET $1',
+      [menuNumber - 1]
+    );
+
+    if (menuResult.rows.length === 0) {
+      const errorMessage = {
+        type: 'text',
+        text: '無効なメニュー番号です。\n「予約」と入力してメニューを再選択してください。'
+      };
+      return client.replyMessage(event.replyToken, errorMessage);
+    }
+
+    const selectedMenu = menuResult.rows[0];
+    
+    // 空き時間検索（明日から7日間）
+    const availableTimes = await getAvailableTimes(selectedMenu.duration);
+    
+    if (availableTimes.length === 0) {
+      const noTimeMessage = {
+        type: 'text',
+        text: `申し訳ございません。\n「${selectedMenu.name}」の空き時間が見つかりませんでした。\n\n別のメニューをお選びいただくか、お電話でお問い合わせください。`
+      };
+      return client.replyMessage(event.replyToken, noTimeMessage);
+    }
+
+    // 空き時間を表示
+    let timeText = `${customer.real_name}様\n\n【選択メニュー】\n${selectedMenu.name}\n¥${selectedMenu.price.toLocaleString()} (${selectedMenu.duration}分)\n\n【空き時間】\n`;
+    
+    availableTimes.forEach((time, index) => {
+      const date = new Date(time.datetime);
+      const dateStr = `${date.getMonth() + 1}/${date.getDate()}(${['日','月','火','水','木','金','土'][date.getDay()]})`;
+      const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+      timeText += `${index + 1}. ${dateStr} ${timeStr}～\n`;
+    });
+    
+    timeText += '\n予約したい時間の番号を入力してください（例：1）';
+
+    const timeMessage = {
+      type: 'text',
+      text: timeText
+    };
+    return client.replyMessage(event.replyToken, timeMessage);
+
+  } catch (error) {
+    console.error('メニュー選択エラー:', error);
+    const errorMessage = {
+      type: 'text',
+      text: 'エラーが発生しました。「予約」と入力してやり直してください。'
+    };
+    return client.replyMessage(event.replyToken, errorMessage);
+  }
+}
+
+// 空き時間検索関数
+async function getAvailableTimes(duration) {
+  const availableTimes = [];
+  const now = new Date();
+  
+  // 明日から7日間をチェック
+  for (let day = 1; day <= 7; day++) {
+    const checkDate = new Date(now);
+    checkDate.setDate(now.getDate() + day);
+    
+    // 営業時間：10:00-19:00（最終受付は所要時間を考慮）
+    const startHour = 10;
+    const endHour = 19;
+    const lastAcceptableHour = endHour - Math.ceil(duration / 60);
+    
+    for (let hour = startHour; hour <= lastAcceptableHour; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) { // 30分刻み
+        const slotTime = new Date(checkDate);
+        slotTime.setHours(hour, minute, 0, 0);
+        
+        // 既存予約との重複チェック（簡易版）
+        const isAvailable = await checkTimeSlotAvailable(slotTime, duration);
+        
+        if (isAvailable) {
+          availableTimes.push({
+            datetime: slotTime.toISOString(),
+            display: `${slotTime.getMonth() + 1}/${slotTime.getDate()} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+          });
+        }
+        
+        // 最大10件まで表示
+        if (availableTimes.length >= 10) {
+          return availableTimes;
+        }
+      }
+    }
+  }
+  
+  return availableTimes;
+}
+
+// 時間枠の空き状況チェック
+async function checkTimeSlotAvailable(startTime, duration) {
+  try {
+    const endTime = new Date(startTime);
+    endTime.setMinutes(endTime.getMinutes() + duration);
+    
+    // 既存予約との重複チェック
+    const conflictResult = await dbClient.query(
+      `SELECT COUNT(*) as count FROM reservations 
+       WHERE reservation_date < $1 AND (reservation_date + INTERVAL '1 minute' * 
+       (SELECT duration FROM menus WHERE menu_id = reservations.menu_id)) > $2
+       AND status != 'cancelled'`,
+      [endTime.toISOString(), startTime.toISOString()]
+    );
+    
+    return parseInt(conflictResult.rows[0].count) === 0;
+  } catch (error) {
+    console.error('空き時間チェックエラー:', error);
+    return true; // エラー時は空きありとして扱う
+  } = require('pg');
 require('dotenv').config();
 
 const app = express();
@@ -251,6 +371,13 @@ async function handleCommand(event, customer, messageText) {
       return client.replyMessage(event.replyToken, menuMessage);
 
     default:
+      // 数字が入力された場合（メニュー選択）
+      const menuNumber = parseInt(messageText);
+      if (!isNaN(menuNumber) && menuNumber >= 1 && menuNumber <= 8) {
+        return await handleMenuSelection(event, customer, menuNumber);
+      }
+
+      // その他のメッセージ
       const helpMessage = {
         type: 'text',
         text: `${customer.real_name}様\n\n以下のコマンドをお使いください：\n・「予約」- 新しい予約を取る\n・「予約確認」- 予約の確認・変更\n・「マイページ」- 個人情報・履歴確認\n・「メニュー」- サービス内容確認`
