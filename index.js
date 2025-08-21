@@ -342,10 +342,20 @@ app.get('/api/staff/:id', async (req, res) => {
 // 管理画面用APIエンドポイント
 // ===========================
 
-// 管理画面用：全顧客取得
+// 管理画面用：全顧客取得（詳細版）
 app.get('/api/admin/customers', async (req, res) => {
     try {
-        const query = 'SELECT * FROM customers ORDER BY registered_date DESC';
+        const query = `
+            SELECT 
+                line_user_id,
+                real_name,
+                phone_number,
+                address,
+                birthday,
+                registered_date
+            FROM customers
+            ORDER BY registered_date DESC
+        `;
         const result = await pgClient.query(query);
         res.json(result.rows);
     } catch (error) {
@@ -382,26 +392,80 @@ app.get('/api/admin/reservations', async (req, res) => {
     }
 });
 
-// 管理画面用：統計データ取得
+// 管理画面用：統計データ取得（拡張版）
 app.get('/api/admin/statistics', async (req, res) => {
     try {
-        // 顧客数
-        const customerQuery = 'SELECT COUNT(*) as total FROM customers';
-        const customerResult = await pgClient.query(customerQuery);
+        // 総顧客数
+        const totalCustomersQuery = 'SELECT COUNT(*) as total FROM customers';
+        const totalCustomersResult = await pgClient.query(totalCustomersQuery);
+        
+        // 今月の新規顧客数
+        const newCustomersQuery = `
+            SELECT COUNT(*) as total 
+            FROM customers 
+            WHERE DATE_TRUNC('month', registered_date) = DATE_TRUNC('month', CURRENT_DATE)
+        `;
+        const newCustomersResult = await pgClient.query(newCustomersQuery);
+        
+        // 常連顧客数（5回以上来店）
+        const regularCustomersQuery = `
+            SELECT COUNT(DISTINCT c.line_user_id) as total
+            FROM customers c
+            WHERE (
+                SELECT COUNT(*) 
+                FROM reservations r 
+                WHERE r.customer_id = c.line_user_id 
+                AND r.status = 'completed'
+            ) >= 5
+        `;
+        const regularCustomersResult = await pgClient.query(regularCustomersQuery);
+        
+        // 平均客単価
+        const avgSpendingQuery = `
+            SELECT AVG(m.price) as average
+            FROM reservations r
+            JOIN menus m ON r.menu_id = m.menu_id
+            WHERE r.status = 'completed'
+        `;
+        const avgSpendingResult = await pgClient.query(avgSpendingQuery);
         
         // 今月の売上
-        const salesQuery = `
+        const monthlySalesQuery = `
             SELECT SUM(m.price) as total
             FROM reservations r
             JOIN menus m ON r.menu_id = m.menu_id
-            WHERE r.status = 'confirmed'
+            WHERE r.status = 'completed'
             AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
         `;
-        const salesResult = await pgClient.query(salesQuery);
+        const monthlySalesResult = await pgClient.query(monthlySalesQuery);
+        
+        // 今日の予約数
+        const todayReservationsQuery = `
+            SELECT COUNT(*) as total
+            FROM reservations
+            WHERE DATE(reservation_date) = CURRENT_DATE
+            AND status = 'confirmed'
+        `;
+        const todayReservationsResult = await pgClient.query(todayReservationsQuery);
+        
+        // 今日の売上
+        const todaySalesQuery = `
+            SELECT SUM(m.price) as total
+            FROM reservations r
+            JOIN menus m ON r.menu_id = m.menu_id
+            WHERE DATE(r.reservation_date) = CURRENT_DATE
+            AND r.status = 'confirmed'
+        `;
+        const todaySalesResult = await pgClient.query(todaySalesQuery);
         
         res.json({
-            totalCustomers: parseInt(customerResult.rows[0].total),
-            monthlySales: salesResult.rows[0].total || 0
+            totalCustomers: parseInt(totalCustomersResult.rows[0].total),
+            newCustomersMonth: parseInt(newCustomersResult.rows[0].total),
+            regularCustomers: parseInt(regularCustomersResult.rows[0].total),
+            averageSpending: Math.round(avgSpendingResult.rows[0].average || 0),
+            monthlySales: monthlySalesResult.rows[0].total || 0,
+            todayReservations: parseInt(todayReservationsResult.rows[0].total),
+            todaySales: todaySalesResult.rows[0].total || 0
         });
     } catch (error) {
         console.error('Error fetching statistics:', error);
