@@ -4,128 +4,171 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>顧客管理 - らくポチビューティー管理画面</title>
-    <link rel="stylesheet" href="css/admin-common.css">
-    <link rel="stylesheet" href="css/customers.css">
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/admin-common.css">
+    <link rel="stylesheet" href="./css/customers.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- ヘッダー -->
-    <header class="admin-header">
-        <div class="header-content">
-            <h1>らくポチビューティー管理画面</h1>
-            <div class="header-user">
-                <span id="adminName">管理者</span>
-                <button onclick="logout()" class="logout-btn">ログアウト</button>
-            </div>
-        </div>
-    </header>
-
     <!-- サイドバー -->
-    <nav class="admin-sidebar">
-        <ul class="nav-menu">
-            <li><a href="dashboard.html">📊 ダッシュボード</a></li>
-            <li><a href="reservations.html">📅 予約管理</a></li>
-            <li><a href="customers.html" class="active">👥 顧客管理</a></li>
-            <li><a href="menus.html">📋 メニュー管理</a></li>
-            <li><a href="staff.html">👤 スタッフ管理</a></li>
-        </ul>
-    </nav>
-
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>らくポチビューティー</h2>
+            <p>管理画面</p>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="./dashboard.html" class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span>ダッシュボード</span>
+            </a>
+            <a href="./reservations.html" class="nav-item">
+                <span class="nav-icon">📅</span>
+                <span>予約管理</span>
+            </a>
+            <a href="./customers.html" class="nav-item active">
+                <span class="nav-icon">👥</span>
+                <span>顧客管理</span>
+            </a>
+            <a href="./menus.html" class="nav-item">
+                <span class="nav-icon">💇‍♀️</span>
+                <span>メニュー管理</span>
+            </a>
+            <a href="./staff.html" class="nav-item">
+                <span class="nav-icon">👨‍💼</span>
+                <span>スタッフ管理</span>
+            </a>
+            <a href="./analytics.html" class="nav-item">
+                <span class="nav-icon">📈</span>
+                <span>売上分析</span>
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button onclick="logout()" class="btn btn-logout">
+                ログアウト
+            </button>
+        </div>
+    </aside>
+    
     <!-- メインコンテンツ -->
-    <main class="admin-main">
-        <div class="page-header">
-            <h2>顧客管理</h2>
+    <main class="main-content">
+        <!-- ヘッダー -->
+        <header class="content-header">
+            <h1>顧客管理</h1>
             <div class="header-actions">
-                <button class="btn-export" onclick="exportCustomerData()">
+                <span id="current-date"></span>
+                <button class="btn btn-secondary" onclick="exportCustomerData()">
                     📥 エクスポート
                 </button>
             </div>
-        </div>
+        </header>
+        
+        <!-- 顧客管理コンテンツ -->
+        <div class="customer-management">
+            <!-- 検索・フィルター -->
+            <div class="search-filter-section">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="名前や電話番号で検索...">
+                    <button onclick="searchCustomers()" class="btn btn-primary">🔍 検索</button>
+                </div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterCustomers('all')">すべて</button>
+                    <button class="filter-btn" onclick="filterCustomers('new')">新規（30日以内）</button>
+                    <button class="filter-btn" onclick="filterCustomers('regular')">常連（5回以上）</button>
+                    <button class="filter-btn" onclick="filterCustomers('inactive')">休眠（60日以上）</button>
+                </div>
+            </div>
 
-        <!-- 検索・フィルター -->
-        <div class="search-filter-section">
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="名前や電話番号で検索...">
-                <button onclick="searchCustomers()" class="search-btn">🔍 検索</button>
+            <!-- 統計カード -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        👥
+                    </div>
+                    <div class="stat-info">
+                        <h3>総顧客数</h3>
+                        <p class="stat-value" id="totalCustomers">0</p>
+                        <span class="stat-change">全登録顧客</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        🆕
+                    </div>
+                    <div class="stat-info">
+                        <h3>今月の新規</h3>
+                        <p class="stat-value" id="newCustomersMonth">0</p>
+                        <span class="stat-change positive">+20% 前月比</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        ⭐
+                    </div>
+                    <div class="stat-info">
+                        <h3>常連顧客</h3>
+                        <p class="stat-value" id="regularCustomers">0</p>
+                        <span class="stat-change">5回以上来店</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                        💰
+                    </div>
+                    <div class="stat-info">
+                        <h3>平均単価</h3>
+                        <p class="stat-value" id="averageSpending">¥0</p>
+                        <span class="stat-change">全顧客平均</span>
+                    </div>
+                </div>
             </div>
-            <div class="filter-buttons">
-                <button class="filter-btn active" onclick="filterCustomers('all')">すべて</button>
-                <button class="filter-btn" onclick="filterCustomers('new')">新規（30日以内）</button>
-                <button class="filter-btn" onclick="filterCustomers('regular')">常連（5回以上）</button>
-                <button class="filter-btn" onclick="filterCustomers('inactive')">休眠（60日以上）</button>
-            </div>
-        </div>
 
-        <!-- 統計カード -->
-        <div class="stats-cards">
-            <div class="stat-card">
-                <div class="stat-icon">👥</div>
-                <div class="stat-content">
-                    <div class="stat-label">総顧客数</div>
-                    <div class="stat-value" id="totalCustomers">0</div>
+            <!-- 顧客リスト -->
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>顧客一覧</h2>
+                    <span class="customer-count">全 <span id="customerCount">0</span> 件</span>
                 </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">🆕</div>
-                <div class="stat-content">
-                    <div class="stat-label">今月の新規</div>
-                    <div class="stat-value" id="newCustomersMonth">0</div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>顧客名</th>
+                                <th>電話番号</th>
+                                <th>登録日</th>
+                                <th>来店回数</th>
+                                <th>最終来店</th>
+                                <th>累計金額</th>
+                                <th>ステータス</th>
+                                <th>アクション</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customersTableBody">
+                            <tr>
+                                <td colspan="8" class="text-center">データを読み込み中...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">⭐</div>
-                <div class="stat-content">
-                    <div class="stat-label">常連顧客</div>
-                    <div class="stat-value" id="regularCustomers">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon">💰</div>
-                <div class="stat-content">
-                    <div class="stat-label">平均単価</div>
-                    <div class="stat-value" id="averageSpending">¥0</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 顧客リスト -->
-        <div class="customers-section">
-            <div class="section-header">
-                <h3>顧客一覧</h3>
-                <span class="customer-count">全 <span id="customerCount">0</span> 件</span>
-            </div>
-            <div class="customers-table-container">
-                <table class="customers-table">
-                    <thead>
-                        <tr>
-                            <th>顧客名</th>
-                            <th>電話番号</th>
-                            <th>登録日</th>
-                            <th>来店回数</th>
-                            <th>最終来店</th>
-                            <th>累計金額</th>
-                            <th>ステータス</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="customersTableBody">
-                        <!-- JavaScriptで動的に生成 -->
-                    </tbody>
-                </table>
             </div>
         </div>
     </main>
 
     <!-- 顧客詳細モーダル -->
-    <div id="customerDetailModal" class="modal">
-        <div class="modal-content large">
+    <div id="customerDetailModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
             <div class="modal-header">
-                <h3>顧客詳細情報</h3>
-                <span class="close" onclick="closeCustomerDetail()">&times;</span>
+                <h2>顧客詳細情報</h2>
+                <button class="modal-close" onclick="closeCustomerDetail()">×</button>
             </div>
             <div class="modal-body">
                 <!-- 基本情報 -->
                 <div class="detail-section">
-                    <h4>基本情報</h4>
+                    <h3>基本情報</h3>
                     <div class="detail-grid">
                         <div class="detail-item">
                             <label>顧客名</label>
@@ -156,8 +199,8 @@
 
                 <!-- 利用統計 -->
                 <div class="detail-section">
-                    <h4>利用統計</h4>
-                    <div class="stats-grid">
+                    <h3>利用統計</h3>
+                    <div class="stats-grid-small">
                         <div class="stat-item">
                             <div class="stat-label">総来店回数</div>
                             <div class="stat-value" id="detailVisitCount">0回</div>
@@ -179,7 +222,7 @@
 
                 <!-- よく利用するメニュー -->
                 <div class="detail-section">
-                    <h4>よく利用するメニュー</h4>
+                    <h3>よく利用するメニュー</h3>
                     <div id="favoriteMenus" class="favorite-menus">
                         <!-- JavaScriptで動的に生成 -->
                     </div>
@@ -187,9 +230,9 @@
 
                 <!-- 予約履歴 -->
                 <div class="detail-section">
-                    <h4>予約履歴</h4>
-                    <div class="reservation-history">
-                        <table class="history-table">
+                    <h3>予約履歴</h3>
+                    <div class="table-container">
+                        <table class="data-table">
                             <thead>
                                 <tr>
                                     <th>日時</th>
@@ -200,7 +243,9 @@
                                 </tr>
                             </thead>
                             <tbody id="historyTableBody">
-                                <!-- JavaScriptで動的に生成 -->
+                                <tr>
+                                    <td colspan="5" class="text-center">履歴データを読み込み中...</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -208,15 +253,18 @@
 
                 <!-- メモ欄 -->
                 <div class="detail-section">
-                    <h4>メモ・特記事項</h4>
-                    <textarea id="customerMemo" class="memo-textarea" placeholder="顧客に関するメモを入力..."></textarea>
-                    <button class="btn-save-memo" onclick="saveCustomerMemo()">メモを保存</button>
+                    <h3>メモ・特記事項</h3>
+                    <textarea id="customerMemo" class="form-textarea" rows="4" placeholder="顧客に関するメモを入力..."></textarea>
+                    <button class="btn btn-primary" onclick="saveCustomerMemo()">メモを保存</button>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCustomerDetail()">閉じる</button>
             </div>
         </div>
     </div>
-
-    <script src="js/admin-common.js"></script>
-    <script src="js/customers.js"></script>
+    
+    <script src="./js/admin-common.js"></script>
+    <script src="./js/customers.js"></script>
 </body>
 </html>

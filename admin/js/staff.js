@@ -1,455 +1,352 @@
-// スタッフ管理画面のJavaScript
-
-// グローバル変数
-let allStaff = [];
-let currentViewMode = 'grid';
-let editingStaffId = null;
-let deletingStaffId = null;
-
-// ページ読み込み時の処理
-document.addEventListener('DOMContentLoaded', function() {
-    // 認証チェック
-    if (!localStorage.getItem('adminLoggedIn')) {
-        window.location.href = 'login.html';
-        return;
-    }
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スタッフ管理 - らくポチビューティー管理画面</title>
     
-    // 初期データ読み込み
-    loadStaff();
-    loadStatistics();
-    loadShiftTable();
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/admin-common.css">
+    <link rel="stylesheet" href="./css/staff.css">
     
-    // フォームのイベントリスナー
-    document.getElementById('staffForm').addEventListener('submit', handleStaffSubmit);
-});
-
-// スタッフデータの読み込み
-async function loadStaff() {
-    try {
-        const response = await fetch('/api/staff');
-        if (!response.ok) throw new Error('スタッフデータの取得に失敗しました');
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- サイドバー -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2>らくポチビューティー</h2>
+            <p>管理画面</p>
+        </div>
         
-        allStaff = await response.json();
-        displayStaff();
-        updateStatistics();
-    } catch (error) {
-        console.error('Error loading staff:', error);
-        showError('スタッフデータの読み込みに失敗しました');
-    }
-}
-
-// スタッフ統計の読み込み
-async function loadStatistics() {
-    try {
-        // スタッフ関連の統計を計算
-        const totalStaff = allStaff.length;
-        const stylistCount = allStaff.filter(s => 
-            s.role && (s.role.includes('スタイリスト') || s.role.includes('チーフ'))
-        ).length;
-        const assistantCount = allStaff.filter(s => 
-            s.role && s.role.includes('アシスタント')
-        ).length;
+        <nav class="sidebar-nav">
+            <a href="./dashboard.html" class="nav-item">
+                <span class="nav-icon">📊</span>
+                <span>ダッシュボード</span>
+            </a>
+            <a href="./reservations.html" class="nav-item">
+                <span class="nav-icon">📅</span>
+                <span>予約管理</span>
+            </a>
+            <a href="./customers.html" class="nav-item">
+                <span class="nav-icon">👥</span>
+                <span>顧客管理</span>
+            </a>
+            <a href="./menus.html" class="nav-item">
+                <span class="nav-icon">💇‍♀️</span>
+                <span>メニュー管理</span>
+            </a>
+            <a href="./staff.html" class="nav-item active">
+                <span class="nav-icon">👨‍💼</span>
+                <span>スタッフ管理</span>
+            </a>
+            <a href="./analytics.html" class="nav-item">
+                <span class="nav-icon">📈</span>
+                <span>売上分析</span>
+            </a>
+        </nav>
         
-        // 本日出勤スタッフ（デモ用：ランダム）
-        const todayWorking = Math.floor(Math.random() * allStaff.length) + 1;
-        
-        // 統計を表示
-        document.getElementById('totalStaff').textContent = totalStaff;
-        document.getElementById('stylistCount').textContent = stylistCount;
-        document.getElementById('assistantCount').textContent = assistantCount;
-        document.getElementById('todayWorking').textContent = todayWorking;
-    } catch (error) {
-        console.error('Error loading statistics:', error);
-    }
-}
-
-// スタッフ表示
-function displayStaff() {
-    if (currentViewMode === 'grid') {
-        displayStaffGrid();
-    } else {
-        displayStaffList();
-    }
-}
-
-// カード表示
-function displayStaffGrid() {
-    const container = document.getElementById('staffGridView');
+        <div class="sidebar-footer">
+            <button onclick="logout()" class="btn btn-logout">
+                ログアウト
+            </button>
+        </div>
+    </aside>
     
-    if (allStaff.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state" style="grid-column: 1 / -1;">
-                <div class="empty-state-icon">👤</div>
-                <div class="empty-state-message">スタッフが登録されていません</div>
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+        <!-- ヘッダー -->
+        <header class="content-header">
+            <h1>スタッフ管理</h1>
+            <div class="header-actions">
+                <span id="current-date"></span>
+                <button class="btn btn-primary" onclick="showAddStaffModal()">
+                    + 新規スタッフ追加
+                </button>
             </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = allStaff.map(staff => {
-        const avatar = getStaffAvatar(staff.name);
-        const role = staff.role || staff.working_hours || 'スタッフ';
-        const monthlyReservations = Math.floor(Math.random() * 50) + 10; // デモ用
-        const rating = (Math.random() * 2 + 3).toFixed(1); // デモ用：3.0〜5.0
+        </header>
         
-        return `
-            <div class="staff-card">
-                <div class="staff-card-header">
-                    <div class="staff-avatar">${avatar}</div>
-                    <div class="staff-name">${escapeHtml(staff.name)}</div>
-                    <div class="staff-role">${escapeHtml(role)}</div>
+        <!-- スタッフ管理コンテンツ -->
+        <div class="staff-management">
+            <!-- スタッフ統計 -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        👥
+                    </div>
+                    <div class="stat-info">
+                        <h3>総スタッフ数</h3>
+                        <p class="stat-value" id="totalStaff">0</p>
+                        <span class="stat-change">全スタッフ</span>
+                    </div>
                 </div>
-                <div class="staff-card-body">
-                    <div class="staff-info">
-                        <span class="staff-info-label">📧</span>
-                        <span>${staff.email || '未設定'}</span>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        ⭐
                     </div>
-                    <div class="staff-info">
-                        <span class="staff-info-label">📱</span>
-                        <span>${staff.phone || '未設定'}</span>
+                    <div class="stat-info">
+                        <h3>スタイリスト</h3>
+                        <p class="stat-value" id="stylistCount">0</p>
+                        <span class="stat-change">チーフ含む</span>
                     </div>
-                    <div class="staff-info">
-                        <span class="staff-info-label">🕐</span>
-                        <span>${staff.working_hours || '10:00-19:00'}</span>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        🎯
                     </div>
-                    
-                    <div class="staff-stats">
-                        <div class="staff-stat">
-                            <div class="staff-stat-value">${monthlyReservations}</div>
-                            <div class="staff-stat-label">今月の予約</div>
-                        </div>
-                        <div class="staff-stat">
-                            <div class="staff-stat-value">${rating}</div>
-                            <div class="staff-stat-label">評価</div>
-                        </div>
+                    <div class="stat-info">
+                        <h3>アシスタント</h3>
+                        <p class="stat-value" id="assistantCount">0</p>
+                        <span class="stat-change">研修中含む</span>
                     </div>
-                    
-                    <div class="staff-card-actions">
-                        <button class="btn-edit" onclick="editStaff(${staff.staff_id})">
-                            編集
-                        </button>
-                        <button class="btn-delete" onclick="deleteStaff(${staff.staff_id})">
-                            削除
-                        </button>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                        📅
+                    </div>
+                    <div class="stat-info">
+                        <h3>本日出勤</h3>
+                        <p class="stat-value" id="todayWorking">0</p>
+                        <span class="stat-change">現在稼働中</span>
                     </div>
                 </div>
             </div>
-        `;
-    }).join('');
-}
 
-// リスト表示
-function displayStaffList() {
-    const tbody = document.getElementById('staffTableBody');
-    
-    if (allStaff.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" class="empty-state">
-                    <div class="empty-state-icon">👤</div>
-                    <div class="empty-state-message">スタッフが登録されていません</div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = allStaff.map(staff => {
-        const role = staff.role || staff.working_hours || 'スタッフ';
-        const monthlyReservations = Math.floor(Math.random() * 50) + 10; // デモ用
-        const rating = (Math.random() * 2 + 3).toFixed(1); // デモ用
-        const stars = generateStars(rating);
-        
-        return `
-            <tr>
-                <td>${escapeHtml(staff.name)}</td>
-                <td>${escapeHtml(role)}</td>
-                <td>${staff.email || '-'}</td>
-                <td>${staff.phone || '-'}</td>
-                <td>${staff.working_hours || '10:00-19:00'}</td>
-                <td>${monthlyReservations}</td>
-                <td><span class="rating">${stars}</span> ${rating}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-action btn-edit" onclick="editStaff(${staff.staff_id})">
-                            編集
+            <!-- スタッフ一覧 -->
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>スタッフ一覧</h2>
+                    <div class="view-toggle">
+                        <button class="view-btn active" onclick="setViewMode('grid')">
+                            📱 カード表示
                         </button>
-                        <button class="btn-action btn-delete" onclick="deleteStaff(${staff.staff_id})">
-                            削除
+                        <button class="view-btn" onclick="setViewMode('list')">
+                            📋 リスト表示
                         </button>
                     </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
+                </div>
 
-// シフト表の読み込み
-function loadShiftTable() {
-    const tbody = document.getElementById('shiftTableBody');
-    const days = ['月', '火', '水', '木', '金', '土', '日'];
-    
-    if (allStaff.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" style="text-align: center; color: #999;">
-                    スタッフが登録されていません
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = allStaff.map(staff => {
-        const workingDays = staff.working_days || generateRandomWorkDays();
-        
-        return `
-            <tr>
-                <td>${escapeHtml(staff.name)}</td>
-                ${days.map(day => {
-                    const isWorking = workingDays.includes(day);
-                    return `
-                        <td>
-                            <span class="shift-cell ${isWorking ? 'shift-working' : 'shift-off'}">
-                                ${isWorking ? '10:00-19:00' : '休'}
-                            </span>
-                        </td>
-                    `;
-                }).join('')}
-            </tr>
-        `;
-    }).join('');
-}
+                <!-- カード表示 -->
+                <div id="staffGridView" class="staff-grid">
+                    <!-- JavaScriptで動的に生成 -->
+                </div>
 
-// ビューモード切り替え
-function setViewMode(mode) {
-    currentViewMode = mode;
-    
-    // ボタンのアクティブ状態を更新
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    event.target.classList.add('active');
-    
-    // 表示を切り替え
-    if (mode === 'grid') {
-        document.getElementById('staffGridView').style.display = 'grid';
-        document.getElementById('staffListView').style.display = 'none';
-    } else {
-        document.getElementById('staffGridView').style.display = 'none';
-        document.getElementById('staffListView').style.display = 'block';
-    }
-    
-    displayStaff();
-}
+                <!-- リスト表示 -->
+                <div id="staffListView" class="view-container" style="display: none;">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>スタッフ名</th>
+                                    <th>役職</th>
+                                    <th>メールアドレス</th>
+                                    <th>電話番号</th>
+                                    <th>勤務時間</th>
+                                    <th>今月の予約数</th>
+                                    <th>評価</th>
+                                    <th>アクション</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staffTableBody">
+                                <!-- JavaScriptで動的に生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
-// スタッフ追加モーダルを開く
-function showAddStaffModal() {
-    editingStaffId = null;
-    document.getElementById('modalTitle').textContent = '新規スタッフ追加';
-    document.getElementById('staffForm').reset();
-    document.getElementById('staffModal').style.display = 'block';
-}
+            <!-- シフト表セクション -->
+            <div class="dashboard-section">
+                <div class="section-header">
+                    <h2>今週のシフト</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" onclick="connectRakupochiKintai()">
+                            🔄 らくポチ勤怠と連携
+                        </button>
+                        <button class="btn btn-secondary" onclick="editShifts()">
+                            ✏️ 手動編集
+                        </button>
+                    </div>
+                </div>
+                <div class="shift-notice">
+                    ℹ️ シフト情報は「らくポチ勤怠」と自動連携予定です
+                </div>
+                <div class="table-container">
+                    <table class="shift-table">
+                        <thead>
+                            <tr>
+                                <th>スタッフ</th>
+                                <th>月</th>
+                                <th>火</th>
+                                <th>水</th>
+                                <th>木</th>
+                                <th>金</th>
+                                <th>土</th>
+                                <th>日</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shiftTableBody">
+                            <!-- JavaScriptで動的に生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
 
-// スタッフ編集
-function editStaff(staffId) {
-    editingStaffId = staffId;
-    const staff = allStaff.find(s => s.staff_id === staffId);
-    
-    if (!staff) {
-        showError('スタッフ情報が見つかりません');
-        return;
-    }
-    
-    document.getElementById('modalTitle').textContent = 'スタッフ情報編集';
-    document.getElementById('staffId').value = staffId;
-    document.getElementById('staffName').value = staff.name;
-    document.getElementById('staffRole').value = staff.role || '';
-    document.getElementById('staffEmail').value = staff.email || '';
-    document.getElementById('staffPhone').value = staff.phone || '';
-    document.getElementById('workingHours').value = staff.working_hours || '';
-    document.getElementById('staffBio').value = staff.bio || '';
-    
-    // 勤務日のチェックボックスを設定
-    const workingDays = staff.working_days || [];
-    document.querySelectorAll('input[name="workingDays"]').forEach(checkbox => {
-        checkbox.checked = workingDays.includes(checkbox.value);
-    });
-    
-    document.getElementById('staffModal').style.display = 'block';
-}
+    <!-- スタッフ追加/編集モーダル -->
+    <div id="staffModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">新規スタッフ追加</h2>
+                <button class="modal-close" onclick="closeStaffModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="staffForm">
+                    <input type="hidden" id="staffId">
+                    
+                    <div class="form-group">
+                        <label for="staffName">スタッフ名 <span class="required">*</span></label>
+                        <input type="text" id="staffName" required placeholder="例: 山田 花子">
+                    </div>
 
-// スタッフモーダルを閉じる
-function closeStaffModal() {
-    document.getElementById('staffModal').style.display = 'none';
-    editingStaffId = null;
-}
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="staffRole">役職 <span class="required">*</span></label>
+                            <select id="staffRole" required>
+                                <option value="">選択してください</option>
+                                <option value="チーフスタイリスト">チーフスタイリスト</option>
+                                <option value="スタイリスト">スタイリスト</option>
+                                <option value="アシスタント">アシスタント</option>
+                                <option value="レセプション">レセプション</option>
+                            </select>
+                        </div>
 
-// スタッフフォーム送信処理
-async function handleStaffSubmit(e) {
-    e.preventDefault();
-    
-    const workingDays = Array.from(document.querySelectorAll('input[name="workingDays"]:checked'))
-        .map(checkbox => checkbox.value);
-    
-    const staffData = {
-        name: document.getElementById('staffName').value,
-        role: document.getElementById('staffRole').value,
-        email: document.getElementById('staffEmail').value,
-        phone: document.getElementById('staffPhone').value,
-        working_hours: document.getElementById('workingHours').value,
-        working_days: workingDays,
-        bio: document.getElementById('staffBio').value
-    };
-    
-    try {
-        let response;
-        if (editingStaffId) {
-            // 更新
-            response = await fetch(`/api/staff/${editingStaffId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(staffData)
-            });
-        } else {
-            // 新規作成
-            response = await fetch('/api/staff', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(staffData)
-            });
+                        <div class="form-group">
+                            <label for="staffStatus">ステータス</label>
+                            <select id="staffStatus">
+                                <option value="active">在籍</option>
+                                <option value="training">研修中</option>
+                                <option value="leave">休職中</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="staffEmail">メールアドレス</label>
+                            <input type="email" id="staffEmail" placeholder="例: yamada@example.com">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="staffPhone">電話番号</label>
+                            <input type="tel" id="staffPhone" placeholder="例: 090-1234-5678">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="workingHours">勤務時間</label>
+                            <input type="text" id="workingHours" placeholder="例: 10:00-19:00">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="rakupochiId">らくポチ勤怠ID</label>
+                            <input type="text" id="rakupochiId" placeholder="連携用ID（自動連携時に使用）">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>勤務日</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="月"> 月
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="火"> 火
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="水"> 水
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="木"> 木
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="金"> 金
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="土"> 土
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="日"> 日
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="staffBio">プロフィール・特技</label>
+                        <textarea id="staffBio" rows="3" placeholder="スタッフの紹介文や特技など"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeStaffModal()">キャンセル</button>
+                <button class="btn btn-primary" onclick="saveStaff()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 削除確認モーダル -->
+    <div id="deleteModal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>スタッフの削除</h2>
+                <button class="modal-close" onclick="closeDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p class="delete-message">
+                    「<span id="deleteStaffName"></span>」を削除してもよろしいですか？
+                </p>
+                <p class="warning-text">
+                    ⚠️ この操作は取り消せません。関連する予約データは保持されます。
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">キャンセル</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">削除する</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./js/admin-common.js"></script>
+    <script src="./js/staff.js"></script>
+    <script>
+        // らくポチ勤怠連携用の関数
+        function connectRakupochiKintai() {
+            alert('らくポチ勤怠との連携機能は現在開発中です。\n\n今後の実装予定:\n- らくポチ勤怠のシフトデータを自動取得\n- リアルタイムでシフト情報を同期\n- 勤怠打刻データとの連携');
         }
-        
-        if (response.ok) {
-            alert(editingStaffId ? 'スタッフ情報を更新しました' : 'スタッフを追加しました');
-            closeStaffModal();
-            loadStaff();
-            loadShiftTable();
-        } else {
-            throw new Error('保存に失敗しました');
+
+        // シフト手動編集
+        function editShifts() {
+            alert('シフト編集機能は現在開発中です。\n\nらくポチ勤怠と連携後は、シフト情報が自動的に反映されます。');
         }
-    } catch (error) {
-        console.error('Error saving staff:', error);
-        alert('スタッフ情報の保存に失敗しました');
-    }
-}
 
-// スタッフ削除
-function deleteStaff(staffId) {
-    deletingStaffId = staffId;
-    const staff = allStaff.find(s => s.staff_id === staffId);
-    
-    if (!staff) {
-        showError('スタッフ情報が見つかりません');
-        return;
-    }
-    
-    document.getElementById('deleteStaffName').textContent = staff.name;
-    document.getElementById('deleteModal').style.display = 'block';
-}
-
-// 削除確認
-async function confirmDelete() {
-    if (!deletingStaffId) return;
-    
-    try {
-        const response = await fetch(`/api/staff/${deletingStaffId}`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok || response.status === 204) {
-            alert('スタッフを削除しました');
-            closeDeleteModal();
-            loadStaff();
-            loadShiftTable();
-        } else {
-            throw new Error('削除に失敗しました');
+        // 保存処理を上書き
+        function saveStaff() {
+            const form = document.getElementById('staffForm');
+            if (form.checkValidity()) {
+                // らくポチ勤怠IDも含めて保存
+                const rakupochiId = document.getElementById('rakupochiId').value;
+                if (rakupochiId) {
+                    console.log('らくポチ勤怠ID:', rakupochiId);
+                }
+                // 元の保存処理を呼び出し
+                handleStaffSubmit(new Event('submit'));
+            } else {
+                form.reportValidity();
+            }
         }
-    } catch (error) {
-        console.error('Error deleting staff:', error);
-        alert('スタッフの削除に失敗しました');
-    }
-}
-
-// 削除モーダルを閉じる
-function closeDeleteModal() {
-    document.getElementById('deleteModal').style.display = 'none';
-    deletingStaffId = null;
-}
-
-// シフト編集（仮実装）
-function editShifts() {
-    alert('シフト編集機能は現在開発中です');
-}
-
-// ヘルパー関数
-function getStaffAvatar(name) {
-    // 名前から絵文字アバターを生成
-    const avatars = ['👨', '👩', '🧑', '👱', '👨‍🦱', '👩‍🦰', '🧔', '👨‍🦳'];
-    const index = name.charCodeAt(0) % avatars.length;
-    return avatars[index];
-}
-
-function generateStars(rating) {
-    const fullStars = Math.floor(rating);
-    const halfStar = rating % 1 >= 0.5 ? 1 : 0;
-    const emptyStars = 5 - fullStars - halfStar;
-    
-    return '★'.repeat(fullStars) + '☆'.repeat(halfStar) + '☆'.repeat(emptyStars);
-}
-
-function generateRandomWorkDays() {
-    const days = ['月', '火', '水', '木', '金', '土', '日'];
-    const workDays = [];
-    days.forEach(day => {
-        if (Math.random() > 0.3) { // 70%の確率で出勤
-            workDays.push(day);
-        }
-    });
-    return workDays.length > 0 ? workDays : ['月', '火', '水', '木', '金']; // 最低でも平日は出勤
-}
-
-function updateStatistics() {
-    const totalStaff = allStaff.length;
-    const stylistCount = allStaff.filter(s => 
-        s.role && (s.role.includes('スタイリスト') || s.role.includes('チーフ'))
-    ).length;
-    const assistantCount = allStaff.filter(s => 
-        s.role && s.role.includes('アシスタント')
-    ).length;
-    const todayWorking = Math.floor(Math.random() * allStaff.length) + 1;
-    
-    document.getElementById('totalStaff').textContent = totalStaff;
-    document.getElementById('stylistCount').textContent = stylistCount;
-    document.getElementById('assistantCount').textContent = assistantCount;
-    document.getElementById('todayWorking').textContent = todayWorking;
-}
-
-function showError(message) {
-    alert(message);
-}
-
-function escapeHtml(text) {
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text ? text.replace(/[&<>"']/g, m => map[m]) : '';
-}
-
-// モーダルの外側クリックで閉じる
-window.onclick = function(event) {
-    if (event.target === document.getElementById('staffModal')) {
-        closeStaffModal();
-    }
-    if (event.target === document.getElementById('deleteModal')) {
-        closeDeleteModal();
-    }
-}
+    </script>
+</body>
+</html>
