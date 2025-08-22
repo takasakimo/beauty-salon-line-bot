@@ -1,0 +1,569 @@
+/* スタッフ管理画面専用スタイル */
+
+/* 統計カード */
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stat-icon {
+    font-size: 32px;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #FFE5E5, #FFF0F5);
+    border-radius: 50%;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 5px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* スタッフセクション */
+.staff-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.section-header h3 {
+    margin: 0;
+    color: #333;
+}
+
+/* ビュー切り替えボタン */
+.view-toggle {
+    display: flex;
+    gap: 5px;
+}
+
+.view-btn {
+    padding: 8px 16px;
+    background: white;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.view-btn:first-child {
+    border-radius: 4px 0 0 4px;
+}
+
+.view-btn:last-child {
+    border-radius: 0 4px 4px 0;
+}
+
+.view-btn.active {
+    background: #FF6B6B;
+    color: white;
+    border-color: #FF6B6B;
+}
+
+/* カード表示（グリッド） */
+.staff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.staff-card {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.staff-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+}
+
+.staff-card-header {
+    background: linear-gradient(135deg, #FF6B6B, #FFB6C1);
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+.staff-avatar {
+    width: 80px;
+    height: 80px;
+    background: white;
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+}
+
+.staff-name {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.staff-role {
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.staff-card-body {
+    padding: 20px;
+}
+
+.staff-info {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #666;
+}
+
+.staff-info-label {
+    font-weight: 500;
+    color: #333;
+}
+
+.staff-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: 15px 0;
+    border-top: 1px solid #f0f0f0;
+    border-bottom: 1px solid #f0f0f0;
+    margin: 15px 0;
+}
+
+.staff-stat {
+    text-align: center;
+}
+
+.staff-stat-value {
+    font-size: 20px;
+    font-weight: bold;
+    color: #FF6B6B;
+}
+
+.staff-stat-label {
+    font-size: 12px;
+    color: #999;
+    margin-top: 4px;
+}
+
+.staff-card-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-edit, .btn-delete {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: opacity 0.3s;
+}
+
+.btn-edit {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn-delete {
+    background: #f44336;
+    color: white;
+}
+
+.btn-edit:hover, .btn-delete:hover {
+    opacity: 0.8;
+}
+
+/* リスト表示（テーブル） */
+.staff-list {
+    overflow-x: auto;
+}
+
+.staff-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.staff-table thead {
+    background: #f8f9fa;
+}
+
+.staff-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.staff-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 14px;
+}
+
+.staff-table tbody tr:hover {
+    background: #f8f9fa;
+}
+
+/* 評価星 */
+.rating {
+    color: #FFD700;
+}
+
+/* シフト表セクション */
+.shift-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.shift-table-container {
+    overflow-x: auto;
+}
+
+.shift-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.shift-table thead {
+    background: #f8f9fa;
+}
+
+.shift-table th,
+.shift-table td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+    font-size: 14px;
+}
+
+.shift-table th:first-child,
+.shift-table td:first-child {
+    text-align: left;
+    font-weight: 600;
+}
+
+.shift-cell {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.shift-working {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.shift-off {
+    background: #fafafa;
+    color: #999;
+}
+
+/* モーダル */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 50px auto;
+    padding: 0;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 8px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-content.small {
+    max-width: 400px;
+}
+
+.modal-header {
+    padding: 20px;
+    background: linear-gradient(135deg, #FF6B6B, #FFB6C1);
+    color: white;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header.delete {
+    background: linear-gradient(135deg, #f44336, #ef5350);
+}
+
+.modal-header h3 {
+    margin: 0;
+}
+
+.close {
+    color: white;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.close:hover {
+    opacity: 0.8;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+/* フォーム */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.required {
+    color: #f44336;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #FF6B6B;
+}
+
+/* チェックボックスグループ */
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.checkbox-label input {
+    width: auto;
+    margin-right: 5px;
+}
+
+/* フォームアクション */
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+/* ボタン */
+.btn-primary {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #FF6B6B, #FFB6C1);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(255, 107, 107, 0.3);
+}
+
+.btn-secondary {
+    padding: 8px 16px;
+    background: white;
+    color: #FF6B6B;
+    border: 1px solid #FF6B6B;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+    background: #FF6B6B;
+    color: white;
+}
+
+.btn-cancel {
+    padding: 10px 20px;
+    background: #f5f5f5;
+    color: #666;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-cancel:hover {
+    background: #e0e0e0;
+}
+
+.btn-danger {
+    padding: 10px 20px;
+    background: #f44336;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-danger:hover {
+    background: #d32f2f;
+}
+
+/* 削除確認モーダル */
+.delete-message {
+    font-size: 16px;
+    margin-bottom: 15px;
+}
+
+.delete-warning {
+    background: #fff3e0;
+    color: #f57c00;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* 空状態 */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+}
+
+.empty-state-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+.empty-state-message {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .stats-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .staff-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .view-toggle {
+        display: none;
+    }
+    
+    .staff-list {
+        display: none !important;
+    }
+    
+    .staff-grid {
+        display: grid !important;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 20px auto;
+    }
+    
+    .shift-table {
+        font-size: 12px;
+    }
+    
+    .shift-table th,
+    .shift-table td {
+        padding: 6px;
+    }
+}

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スタッフ管理 - らくポチビューティー管理画面</title>
+    <link rel="stylesheet" href="css/admin-common.css">
+    <link rel="stylesheet" href="css/staff.css">
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header class="admin-header">
+        <div class="header-content">
+            <h1>らくポチビューティー管理画面</h1>
+            <div class="header-user">
+                <span id="adminName">管理者</span>
+                <button onclick="logout()" class="logout-btn">ログアウト</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- サイドバー -->
+    <nav class="admin-sidebar">
+        <ul class="nav-menu">
+            <li><a href="dashboard.html">📊 ダッシュボード</a></li>
+            <li><a href="reservations.html">📅 予約管理</a></li>
+            <li><a href="customers.html">👥 顧客管理</a></li>
+            <li><a href="menus.html">📋 メニュー管理</a></li>
+            <li><a href="staff.html" class="active">👤 スタッフ管理</a></li>
+        </ul>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="admin-main">
+        <div class="page-header">
+            <h2>スタッフ管理</h2>
+            <div class="header-actions">
+                <button class="btn-primary" onclick="showAddStaffModal()">
+                    ➕ 新規スタッフ追加
+                </button>
+            </div>
+        </div>
+
+        <!-- スタッフ統計 -->
+        <div class="stats-cards">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-content">
+                    <div class="stat-label">総スタッフ数</div>
+                    <div class="stat-value" id="totalStaff">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⭐</div>
+                <div class="stat-content">
+                    <div class="stat-label">スタイリスト</div>
+                    <div class="stat-value" id="stylistCount">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-content">
+                    <div class="stat-label">アシスタント</div>
+                    <div class="stat-value" id="assistantCount">0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-content">
+                    <div class="stat-label">本日出勤</div>
+                    <div class="stat-value" id="todayWorking">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- スタッフ一覧 -->
+        <div class="staff-section">
+            <div class="section-header">
+                <h3>スタッフ一覧</h3>
+                <div class="view-toggle">
+                    <button class="view-btn active" onclick="setViewMode('grid')">
+                        📱 カード表示
+                    </button>
+                    <button class="view-btn" onclick="setViewMode('list')">
+                        📋 リスト表示
+                    </button>
+                </div>
+            </div>
+
+            <!-- カード表示 -->
+            <div id="staffGridView" class="staff-grid">
+                <!-- JavaScriptで動的に生成 -->
+            </div>
+
+            <!-- リスト表示 -->
+            <div id="staffListView" class="staff-list" style="display: none;">
+                <table class="staff-table">
+                    <thead>
+                        <tr>
+                            <th>スタッフ名</th>
+                            <th>役職</th>
+                            <th>メールアドレス</th>
+                            <th>電話番号</th>
+                            <th>勤務時間</th>
+                            <th>今月の予約数</th>
+                            <th>評価</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="staffTableBody">
+                        <!-- JavaScriptで動的に生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- シフト表セクション -->
+        <div class="shift-section">
+            <div class="section-header">
+                <h3>今週のシフト</h3>
+                <button class="btn-secondary" onclick="editShifts()">
+                    ✏️ シフト編集
+                </button>
+            </div>
+            <div class="shift-table-container">
+                <table class="shift-table">
+                    <thead>
+                        <tr>
+                            <th>スタッフ</th>
+                            <th>月</th>
+                            <th>火</th>
+                            <th>水</th>
+                            <th>木</th>
+                            <th>金</th>
+                            <th>土</th>
+                            <th>日</th>
+                        </tr>
+                    </thead>
+                    <tbody id="shiftTableBody">
+                        <!-- JavaScriptで動的に生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- スタッフ追加/編集モーダル -->
+    <div id="staffModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">新規スタッフ追加</h3>
+                <span class="close" onclick="closeStaffModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="staffForm">
+                    <input type="hidden" id="staffId">
+                    
+                    <div class="form-group">
+                        <label for="staffName">スタッフ名 <span class="required">*</span></label>
+                        <input type="text" id="staffName" required placeholder="例: 山田 花子">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="staffRole">役職 <span class="required">*</span></label>
+                        <select id="staffRole" required>
+                            <option value="">選択してください</option>
+                            <option value="チーフスタイリスト">チーフスタイリスト</option>
+                            <option value="スタイリスト">スタイリスト</option>
+                            <option value="アシスタント">アシスタント</option>
+                            <option value="レセプション">レセプション</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="staffEmail">メールアドレス</label>
+                        <input type="email" id="staffEmail" placeholder="例: yamada@example.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="staffPhone">電話番号</label>
+                        <input type="tel" id="staffPhone" placeholder="例: 090-1234-5678">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="workingHours">勤務時間</label>
+                        <input type="text" id="workingHours" placeholder="例: 10:00-19:00">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="workingDays">勤務日</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="月"> 月
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="火"> 火
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="水"> 水
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="木"> 木
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="金"> 金
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="土"> 土
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="workingDays" value="日"> 日
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="staffBio">プロフィール</label>
+                        <textarea id="staffBio" rows="3" placeholder="スタッフの紹介文や特技など"></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn-cancel" onclick="closeStaffModal()">
+                            キャンセル
+                        </button>
+                        <button type="submit" class="btn-primary">
+                            保存
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 削除確認モーダル -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header delete">
+                <h3>スタッフの削除</h3>
+                <span class="close" onclick="closeDeleteModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="delete-message">
+                    「<span id="deleteStaffName"></span>」を削除してもよろしいですか？
+                </p>
+                <p class="delete-warning">
+                    ⚠️ この操作は取り消せません。関連する予約データは保持されます。
+                </p>
+                <div class="form-actions">
+                    <button class="btn-cancel" onclick="closeDeleteModal()">
+                        キャンセル
+                    </button>
+                    <button class="btn-danger" onclick="confirmDelete()">
+                        削除する
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/admin-common.js"></script>
+    <script src="js/staff.js"></script>
+</body>
+</html>

@@ -1,0 +1,455 @@
+// スタッフ管理画面のJavaScript
+
+// グローバル変数
+let allStaff = [];
+let currentViewMode = 'grid';
+let editingStaffId = null;
+let deletingStaffId = null;
+
+// ページ読み込み時の処理
+document.addEventListener('DOMContentLoaded', function() {
+    // 認証チェック
+    if (!localStorage.getItem('adminLoggedIn')) {
+        window.location.href = 'login.html';
+        return;
+    }
+    
+    // 初期データ読み込み
+    loadStaff();
+    loadStatistics();
+    loadShiftTable();
+    
+    // フォームのイベントリスナー
+    document.getElementById('staffForm').addEventListener('submit', handleStaffSubmit);
+});
+
+// スタッフデータの読み込み
+async function loadStaff() {
+    try {
+        const response = await fetch('/api/staff');
+        if (!response.ok) throw new Error('スタッフデータの取得に失敗しました');
+        
+        allStaff = await response.json();
+        displayStaff();
+        updateStatistics();
+    } catch (error) {
+        console.error('Error loading staff:', error);
+        showError('スタッフデータの読み込みに失敗しました');
+    }
+}
+
+// スタッフ統計の読み込み
+async function loadStatistics() {
+    try {
+        // スタッフ関連の統計を計算
+        const totalStaff = allStaff.length;
+        const stylistCount = allStaff.filter(s => 
+            s.role && (s.role.includes('スタイリスト') || s.role.includes('チーフ'))
+        ).length;
+        const assistantCount = allStaff.filter(s => 
+            s.role && s.role.includes('アシスタント')
+        ).length;
+        
+        // 本日出勤スタッフ（デモ用：ランダム）
+        const todayWorking = Math.floor(Math.random() * allStaff.length) + 1;
+        
+        // 統計を表示
+        document.getElementById('totalStaff').textContent = totalStaff;
+        document.getElementById('stylistCount').textContent = stylistCount;
+        document.getElementById('assistantCount').textContent = assistantCount;
+        document.getElementById('todayWorking').textContent = todayWorking;
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+    }
+}
+
+// スタッフ表示
+function displayStaff() {
+    if (currentViewMode === 'grid') {
+        displayStaffGrid();
+    } else {
+        displayStaffList();
+    }
+}
+
+// カード表示
+function displayStaffGrid() {
+    const container = document.getElementById('staffGridView');
+    
+    if (allStaff.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="empty-state-icon">👤</div>
+                <div class="empty-state-message">スタッフが登録されていません</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = allStaff.map(staff => {
+        const avatar = getStaffAvatar(staff.name);
+        const role = staff.role || staff.working_hours || 'スタッフ';
+        const monthlyReservations = Math.floor(Math.random() * 50) + 10; // デモ用
+        const rating = (Math.random() * 2 + 3).toFixed(1); // デモ用：3.0〜5.0
+        
+        return `
+            <div class="staff-card">
+                <div class="staff-card-header">
+                    <div class="staff-avatar">${avatar}</div>
+                    <div class="staff-name">${escapeHtml(staff.name)}</div>
+                    <div class="staff-role">${escapeHtml(role)}</div>
+                </div>
+                <div class="staff-card-body">
+                    <div class="staff-info">
+                        <span class="staff-info-label">📧</span>
+                        <span>${staff.email || '未設定'}</span>
+                    </div>
+                    <div class="staff-info">
+                        <span class="staff-info-label">📱</span>
+                        <span>${staff.phone || '未設定'}</span>
+                    </div>
+                    <div class="staff-info">
+                        <span class="staff-info-label">🕐</span>
+                        <span>${staff.working_hours || '10:00-19:00'}</span>
+                    </div>
+                    
+                    <div class="staff-stats">
+                        <div class="staff-stat">
+                            <div class="staff-stat-value">${monthlyReservations}</div>
+                            <div class="staff-stat-label">今月の予約</div>
+                        </div>
+                        <div class="staff-stat">
+                            <div class="staff-stat-value">${rating}</div>
+                            <div class="staff-stat-label">評価</div>
+                        </div>
+                    </div>
+                    
+                    <div class="staff-card-actions">
+                        <button class="btn-edit" onclick="editStaff(${staff.staff_id})">
+                            編集
+                        </button>
+                        <button class="btn-delete" onclick="deleteStaff(${staff.staff_id})">
+                            削除
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// リスト表示
+function displayStaffList() {
+    const tbody = document.getElementById('staffTableBody');
+    
+    if (allStaff.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="empty-state">
+                    <div class="empty-state-icon">👤</div>
+                    <div class="empty-state-message">スタッフが登録されていません</div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = allStaff.map(staff => {
+        const role = staff.role || staff.working_hours || 'スタッフ';
+        const monthlyReservations = Math.floor(Math.random() * 50) + 10; // デモ用
+        const rating = (Math.random() * 2 + 3).toFixed(1); // デモ用
+        const stars = generateStars(rating);
+        
+        return `
+            <tr>
+                <td>${escapeHtml(staff.name)}</td>
+                <td>${escapeHtml(role)}</td>
+                <td>${staff.email || '-'}</td>
+                <td>${staff.phone || '-'}</td>
+                <td>${staff.working_hours || '10:00-19:00'}</td>
+                <td>${monthlyReservations}</td>
+                <td><span class="rating">${stars}</span> ${rating}</td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn-action btn-edit" onclick="editStaff(${staff.staff_id})">
+                            編集
+                        </button>
+                        <button class="btn-action btn-delete" onclick="deleteStaff(${staff.staff_id})">
+                            削除
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// シフト表の読み込み
+function loadShiftTable() {
+    const tbody = document.getElementById('shiftTableBody');
+    const days = ['月', '火', '水', '木', '金', '土', '日'];
+    
+    if (allStaff.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="text-align: center; color: #999;">
+                    スタッフが登録されていません
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = allStaff.map(staff => {
+        const workingDays = staff.working_days || generateRandomWorkDays();
+        
+        return `
+            <tr>
+                <td>${escapeHtml(staff.name)}</td>
+                ${days.map(day => {
+                    const isWorking = workingDays.includes(day);
+                    return `
+                        <td>
+                            <span class="shift-cell ${isWorking ? 'shift-working' : 'shift-off'}">
+                                ${isWorking ? '10:00-19:00' : '休'}
+                            </span>
+                        </td>
+                    `;
+                }).join('')}
+            </tr>
+        `;
+    }).join('');
+}
+
+// ビューモード切り替え
+function setViewMode(mode) {
+    currentViewMode = mode;
+    
+    // ボタンのアクティブ状態を更新
+    document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // 表示を切り替え
+    if (mode === 'grid') {
+        document.getElementById('staffGridView').style.display = 'grid';
+        document.getElementById('staffListView').style.display = 'none';
+    } else {
+        document.getElementById('staffGridView').style.display = 'none';
+        document.getElementById('staffListView').style.display = 'block';
+    }
+    
+    displayStaff();
+}
+
+// スタッフ追加モーダルを開く
+function showAddStaffModal() {
+    editingStaffId = null;
+    document.getElementById('modalTitle').textContent = '新規スタッフ追加';
+    document.getElementById('staffForm').reset();
+    document.getElementById('staffModal').style.display = 'block';
+}
+
+// スタッフ編集
+function editStaff(staffId) {
+    editingStaffId = staffId;
+    const staff = allStaff.find(s => s.staff_id === staffId);
+    
+    if (!staff) {
+        showError('スタッフ情報が見つかりません');
+        return;
+    }
+    
+    document.getElementById('modalTitle').textContent = 'スタッフ情報編集';
+    document.getElementById('staffId').value = staffId;
+    document.getElementById('staffName').value = staff.name;
+    document.getElementById('staffRole').value = staff.role || '';
+    document.getElementById('staffEmail').value = staff.email || '';
+    document.getElementById('staffPhone').value = staff.phone || '';
+    document.getElementById('workingHours').value = staff.working_hours || '';
+    document.getElementById('staffBio').value = staff.bio || '';
+    
+    // 勤務日のチェックボックスを設定
+    const workingDays = staff.working_days || [];
+    document.querySelectorAll('input[name="workingDays"]').forEach(checkbox => {
+        checkbox.checked = workingDays.includes(checkbox.value);
+    });
+    
+    document.getElementById('staffModal').style.display = 'block';
+}
+
+// スタッフモーダルを閉じる
+function closeStaffModal() {
+    document.getElementById('staffModal').style.display = 'none';
+    editingStaffId = null;
+}
+
+// スタッフフォーム送信処理
+async function handleStaffSubmit(e) {
+    e.preventDefault();
+    
+    const workingDays = Array.from(document.querySelectorAll('input[name="workingDays"]:checked'))
+        .map(checkbox => checkbox.value);
+    
+    const staffData = {
+        name: document.getElementById('staffName').value,
+        role: document.getElementById('staffRole').value,
+        email: document.getElementById('staffEmail').value,
+        phone: document.getElementById('staffPhone').value,
+        working_hours: document.getElementById('workingHours').value,
+        working_days: workingDays,
+        bio: document.getElementById('staffBio').value
+    };
+    
+    try {
+        let response;
+        if (editingStaffId) {
+            // 更新
+            response = await fetch(`/api/staff/${editingStaffId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(staffData)
+            });
+        } else {
+            // 新規作成
+            response = await fetch('/api/staff', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(staffData)
+            });
+        }
+        
+        if (response.ok) {
+            alert(editingStaffId ? 'スタッフ情報を更新しました' : 'スタッフを追加しました');
+            closeStaffModal();
+            loadStaff();
+            loadShiftTable();
+        } else {
+            throw new Error('保存に失敗しました');
+        }
+    } catch (error) {
+        console.error('Error saving staff:', error);
+        alert('スタッフ情報の保存に失敗しました');
+    }
+}
+
+// スタッフ削除
+function deleteStaff(staffId) {
+    deletingStaffId = staffId;
+    const staff = allStaff.find(s => s.staff_id === staffId);
+    
+    if (!staff) {
+        showError('スタッフ情報が見つかりません');
+        return;
+    }
+    
+    document.getElementById('deleteStaffName').textContent = staff.name;
+    document.getElementById('deleteModal').style.display = 'block';
+}
+
+// 削除確認
+async function confirmDelete() {
+    if (!deletingStaffId) return;
+    
+    try {
+        const response = await fetch(`/api/staff/${deletingStaffId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok || response.status === 204) {
+            alert('スタッフを削除しました');
+            closeDeleteModal();
+            loadStaff();
+            loadShiftTable();
+        } else {
+            throw new Error('削除に失敗しました');
+        }
+    } catch (error) {
+        console.error('Error deleting staff:', error);
+        alert('スタッフの削除に失敗しました');
+    }
+}
+
+// 削除モーダルを閉じる
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+    deletingStaffId = null;
+}
+
+// シフト編集（仮実装）
+function editShifts() {
+    alert('シフト編集機能は現在開発中です');
+}
+
+// ヘルパー関数
+function getStaffAvatar(name) {
+    // 名前から絵文字アバターを生成
+    const avatars = ['👨', '👩', '🧑', '👱', '👨‍🦱', '👩‍🦰', '🧔', '👨‍🦳'];
+    const index = name.charCodeAt(0) % avatars.length;
+    return avatars[index];
+}
+
+function generateStars(rating) {
+    const fullStars = Math.floor(rating);
+    const halfStar = rating % 1 >= 0.5 ? 1 : 0;
+    const emptyStars = 5 - fullStars - halfStar;
+    
+    return '★'.repeat(fullStars) + '☆'.repeat(halfStar) + '☆'.repeat(emptyStars);
+}
+
+function generateRandomWorkDays() {
+    const days = ['月', '火', '水', '木', '金', '土', '日'];
+    const workDays = [];
+    days.forEach(day => {
+        if (Math.random() > 0.3) { // 70%の確率で出勤
+            workDays.push(day);
+        }
+    });
+    return workDays.length > 0 ? workDays : ['月', '火', '水', '木', '金']; // 最低でも平日は出勤
+}
+
+function updateStatistics() {
+    const totalStaff = allStaff.length;
+    const stylistCount = allStaff.filter(s => 
+        s.role && (s.role.includes('スタイリスト') || s.role.includes('チーフ'))
+    ).length;
+    const assistantCount = allStaff.filter(s => 
+        s.role && s.role.includes('アシスタント')
+    ).length;
+    const todayWorking = Math.floor(Math.random() * allStaff.length) + 1;
+    
+    document.getElementById('totalStaff').textContent = totalStaff;
+    document.getElementById('stylistCount').textContent = stylistCount;
+    document.getElementById('assistantCount').textContent = assistantCount;
+    document.getElementById('todayWorking').textContent = todayWorking;
+}
+
+function showError(message) {
+    alert(message);
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text ? text.replace(/[&<>"']/g, m => map[m]) : '';
+}
+
+// モーダルの外側クリックで閉じる
+window.onclick = function(event) {
+    if (event.target === document.getElementById('staffModal')) {
+        closeStaffModal();
+    }
+    if (event.target === document.getElementById('deleteModal')) {
+        closeDeleteModal();
+    }
+}

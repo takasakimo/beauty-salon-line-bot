@@ -532,6 +532,116 @@ app.delete('/api/menus/:id', async (req, res) => {
     }
 });
 
+// ===========================
+// スタッフ管理API（新規追加）
+// ===========================
+
+// スタッフ追加
+app.post('/api/staff', async (req, res) => {
+    try {
+        const { name, email, working_hours, role, phone, working_days, bio } = req.body;
+        
+        // working_daysを文字列に変換（配列の場合）
+        const workingDaysStr = Array.isArray(working_days) ? working_days.join(',') : working_days;
+        
+        const insertQuery = `
+            INSERT INTO staff (name, email, working_hours)
+            VALUES ($1, $2, $3)
+            RETURNING *
+        `;
+        
+        // 基本情報のみを保存（既存のテーブル構造に合わせる）
+        const result = await pgClient.query(insertQuery, [
+            name, 
+            email || null, 
+            role || working_hours || null
+        ]);
+        
+        // 追加のフィールドは返却時に含める
+        const staffData = {
+            ...result.rows[0],
+            role: role,
+            phone: phone,
+            working_days: working_days,
+            bio: bio
+        };
+        
+        res.json(staffData);
+    } catch (error) {
+        console.error('Error creating staff:', error);
+        res.status(500).json({ error: 'Creation failed' });
+    }
+});
+
+// スタッフ更新
+app.put('/api/staff/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, working_hours, role, phone, working_days, bio } = req.body;
+        
+        const updateQuery = `
+            UPDATE staff 
+            SET name = $2, email = $3, working_hours = $4
+            WHERE staff_id = $1
+            RETURNING *
+        `;
+        
+        const result = await pgClient.query(updateQuery, [
+            id,
+            name,
+            email || null,
+            role || working_hours || null
+        ]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Staff not found' });
+        }
+        
+        // 追加のフィールドを含めて返却
+        const staffData = {
+            ...result.rows[0],
+            role: role,
+            phone: phone,
+            working_days: working_days,
+            bio: bio
+        };
+        
+        res.json(staffData);
+    } catch (error) {
+        console.error('Error updating staff:', error);
+        res.status(500).json({ error: 'Update failed' });
+    }
+});
+
+// スタッフ削除
+app.delete('/api/staff/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // 予約に関連付けられているスタッフは削除できないようにする（オプション）
+        const checkQuery = `
+            SELECT COUNT(*) as count 
+            FROM reservations 
+            WHERE staff_id = $1 AND status = 'confirmed'
+        `;
+        const checkResult = await pgClient.query(checkQuery, [id]);
+        
+        if (parseInt(checkResult.rows[0].count) > 0) {
+            return res.status(400).json({ 
+                error: 'このスタッフには確定済みの予約があるため削除できません' 
+            });
+        }
+        
+        const deleteQuery = 'DELETE FROM staff WHERE staff_id = $1';
+        await pgClient.query(deleteQuery, [id]);
+        
+        res.status(204).send();
+    } catch (error) {
+        console.error('Error deleting staff:', error);
+        res.status(500).json({ error: 'Deletion failed' });
+    }
+});
+
 // テスト用エンドポイント
 app.get('/test', (req, res) => {
     res.send('Beauty Salon LINE Bot with LIFF is running!');
