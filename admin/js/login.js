@@ -1,57 +1,48 @@
-// ログインフォームの処理
-document.getElementById('login-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - らくポチビューティー管理画面</title>
+    <link rel="stylesheet" href="css/login.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <h1>らくポチビューティー</h1>
+                <p>管理画面ログイン</p>
+            </div>
+            
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="username">ユーザー名</label>
+                    <input type="text" id="username" required placeholder="ユーザー名を入力">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">パスワード</label>
+                    <input type="password" id="password" required placeholder="パスワードを入力">
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="remember"> 
+                        ログイン状態を保持する
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn-login">ログイン</button>
+            </form>
+            
+            <div class="login-footer">
+                <p>デモ用アカウント</p>
+                <p class="demo-info">ユーザー名: admin / パスワード: admin123</p>
+            </div>
+        </div>
+    </div>
     
-    const username = document.getElementById('username').value;
-    const password = document.getElementById('password').value;
-    const remember = document.querySelector('input[name="remember"]').checked;
-    
-    // デモ用の簡易認証（本番環境では適切な認証を実装）
-    if (username === 'admin' && password === 'admin123') {
-        // セッションストレージに保存（rememberがtrueの場合はlocalStorage）
-        const storage = remember ? localStorage : sessionStorage;
-        storage.setItem('adminLoggedIn', 'true');
-        storage.setItem('adminUsername', username);
-        storage.setItem('loginTime', new Date().toISOString());
-        
-        // ダッシュボードへリダイレクト
-        window.location.href = './dashboard.html';
-    } else {
-        // エラーメッセージを表示
-        showError('ユーザー名またはパスワードが正しくありません');
-    }
-});
-
-// エラーメッセージを表示
-function showError(message) {
-    // 既存のエラーメッセージを削除
-    const existingError = document.querySelector('.error-message');
-    if (existingError) {
-        existingError.remove();
-    }
-    
-    // 新しいエラーメッセージを作成
-    const errorDiv = document.createElement('div');
-    errorDiv.className = 'error-message';
-    errorDiv.textContent = message;
-    
-    // フォームの前に挿入
-    const form = document.getElementById('login-form');
-    form.insertBefore(errorDiv, form.firstChild);
-    
-    // 3秒後に自動的に消す
-    setTimeout(() => {
-        errorDiv.style.opacity = '0';
-        setTimeout(() => errorDiv.remove(), 300);
-    }, 3000);
-}
-
-// ページ読み込み時にログイン状態をチェック
-document.addEventListener('DOMContentLoaded', function() {
-    const isLoggedIn = localStorage.getItem('adminLoggedIn') || sessionStorage.getItem('adminLoggedIn');
-    
-    if (isLoggedIn) {
-        // 既にログインしている場合はダッシュボードへ
-        window.location.href = './dashboard.html';
-    }
-});
+    <script src="js/login.js"></script>
+</body>
+</html>
