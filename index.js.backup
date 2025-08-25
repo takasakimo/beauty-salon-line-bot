@@ -2,7 +2,6 @@ const express = require('express');
 const line = require('@line/bot-sdk');
 const { Client } = require('pg');
 const path = require('path');
-const crypto = require('crypto');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -27,9 +26,6 @@ pgClient.connect()
     .then(() => console.log('PostgreSQL connected'))
     .catch(err => console.error('PostgreSQL connection error:', err));
 
-// セッション管理用の簡易ストア（マルチテナント用）
-const sessions = new Map();
-
 // 静的ファイルの提供（LIFF用） - 最初に設定
 app.use('/liff', express.static(path.join(__dirname, 'liff')));
 // ルートパスでもLIFFにアクセスできるように
@@ -40,7 +36,7 @@ app.use('/admin', express.static(path.join(__dirname, 'admin')));
 // CORSヘッダー設定（LIFF用）
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Tenant-Code, X-Session-Token');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') {
         res.sendStatus(200);
@@ -86,161 +82,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ===========================
-// テナントID取得ミドルウェア（新規追加）
-// ===========================
-async function getTenantId(req, res, next) {
-    try {
-        // ヘッダーまたはクエリパラメータからテナントコードを取得
-        const tenantCode = req.headers['x-tenant-code'] || req.query.tenant || 'beauty-salon-001';
-        
-        const result = await pgClient.query(
-            'SELECT tenant_id, is_active FROM tenants WHERE tenant_code = $1',
-            [tenantCode]
-        );
-
-        if (result.rows.length === 0) {
-            // テナントが存在しない場合はデフォルトテナントを使用
-            const defaultResult = await pgClient.query(
-                'SELECT tenant_id FROM tenants WHERE tenant_code = $1',
-                ['beauty-salon-001']
-            );
-            req.tenantId = defaultResult.rows[0].tenant_id;
-        } else {
-            if (!result.rows[0].is_active) {
-                return res.status(403).json({ error: 'このテナントは無効です' });
-            }
-            req.tenantId = result.rows[0].tenant_id;
-        }
-        
-        next();
-    } catch (error) {
-        console.error('テナントID取得エラー:', error);
-        // エラーの場合もデフォルトテナントで続行
-        req.tenantId = 1; // デフォルトテナントID
-        next();
-    }
-}
-
-// 管理者認証ミドルウェア（新規追加）
-async function authenticateAdmin(req, res, next) {
-    try {
-        const sessionToken = req.headers['x-session-token'];
-        
-        if (!sessionToken || !sessions.has(sessionToken)) {
-            return res.status(401).json({ error: '認証が必要です' });
-        }
-
-        const session = sessions.get(sessionToken);
-        req.adminId = session.adminId;
-        req.tenantId = session.tenantId;
-        req.role = session.role;
-        
-        next();
-    } catch (error) {
-        console.error('認証エラー:', error);
-        res.status(500).json({ error: 'サーバーエラー' });
-    }
-}
-
-// ===========================
-// 認証API（新規追加）
-// ===========================
-
-// 管理者ログイン（マルチテナント対応）
-app.post('/api/admin/login', async (req, res) => {
-    try {
-        const { username, password, tenantCode } = req.body;
-        
-        // テナントコードが指定されていない場合はデフォルトを使用
-        const actualTenantCode = tenantCode || 'beauty-salon-001';
-        
-        // テナント情報を取得
-        const tenantResult = await pgClient.query(
-            'SELECT tenant_id, salon_name, is_active FROM tenants WHERE tenant_code = $1',
-            [actualTenantCode]
-        );
-
-        if (tenantResult.rows.length === 0) {
-            return res.status(401).json({ error: 'ログイン失敗：テナントが見つかりません' });
-        }
-
-        const tenant = tenantResult.rows[0];
-        
-        if (!tenant.is_active) {
-            return res.status(401).json({ error: 'このテナントは無効です' });
-        }
-
-        // パスワードハッシュの生成
-        const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
-        
-        // 管理者認証
-        const adminResult = await pgClient.query(
-            `SELECT admin_id, full_name, role 
-             FROM tenant_admins 
-             WHERE tenant_id = $1 AND username = $2 AND password_hash = $3 AND is_active = true`,
-            [tenant.tenant_id, username, passwordHash]
-        );
-
-        if (adminResult.rows.length === 0) {
-            return res.status(401).json({ error: 'ログイン失敗：認証情報が正しくありません' });
-        }
-
-        const admin = adminResult.rows[0];
-        
-        // セッショントークンの生成
-        const sessionToken = crypto.randomBytes(32).toString('hex');
-        
-        // セッション情報を保存
-        sessions.set(sessionToken, {
-            adminId: admin.admin_id,
-            tenantId: tenant.tenant_id,
-            username: username,
-            role: admin.role,
-            createdAt: Date.now()
-        });
-
-        // 最終ログイン時刻を更新
-        await pgClient.query(
-            'UPDATE tenant_admins SET last_login = CURRENT_TIMESTAMP WHERE admin_id = $1',
-            [admin.admin_id]
-        );
-
-        res.json({
-            success: true,
-            sessionToken,
-            adminName: admin.full_name,
-            tenantName: tenant.salon_name,
-            role: admin.role
-        });
-    } catch (error) {
-        console.error('ログインエラー:', error);
-        res.status(500).json({ error: 'サーバーエラー' });
-    }
-});
-
-// テナント一覧取得（ログイン画面用）
-app.get('/api/tenants/active', async (req, res) => {
-    try {
-        const result = await pgClient.query(
-            'SELECT tenant_code, salon_name FROM tenants WHERE is_active = true ORDER BY salon_name'
-        );
-        res.json(result.rows);
-    } catch (error) {
-        console.error('テナント一覧取得エラー:', error);
-        res.status(500).json({ error: 'サーバーエラー' });
-    }
-});
-
-// ===========================
-// API エンドポイント（既存のものにテナントID対応を追加）
+// API エンドポイント
 // ===========================
 
 // 顧客API
-app.get('/api/customers/:lineUserId', getTenantId, async (req, res) => {
+app.get('/api/customers/:lineUserId', async (req, res) => {
     try {
         const { lineUserId } = req.params;
-        const query = 'SELECT * FROM customers WHERE line_user_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
-        const result = await pgClient.query(query, [lineUserId, req.tenantId]);
+        const query = 'SELECT * FROM customers WHERE line_user_id = $1';
+        const result = await pgClient.query(query, [lineUserId]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Customer not found' });
@@ -253,22 +103,15 @@ app.get('/api/customers/:lineUserId', getTenantId, async (req, res) => {
     }
 });
 
-app.post('/api/customers/register', getTenantId, async (req, res) => {
+app.post('/api/customers/register', async (req, res) => {
     try {
         const { line_user_id, real_name, phone_number } = req.body;
         
         // 既存チェック
-        const checkQuery = 'SELECT * FROM customers WHERE line_user_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
-        const checkResult = await pgClient.query(checkQuery, [line_user_id, req.tenantId]);
+        const checkQuery = 'SELECT * FROM customers WHERE line_user_id = $1';
+        const checkResult = await pgClient.query(checkQuery, [line_user_id]);
         
         if (checkResult.rows.length > 0) {
-            // 既存顧客にテナントIDを設定
-            if (!checkResult.rows[0].tenant_id) {
-                await pgClient.query(
-                    'UPDATE customers SET tenant_id = $1 WHERE line_user_id = $2',
-                    [req.tenantId, line_user_id]
-                );
-            }
             return res.json({ 
                 success: true, 
                 message: 'Already registered',
@@ -278,11 +121,11 @@ app.post('/api/customers/register', getTenantId, async (req, res) => {
         
         // 新規登録
         const insertQuery = `
-            INSERT INTO customers (line_user_id, real_name, phone_number, registered_date, tenant_id)
-            VALUES ($1, $2, $3, NOW(), $4)
+            INSERT INTO customers (line_user_id, real_name, phone_number, registered_date)
+            VALUES ($1, $2, $3, NOW())
             RETURNING *
         `;
-        const result = await pgClient.query(insertQuery, [line_user_id, real_name, phone_number, req.tenantId]);
+        const result = await pgClient.query(insertQuery, [line_user_id, real_name, phone_number]);
         
         res.json({ 
             success: true, 
@@ -295,7 +138,7 @@ app.post('/api/customers/register', getTenantId, async (req, res) => {
     }
 });
 
-app.put('/api/customers/:lineUserId', getTenantId, async (req, res) => {
+app.put('/api/customers/:lineUserId', async (req, res) => {
     try {
         const { lineUserId } = req.params;
         const { real_name, phone_number } = req.body;
@@ -303,10 +146,10 @@ app.put('/api/customers/:lineUserId', getTenantId, async (req, res) => {
         const updateQuery = `
             UPDATE customers 
             SET real_name = $2, phone_number = $3
-            WHERE line_user_id = $1 AND (tenant_id = $4 OR tenant_id IS NULL)
+            WHERE line_user_id = $1
             RETURNING *
         `;
-        const result = await pgClient.query(updateQuery, [lineUserId, real_name, phone_number, req.tenantId]);
+        const result = await pgClient.query(updateQuery, [lineUserId, real_name, phone_number]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Customer not found' });
@@ -320,7 +163,7 @@ app.put('/api/customers/:lineUserId', getTenantId, async (req, res) => {
 });
 
 // 予約API
-app.get('/api/reservations/user/:userId', getTenantId, async (req, res) => {
+app.get('/api/reservations/user/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
         const query = `
@@ -328,10 +171,10 @@ app.get('/api/reservations/user/:userId', getTenantId, async (req, res) => {
             FROM reservations r
             JOIN menus m ON r.menu_id = m.menu_id
             JOIN staff s ON r.staff_id = s.staff_id
-            WHERE r.customer_id = $1 AND (r.tenant_id = $2 OR r.tenant_id IS NULL)
+            WHERE r.customer_id = $1
             ORDER BY r.reservation_date DESC
         `;
-        const result = await pgClient.query(query, [userId, req.tenantId]);
+        const result = await pgClient.query(query, [userId]);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching reservations:', error);
@@ -339,7 +182,7 @@ app.get('/api/reservations/user/:userId', getTenantId, async (req, res) => {
     }
 });
 
-app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
+app.get('/api/reservations/current/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
         const query = `
@@ -348,13 +191,12 @@ app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
             JOIN menus m ON r.menu_id = m.menu_id
             JOIN staff s ON r.staff_id = s.staff_id
             WHERE r.customer_id = $1 
-            AND (r.tenant_id = $2 OR r.tenant_id IS NULL)
             AND r.reservation_date > NOW()
             AND r.status = 'confirmed'
             ORDER BY r.reservation_date ASC
             LIMIT 1
         `;
-        const result = await pgClient.query(query, [userId, req.tenantId]);
+        const result = await pgClient.query(query, [userId]);
         
         if (result.rows.length === 0) {
             return res.json(null);
@@ -367,16 +209,16 @@ app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
     }
 });
 
-app.post('/api/reservations', getTenantId, async (req, res) => {
+app.post('/api/reservations', async (req, res) => {
     try {
         const { customer_id, staff_id, menu_id, reservation_date } = req.body;
         
         const insertQuery = `
-            INSERT INTO reservations (customer_id, staff_id, menu_id, reservation_date, status, created_at, tenant_id)
-            VALUES ($1, $2, $3, $4, 'confirmed', NOW(), $5)
+            INSERT INTO reservations (customer_id, staff_id, menu_id, reservation_date, status, created_at)
+            VALUES ($1, $2, $3, $4, 'confirmed', NOW())
             RETURNING *
         `;
-        const result = await pgClient.query(insertQuery, [customer_id, staff_id, menu_id, reservation_date, req.tenantId]);
+        const result = await pgClient.query(insertQuery, [customer_id, staff_id, menu_id, reservation_date]);
         
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -385,17 +227,17 @@ app.post('/api/reservations', getTenantId, async (req, res) => {
     }
 });
 
-app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
+app.delete('/api/reservations/:id', async (req, res) => {
     try {
         const { id } = req.params;
         
         const updateQuery = `
             UPDATE reservations 
             SET status = 'cancelled', cancelled_at = NOW()
-            WHERE reservation_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+            WHERE reservation_id = $1
             RETURNING *
         `;
-        const result = await pgClient.query(updateQuery, [id, req.tenantId]);
+        const result = await pgClient.query(updateQuery, [id]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Reservation not found' });
@@ -408,7 +250,7 @@ app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
     }
 });
 
-app.get('/api/reservations/available-slots', getTenantId, async (req, res) => {
+app.get('/api/reservations/available-slots', async (req, res) => {
     try {
         const { date, menu_id } = req.query;
         
@@ -425,9 +267,8 @@ app.get('/api/reservations/available-slots', getTenantId, async (req, res) => {
             FROM reservations
             WHERE DATE(reservation_date) = $1
             AND status = 'confirmed'
-            AND (tenant_id = $2 OR tenant_id IS NULL)
         `;
-        const result = await pgClient.query(query, [date, req.tenantId]);
+        const result = await pgClient.query(query, [date]);
         const bookedSlots = result.rows.map(row => row.time);
         
         // 空きスロットを返す
@@ -440,10 +281,10 @@ app.get('/api/reservations/available-slots', getTenantId, async (req, res) => {
 });
 
 // メニューAPI
-app.get('/api/menus', getTenantId, async (req, res) => {
+app.get('/api/menus', async (req, res) => {
     try {
-        const query = 'SELECT * FROM menus WHERE (tenant_id = $1 OR tenant_id IS NULL) ORDER BY menu_id';
-        const result = await pgClient.query(query, [req.tenantId]);
+        const query = 'SELECT * FROM menus ORDER BY menu_id';
+        const result = await pgClient.query(query);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching menus:', error);
@@ -451,11 +292,11 @@ app.get('/api/menus', getTenantId, async (req, res) => {
     }
 });
 
-app.get('/api/menus/:id', getTenantId, async (req, res) => {
+app.get('/api/menus/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const query = 'SELECT * FROM menus WHERE menu_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
-        const result = await pgClient.query(query, [id, req.tenantId]);
+        const query = 'SELECT * FROM menus WHERE menu_id = $1';
+        const result = await pgClient.query(query, [id]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Menu not found' });
@@ -469,10 +310,10 @@ app.get('/api/menus/:id', getTenantId, async (req, res) => {
 });
 
 // スタッフAPI
-app.get('/api/staff', getTenantId, async (req, res) => {
+app.get('/api/staff', async (req, res) => {
     try {
-        const query = 'SELECT * FROM staff WHERE (tenant_id = $1 OR tenant_id IS NULL) ORDER BY staff_id';
-        const result = await pgClient.query(query, [req.tenantId]);
+        const query = 'SELECT * FROM staff ORDER BY staff_id';
+        const result = await pgClient.query(query);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching staff:', error);
@@ -480,11 +321,11 @@ app.get('/api/staff', getTenantId, async (req, res) => {
     }
 });
 
-app.get('/api/staff/:id', getTenantId, async (req, res) => {
+app.get('/api/staff/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const query = 'SELECT * FROM staff WHERE staff_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
-        const result = await pgClient.query(query, [id, req.tenantId]);
+        const query = 'SELECT * FROM staff WHERE staff_id = $1';
+        const result = await pgClient.query(query, [id]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Staff not found' });
@@ -498,11 +339,11 @@ app.get('/api/staff/:id', getTenantId, async (req, res) => {
 });
 
 // ===========================
-// 管理画面用APIエンドポイント（テナント対応）
+// 管理画面用APIエンドポイント
 // ===========================
 
 // 管理画面用：全顧客取得（詳細版）
-app.get('/api/admin/customers', authenticateAdmin, async (req, res) => {
+app.get('/api/admin/customers', async (req, res) => {
     try {
         const query = `
             SELECT 
@@ -513,10 +354,9 @@ app.get('/api/admin/customers', authenticateAdmin, async (req, res) => {
                 birthday,
                 registered_date
             FROM customers
-            WHERE tenant_id = $1
             ORDER BY registered_date DESC
         `;
-        const result = await pgClient.query(query, [req.tenantId]);
+        const result = await pgClient.query(query);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching all customers:', error);
@@ -525,7 +365,7 @@ app.get('/api/admin/customers', authenticateAdmin, async (req, res) => {
 });
 
 // 管理画面用：全予約取得（日付フィルター付き）
-app.get('/api/admin/reservations', authenticateAdmin, async (req, res) => {
+app.get('/api/admin/reservations', async (req, res) => {
     try {
         const { date } = req.query;
         let query = `
@@ -534,19 +374,18 @@ app.get('/api/admin/reservations', authenticateAdmin, async (req, res) => {
             LEFT JOIN customers c ON r.customer_id = c.line_user_id
             JOIN menus m ON r.menu_id = m.menu_id
             JOIN staff s ON r.staff_id = s.staff_id
-            WHERE r.tenant_id = $1
         `;
         
-        const params = [req.tenantId];
-        
         if (date) {
-            query += ` AND DATE(r.reservation_date) = $2`;
-            params.push(date);
+            query += ` WHERE DATE(r.reservation_date) = $1`;
+            query += ` ORDER BY r.reservation_date ASC`;
+            const result = await pgClient.query(query, [date]);
+            res.json(result.rows);
+        } else {
+            query += ` ORDER BY r.reservation_date DESC`;
+            const result = await pgClient.query(query);
+            res.json(result.rows);
         }
-        
-        query += ` ORDER BY r.reservation_date ASC`;
-        const result = await pgClient.query(query, params);
-        res.json(result.rows);
     } catch (error) {
         console.error('Error fetching admin reservations:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -554,35 +393,32 @@ app.get('/api/admin/reservations', authenticateAdmin, async (req, res) => {
 });
 
 // 管理画面用：統計データ取得（拡張版）
-app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
+app.get('/api/admin/statistics', async (req, res) => {
     try {
         // 総顧客数
-        const totalCustomersQuery = 'SELECT COUNT(*) as total FROM customers WHERE tenant_id = $1';
-        const totalCustomersResult = await pgClient.query(totalCustomersQuery, [req.tenantId]);
+        const totalCustomersQuery = 'SELECT COUNT(*) as total FROM customers';
+        const totalCustomersResult = await pgClient.query(totalCustomersQuery);
         
         // 今月の新規顧客数
         const newCustomersQuery = `
             SELECT COUNT(*) as total 
             FROM customers 
-            WHERE tenant_id = $1
-            AND DATE_TRUNC('month', registered_date) = DATE_TRUNC('month', CURRENT_DATE)
+            WHERE DATE_TRUNC('month', registered_date) = DATE_TRUNC('month', CURRENT_DATE)
         `;
-        const newCustomersResult = await pgClient.query(newCustomersQuery, [req.tenantId]);
+        const newCustomersResult = await pgClient.query(newCustomersQuery);
         
         // 常連顧客数（5回以上来店）
         const regularCustomersQuery = `
             SELECT COUNT(DISTINCT c.line_user_id) as total
             FROM customers c
-            WHERE c.tenant_id = $1
-            AND (
+            WHERE (
                 SELECT COUNT(*) 
                 FROM reservations r 
                 WHERE r.customer_id = c.line_user_id 
-                AND r.tenant_id = $1
                 AND r.status = 'completed'
             ) >= 5
         `;
-        const regularCustomersResult = await pgClient.query(regularCustomersQuery, [req.tenantId]);
+        const regularCustomersResult = await pgClient.query(regularCustomersQuery);
         
         // 平均客単価
         const avgSpendingQuery = `
@@ -590,9 +426,8 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
             FROM reservations r
             JOIN menus m ON r.menu_id = m.menu_id
             WHERE r.status = 'completed'
-            AND r.tenant_id = $1
         `;
-        const avgSpendingResult = await pgClient.query(avgSpendingQuery, [req.tenantId]);
+        const avgSpendingResult = await pgClient.query(avgSpendingQuery);
         
         // 今月の売上
         const monthlySalesQuery = `
@@ -600,10 +435,9 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
             FROM reservations r
             JOIN menus m ON r.menu_id = m.menu_id
             WHERE r.status = 'completed'
-            AND r.tenant_id = $1
             AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
         `;
-        const monthlySalesResult = await pgClient.query(monthlySalesQuery, [req.tenantId]);
+        const monthlySalesResult = await pgClient.query(monthlySalesQuery);
         
         // 今日の予約数
         const todayReservationsQuery = `
@@ -611,9 +445,8 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
             FROM reservations
             WHERE DATE(reservation_date) = CURRENT_DATE
             AND status = 'confirmed'
-            AND tenant_id = $1
         `;
-        const todayReservationsResult = await pgClient.query(todayReservationsQuery, [req.tenantId]);
+        const todayReservationsResult = await pgClient.query(todayReservationsQuery);
         
         // 今日の売上
         const todaySalesQuery = `
@@ -622,13 +455,8 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
             JOIN menus m ON r.menu_id = m.menu_id
             WHERE DATE(r.reservation_date) = CURRENT_DATE
             AND r.status = 'confirmed'
-            AND r.tenant_id = $1
         `;
-        const todaySalesResult = await pgClient.query(todaySalesQuery, [req.tenantId]);
-        
-        // テナント情報を追加
-        const tenantQuery = 'SELECT salon_name FROM tenants WHERE tenant_id = $1';
-        const tenantResult = await pgClient.query(tenantQuery, [req.tenantId]);
+        const todaySalesResult = await pgClient.query(todaySalesQuery);
         
         res.json({
             totalCustomers: parseInt(totalCustomersResult.rows[0].total),
@@ -637,8 +465,7 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
             averageSpending: Math.round(avgSpendingResult.rows[0].average || 0),
             monthlySales: monthlySalesResult.rows[0].total || 0,
             todayReservations: parseInt(todayReservationsResult.rows[0].total),
-            todaySales: todaySalesResult.rows[0].total || 0,
-            tenantName: tenantResult.rows[0]?.salon_name || 'ビューティーサロン'
+            todaySales: todaySalesResult.rows[0].total || 0
         });
     } catch (error) {
         console.error('Error fetching statistics:', error);
@@ -647,7 +474,7 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
 });
 
 // 管理画面用：メニュー更新
-app.put('/api/menus/:id', authenticateAdmin, async (req, res) => {
+app.put('/api/menus/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, price, duration } = req.body;
@@ -655,10 +482,10 @@ app.put('/api/menus/:id', authenticateAdmin, async (req, res) => {
         const updateQuery = `
             UPDATE menus 
             SET name = $2, price = $3, duration = $4
-            WHERE menu_id = $1 AND tenant_id = $5
+            WHERE menu_id = $1
             RETURNING *
         `;
-        const result = await pgClient.query(updateQuery, [id, name, price, duration, req.tenantId]);
+        const result = await pgClient.query(updateQuery, [id, name, price, duration]);
         
         if (result.rows.length === 0) {
             return res.status(404).json({ message: 'Menu not found' });
@@ -672,16 +499,16 @@ app.put('/api/menus/:id', authenticateAdmin, async (req, res) => {
 });
 
 // 管理画面用：メニュー追加
-app.post('/api/menus', authenticateAdmin, async (req, res) => {
+app.post('/api/menus', async (req, res) => {
     try {
         const { name, price, duration } = req.body;
         
         const insertQuery = `
-            INSERT INTO menus (name, price, duration, tenant_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO menus (name, price, duration)
+            VALUES ($1, $2, $3)
             RETURNING *
         `;
-        const result = await pgClient.query(insertQuery, [name, price, duration, req.tenantId]);
+        const result = await pgClient.query(insertQuery, [name, price, duration]);
         
         res.json(result.rows[0]);
     } catch (error) {
@@ -691,12 +518,12 @@ app.post('/api/menus', authenticateAdmin, async (req, res) => {
 });
 
 // 管理画面用：メニュー削除
-app.delete('/api/menus/:id', authenticateAdmin, async (req, res) => {
+app.delete('/api/menus/:id', async (req, res) => {
     try {
         const { id } = req.params;
         
-        const deleteQuery = 'DELETE FROM menus WHERE menu_id = $1 AND tenant_id = $2';
-        await pgClient.query(deleteQuery, [id, req.tenantId]);
+        const deleteQuery = 'DELETE FROM menus WHERE menu_id = $1';
+        await pgClient.query(deleteQuery, [id]);
         
         res.status(204).send();
     } catch (error) {
@@ -706,11 +533,11 @@ app.delete('/api/menus/:id', authenticateAdmin, async (req, res) => {
 });
 
 // ===========================
-// スタッフ管理API（既存+テナント対応）
+// スタッフ管理API（新規追加）
 // ===========================
 
 // スタッフ追加
-app.post('/api/staff', authenticateAdmin, async (req, res) => {
+app.post('/api/staff', async (req, res) => {
     try {
         const { name, email, working_hours, role, phone, working_days, bio } = req.body;
         
@@ -718,8 +545,8 @@ app.post('/api/staff', authenticateAdmin, async (req, res) => {
         const workingDaysStr = Array.isArray(working_days) ? working_days.join(',') : working_days;
         
         const insertQuery = `
-            INSERT INTO staff (name, email, working_hours, tenant_id)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO staff (name, email, working_hours)
+            VALUES ($1, $2, $3)
             RETURNING *
         `;
         
@@ -727,8 +554,7 @@ app.post('/api/staff', authenticateAdmin, async (req, res) => {
         const result = await pgClient.query(insertQuery, [
             name, 
             email || null, 
-            role || working_hours || null,
-            req.tenantId
+            role || working_hours || null
         ]);
         
         // 追加のフィールドは返却時に含める
@@ -748,7 +574,7 @@ app.post('/api/staff', authenticateAdmin, async (req, res) => {
 });
 
 // スタッフ更新
-app.put('/api/staff/:id', authenticateAdmin, async (req, res) => {
+app.put('/api/staff/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { name, email, working_hours, role, phone, working_days, bio } = req.body;
@@ -756,7 +582,7 @@ app.put('/api/staff/:id', authenticateAdmin, async (req, res) => {
         const updateQuery = `
             UPDATE staff 
             SET name = $2, email = $3, working_hours = $4
-            WHERE staff_id = $1 AND tenant_id = $5
+            WHERE staff_id = $1
             RETURNING *
         `;
         
@@ -764,8 +590,7 @@ app.put('/api/staff/:id', authenticateAdmin, async (req, res) => {
             id,
             name,
             email || null,
-            role || working_hours || null,
-            req.tenantId
+            role || working_hours || null
         ]);
         
         if (result.rows.length === 0) {
@@ -789,17 +614,17 @@ app.put('/api/staff/:id', authenticateAdmin, async (req, res) => {
 });
 
 // スタッフ削除
-app.delete('/api/staff/:id', authenticateAdmin, async (req, res) => {
+app.delete('/api/staff/:id', async (req, res) => {
     try {
         const { id } = req.params;
         
-        // 予約に関連付けられているスタッフは削除できないようにする
+        // 予約に関連付けられているスタッフは削除できないようにする（オプション）
         const checkQuery = `
             SELECT COUNT(*) as count 
             FROM reservations 
-            WHERE staff_id = $1 AND status = 'confirmed' AND tenant_id = $2
+            WHERE staff_id = $1 AND status = 'confirmed'
         `;
-        const checkResult = await pgClient.query(checkQuery, [id, req.tenantId]);
+        const checkResult = await pgClient.query(checkQuery, [id]);
         
         if (parseInt(checkResult.rows[0].count) > 0) {
             return res.status(400).json({ 
@@ -807,8 +632,8 @@ app.delete('/api/staff/:id', authenticateAdmin, async (req, res) => {
             });
         }
         
-        const deleteQuery = 'DELETE FROM staff WHERE staff_id = $1 AND tenant_id = $2';
-        await pgClient.query(deleteQuery, [id, req.tenantId]);
+        const deleteQuery = 'DELETE FROM staff WHERE staff_id = $1';
+        await pgClient.query(deleteQuery, [id]);
         
         res.status(204).send();
     } catch (error) {
@@ -819,11 +644,10 @@ app.delete('/api/staff/:id', authenticateAdmin, async (req, res) => {
 
 // テスト用エンドポイント
 app.get('/test', (req, res) => {
-    res.send('Beauty Salon LINE Bot with LIFF (マルチテナント対応版) is running!');
+    res.send('Beauty Salon LINE Bot with LIFF is running!');
 });
 
 // サーバー起動
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
-    console.log('マルチテナント機能が有効になりました');
 });

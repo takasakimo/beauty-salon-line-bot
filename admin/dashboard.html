@@ -18,6 +18,11 @@
         <div class="sidebar-header">
             <h2>らくポチビューティー</h2>
             <p>管理画面</p>
+            <!-- テナント名表示を追加 -->
+            <div class="tenant-info" style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px;">
+                <small style="color: rgba(255,255,255,0.7); font-size: 11px;">現在の店舗</small>
+                <div id="current-tenant" style="color: white; font-size: 13px; font-weight: 500;">読み込み中...</div>
+            </div>
         </div>
         
         <nav class="sidebar-nav">
@@ -48,6 +53,10 @@
         </nav>
         
         <div class="sidebar-footer">
+            <!-- 管理者名表示を追加 -->
+            <div style="padding: 10px; color: rgba(255,255,255,0.7); font-size: 12px; text-align: center;">
+                ログイン中: <span id="admin-name" style="color: white; font-weight: 500;">管理者</span>
+            </div>
             <button onclick="logout()" class="btn btn-logout">
                 ログアウト
             </button>
@@ -66,6 +75,12 @@
                 </button>
             </div>
         </header>
+        
+        <!-- テナント情報バー（マルチテナント用追加） -->
+        <div id="tenant-alert" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 20px; margin-bottom: 20px; border-radius: 8px; font-size: 14px;">
+            <strong id="tenant-name-display"></strong> のダッシュボードを表示中
+            <span id="tenant-plan" style="margin-left: 10px; padding: 2px 8px; background: rgba(255,255,255,0.2); border-radius: 4px; font-size: 12px;"></span>
+        </div>
         
         <!-- ダッシュボードコンテンツ -->
         <div class="dashboard-content">
@@ -158,7 +173,7 @@
                     <div class="section-header">
                         <h2>人気メニューTOP5</h2>
                     </div>
-                    <div class="popular-items">
+                    <div class="popular-items" id="popular-menus">
                         <div class="popular-item">
                             <span class="rank">1</span>
                             <span class="name">カット+カラー</span>

@@ -88,19 +88,66 @@
         }
 
         .form-group input[type="text"],
-        .form-group input[type="password"] {
+        .form-group input[type="password"],
+        .form-group select {
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e0e0e0;
             border-radius: 8px;
             font-size: 15px;
             transition: all 0.3s;
+            background: white;
         }
 
-        .form-group input:focus {
+        .form-group input:focus,
+        .form-group select:focus {
             outline: none;
             border-color: #FF6B6B;
             box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+        }
+
+        .form-group select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 20px;
+            padding-right: 40px;
+        }
+
+        /* テナント情報表示エリア */
+        .tenant-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            text-align: center;
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tenant-info.show {
+            display: block;
+        }
+
+        .tenant-info strong {
+            display: block;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .checkbox-group {
@@ -143,6 +190,12 @@
             transform: translateY(0);
         }
 
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .error-message {
             margin-bottom: 20px;
             padding: 12px;
@@ -152,6 +205,17 @@
             font-size: 14px;
             text-align: center;
             animation: shake 0.5s;
+        }
+
+        .success-message {
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #e7f5e7;
+            color: #2e7d2e;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+            animation: fadeIn 0.5s;
         }
 
         @keyframes shake {
@@ -178,6 +242,78 @@
             color: #999;
             font-family: monospace;
         }
+
+        /* デモアカウント一覧 */
+        .demo-accounts {
+            background: #f0f0f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .demo-accounts h4 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .demo-account-item {
+            background: white;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            border: 1px solid #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .demo-account-item:hover {
+            border-color: #FF6B6B;
+            box-shadow: 0 2px 8px rgba(255, 107, 107, 0.2);
+        }
+
+        .demo-account-item strong {
+            color: #333;
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .demo-account-item span {
+            color: #888;
+            font-family: monospace;
+        }
+
+        /* ローディング表示 */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #FF6B6B;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -185,10 +321,27 @@
         <div class="login-box">
             <div class="login-header">
                 <h1>らくポチビューティー</h1>
-                <p>管理画面ログイン</p>
+                <p>管理画面ログイン - マルチテナント版</p>
             </div>
             
             <form id="login-form">
+                <!-- テナント選択 -->
+                <div class="form-group">
+                    <label for="tenant">美容室を選択</label>
+                    <select id="tenant" name="tenant" required>
+                        <option value="">選択してください...</option>
+                        <option value="beauty-salon-001">ビューティーサロン名古屋</option>
+                        <option value="beauty-salon-002">ヘアサロン東京</option>
+                        <option value="beauty-salon-003">エステ＆ビューティー大阪</option>
+                    </select>
+                </div>
+
+                <!-- テナント情報表示 -->
+                <div id="tenant-info" class="tenant-info">
+                    <strong id="tenant-name"></strong>
+                    <span id="tenant-plan"></span>
+                </div>
+                
                 <div class="form-group">
                     <label for="username">ユーザー名</label>
                     <input type="text" id="username" name="username" required placeholder="ユーザー名を入力">
@@ -205,80 +358,236 @@
                         ログイン状態を保持する
                     </label>
                 </div>
+
+                <!-- ローディング表示 -->
+                <div id="loading" class="loading">
+                    <span class="spinner"></span>
+                    ログイン中...
+                </div>
                 
-                <button type="submit" class="btn-login">ログイン</button>
+                <button type="submit" id="login-button" class="btn-login">ログイン</button>
             </form>
             
             <div class="login-footer">
-                <p>デモ用アカウント</p>
+                <p>デモ用アカウント（全テナント共通）</p>
                 <p class="demo-info">ユーザー名: admin / パスワード: admin123</p>
+                
+                <!-- デモアカウント一覧 -->
+                <div class="demo-accounts">
+                    <h4>テナント別クイックログイン</h4>
+                    <div class="demo-account-item" onclick="quickLogin('beauty-salon-001')">
+                        <strong>ビューティーサロン名古屋</strong>
+                        <span>premiumプラン</span>
+                    </div>
+                    <div class="demo-account-item" onclick="quickLogin('beauty-salon-002')">
+                        <strong>ヘアサロン東京</strong>
+                        <span>basicプラン</span>
+                    </div>
+                    <div class="demo-account-item" onclick="quickLogin('beauty-salon-003')">
+                        <strong>エステ＆ビューティー大阪</strong>
+                        <span>basicプラン</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     
     <!-- JavaScript -->
-    <script src="./js/login.js"></script>
-    
-    <!-- インラインJavaScript（login.jsが読み込めない場合のフォールバック） -->
     <script>
-        // login.jsが読み込めない場合のバックアップ
-        if (typeof showError === 'undefined') {
-            // ログインフォームの処理
-            document.getElementById('login-form').addEventListener('submit', async function(e) {
-                e.preventDefault();
+        // テナント情報の定義
+        const tenantInfo = {
+            'beauty-salon-001': {
+                name: 'ビューティーサロン名古屋',
+                plan: 'Premiumプラン'
+            },
+            'beauty-salon-002': {
+                name: 'ヘアサロン東京',
+                plan: 'Basicプラン'
+            },
+            'beauty-salon-003': {
+                name: 'エステ＆ビューティー大阪',
+                plan: 'Basicプラン'
+            }
+        };
+
+        // テナント選択時の処理
+        document.getElementById('tenant').addEventListener('change', function() {
+            const tenantCode = this.value;
+            const infoDiv = document.getElementById('tenant-info');
+            
+            if (tenantCode && tenantInfo[tenantCode]) {
+                document.getElementById('tenant-name').textContent = tenantInfo[tenantCode].name;
+                document.getElementById('tenant-plan').textContent = tenantInfo[tenantCode].plan;
+                infoDiv.classList.add('show');
+            } else {
+                infoDiv.classList.remove('show');
+            }
+        });
+
+        // ログインフォームの処理
+        document.getElementById('login-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const tenantCode = document.getElementById('tenant').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const remember = document.querySelector('input[name="remember"]').checked;
+            
+            if (!tenantCode) {
+                showMessage('美容室を選択してください', 'error');
+                return;
+            }
+            
+            // ローディング表示
+            showLoading(true);
+            
+            try {
+                // APIへログインリクエスト
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password,
+                        tenantCode: tenantCode
+                    })
+                });
                 
-                const username = document.getElementById('username').value;
-                const password = document.getElementById('password').value;
-                const remember = document.querySelector('input[name="remember"]').checked;
+                const data = await response.json();
                 
-                // デモ用の簡易認証
-                if (username === 'admin' && password === 'admin123') {
-                    // セッションストレージに保存
+                if (response.ok && data.success) {
+                    // ログイン成功
                     const storage = remember ? localStorage : sessionStorage;
                     storage.setItem('adminLoggedIn', 'true');
                     storage.setItem('adminUsername', username);
+                    storage.setItem('sessionToken', data.sessionToken);
+                    storage.setItem('tenantCode', tenantCode);
+                    storage.setItem('tenantName', data.tenantName);
+                    storage.setItem('adminName', data.adminName);
                     storage.setItem('loginTime', new Date().toISOString());
                     
+                    showMessage('ログイン成功！リダイレクト中...', 'success');
+                    
                     // ダッシュボードへリダイレクト
-                    window.location.href = './dashboard.html';
+                    setTimeout(() => {
+                        window.location.href = './dashboard.html';
+                    }, 1000);
                 } else {
                     // エラーメッセージを表示
-                    showErrorMessage('ユーザー名またはパスワードが正しくありません');
+                    showMessage(data.error || 'ログインに失敗しました', 'error');
                 }
-            });
+            } catch (error) {
+                console.error('ログインエラー:', error);
+                
+                // フォールバック（デモ用簡易認証）
+                if (username === 'admin' && password === 'admin123') {
+                    const storage = remember ? localStorage : sessionStorage;
+                    storage.setItem('adminLoggedIn', 'true');
+                    storage.setItem('adminUsername', username);
+                    storage.setItem('tenantCode', tenantCode);
+                    storage.setItem('tenantName', tenantInfo[tenantCode]?.name || 'ビューティーサロン');
+                    storage.setItem('adminName', '管理者');
+                    storage.setItem('loginTime', new Date().toISOString());
+                    
+                    showMessage('ログイン成功！リダイレクト中...', 'success');
+                    
+                    setTimeout(() => {
+                        window.location.href = './dashboard.html';
+                    }, 1000);
+                } else {
+                    showMessage('ユーザー名またはパスワードが正しくありません', 'error');
+                }
+            } finally {
+                showLoading(false);
+            }
+        });
+        
+        // クイックログイン機能
+        function quickLogin(tenantCode) {
+            document.getElementById('tenant').value = tenantCode;
+            document.getElementById('tenant').dispatchEvent(new Event('change'));
+            document.getElementById('username').value = 'admin';
+            document.getElementById('password').value = 'admin123';
+            document.querySelector('input[name="remember"]').checked = true;
             
-            // エラーメッセージを表示
-            function showErrorMessage(message) {
-                // 既存のエラーメッセージを削除
-                const existingError = document.querySelector('.error-message');
-                if (existingError) {
-                    existingError.remove();
-                }
-                
-                // 新しいエラーメッセージを作成
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'error-message';
-                errorDiv.textContent = message;
-                
-                // フォームの前に挿入
-                const form = document.getElementById('login-form');
-                form.insertBefore(errorDiv, form.firstChild);
-                
-                // 3秒後に自動的に消す
+            // 少し待ってから自動ログイン
+            setTimeout(() => {
+                document.getElementById('login-form').dispatchEvent(new Event('submit'));
+            }, 500);
+        }
+        
+        // メッセージ表示関数
+        function showMessage(message, type = 'error') {
+            // 既存のメッセージを削除
+            const existingMessage = document.querySelector('.error-message, .success-message');
+            if (existingMessage) {
+                existingMessage.remove();
+            }
+            
+            // 新しいメッセージを作成
+            const messageDiv = document.createElement('div');
+            messageDiv.className = type === 'error' ? 'error-message' : 'success-message';
+            messageDiv.textContent = message;
+            
+            // フォームの前に挿入
+            const form = document.getElementById('login-form');
+            form.insertBefore(messageDiv, form.firstChild);
+            
+            // 3秒後に自動的に消す
+            if (type === 'error') {
                 setTimeout(() => {
-                    errorDiv.style.opacity = '0';
-                    setTimeout(() => errorDiv.remove(), 300);
+                    messageDiv.style.opacity = '0';
+                    setTimeout(() => messageDiv.remove(), 300);
                 }, 3000);
             }
+        }
+        
+        // ローディング表示制御
+        function showLoading(show) {
+            const loadingDiv = document.getElementById('loading');
+            const loginButton = document.getElementById('login-button');
             
-            // ページ読み込み時にログイン状態をチェック
-            const isLoggedIn = localStorage.getItem('adminLoggedIn') || sessionStorage.getItem('adminLoggedIn');
-            
-            if (isLoggedIn) {
-                // 既にログインしている場合はダッシュボードへ
-                window.location.href = './dashboard.html';
+            if (show) {
+                loadingDiv.classList.add('show');
+                loginButton.disabled = true;
+            } else {
+                loadingDiv.classList.remove('show');
+                loginButton.disabled = false;
             }
         }
+        
+        // ページ読み込み時にログイン状態をチェック
+        const isLoggedIn = localStorage.getItem('adminLoggedIn') || sessionStorage.getItem('adminLoggedIn');
+        
+        if (isLoggedIn) {
+            // 既にログインしている場合はダッシュボードへ
+            window.location.href = './dashboard.html';
+        }
+        
+        // サーバーからテナント一覧を動的に取得（オプション）
+        async function loadTenants() {
+            try {
+                const response = await fetch('/api/tenants/active');
+                const tenants = await response.json();
+                
+                const select = document.getElementById('tenant');
+                select.innerHTML = '<option value="">選択してください...</option>';
+                
+                tenants.forEach(tenant => {
+                    const option = document.createElement('option');
+                    option.value = tenant.tenant_code;
+                    option.textContent = tenant.salon_name;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.log('テナント一覧の取得に失敗しました。デフォルトの一覧を使用します。');
+            }
+        }
+        
+        // ページ読み込み時にテナント一覧を取得
+        // loadTenants(); // 必要に応じてコメントアウトを解除
     </script>
 </body>
 </html>

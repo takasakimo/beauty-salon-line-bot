@@ -1,6 +1,16 @@
 // API基本設定
 const API_BASE_URL = window.location.origin + '/api';
 
+// セッショントークンを取得（マルチテナント用追加）
+function getSessionToken() {
+    return localStorage.getItem('sessionToken') || sessionStorage.getItem('sessionToken');
+}
+
+// テナントコードを取得（マルチテナント用追加）
+function getTenantCode() {
+    return localStorage.getItem('tenantCode') || sessionStorage.getItem('tenantCode') || 'beauty-salon-001';
+}
+
 // ログイン状態をチェック
 function checkAuth() {
     const isLoggedIn = localStorage.getItem('adminLoggedIn') || sessionStorage.getItem('adminLoggedIn');
@@ -11,16 +21,46 @@ function checkAuth() {
         return false;
     }
     
+    // テナント情報を表示（マルチテナント用追加）
+    displayTenantInfo();
+    
     return true;
+}
+
+// テナント情報を表示（マルチテナント用追加）
+function displayTenantInfo() {
+    const tenantName = localStorage.getItem('tenantName') || sessionStorage.getItem('tenantName');
+    const adminName = localStorage.getItem('adminName') || sessionStorage.getItem('adminName') || '管理者';
+    
+    // ヘッダーに管理者名を表示
+    const adminNameElement = document.getElementById('admin-name');
+    if (adminNameElement) {
+        adminNameElement.textContent = adminName;
+    }
+    
+    // テナント名を表示（もし要素があれば）
+    const tenantNameElement = document.getElementById('tenant-name');
+    if (tenantNameElement) {
+        tenantNameElement.textContent = tenantName || 'ビューティーサロン';
+    }
 }
 
 // ログアウト処理
 function logout() {
     if (confirm('ログアウトしますか？')) {
+        // すべてのセッション情報をクリア（マルチテナント対応）
         localStorage.removeItem('adminLoggedIn');
         localStorage.removeItem('adminUsername');
+        localStorage.removeItem('sessionToken');
+        localStorage.removeItem('tenantCode');
+        localStorage.removeItem('tenantName');
+        localStorage.removeItem('adminName');
         sessionStorage.removeItem('adminLoggedIn');
         sessionStorage.removeItem('adminUsername');
+        sessionStorage.removeItem('sessionToken');
+        sessionStorage.removeItem('tenantCode');
+        sessionStorage.removeItem('tenantName');
+        sessionStorage.removeItem('adminName');
         
         window.location.href = './login.html';
     }
@@ -36,23 +76,58 @@ function displayCurrentDate() {
     }
 }
 
-// APIヘルパー関数
+// APIヘルパー関数（マルチテナント対応版）
 class AdminAPI {
+    // ヘッダーを生成（マルチテナント対応）
+    static getHeaders() {
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer admin'
+        };
+        
+        // セッショントークンを追加
+        const sessionToken = getSessionToken();
+        if (sessionToken) {
+            headers['X-Session-Token'] = sessionToken;
+        }
+        
+        // テナントコードを追加
+        const tenantCode = getTenantCode();
+        if (tenantCode) {
+            headers['X-Tenant-Code'] = tenantCode;
+        }
+        
+        return headers;
+    }
+    
+    // エラーハンドリング（401の場合はログイン画面へ）
+    static async handleResponse(response) {
+        if (response.status === 401) {
+            // 認証エラーの場合はログイン画面へ
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = './login.html';
+            return null;
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        return response;
+    }
+    
     static async get(endpoint) {
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer admin'
-                }
+                headers: this.getHeaders()
             });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            const checkedResponse = await this.handleResponse(response);
+            if (!checkedResponse) return null;
             
-            return await response.json();
+            return await checkedResponse.json();
         } catch (error) {
             console.error('API GET Error:', error);
             throw error;
@@ -63,18 +138,14 @@ class AdminAPI {
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer admin'
-                },
+                headers: this.getHeaders(),
                 body: JSON.stringify(data)
             });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            const checkedResponse = await this.handleResponse(response);
+            if (!checkedResponse) return null;
             
-            return await response.json();
+            return await checkedResponse.json();
         } catch (error) {
             console.error('API POST Error:', error);
             throw error;
@@ -85,18 +156,14 @@ class AdminAPI {
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer admin'
-                },
+                headers: this.getHeaders(),
                 body: JSON.stringify(data)
             });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            const checkedResponse = await this.handleResponse(response);
+            if (!checkedResponse) return null;
             
-            return await response.json();
+            return await checkedResponse.json();
         } catch (error) {
             console.error('API PUT Error:', error);
             throw error;
@@ -107,17 +174,13 @@ class AdminAPI {
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer admin'
-                }
+                headers: this.getHeaders()
             });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            const checkedResponse = await this.handleResponse(response);
+            if (!checkedResponse) return null;
             
-            return response.status === 204 ? null : await response.json();
+            return response.status === 204 ? null : await checkedResponse.json();
         } catch (error) {
             console.error('API DELETE Error:', error);
             throw error;
@@ -150,6 +213,33 @@ function formatDate(dateString) {
 // 金額フォーマット関数
 function formatCurrency(amount) {
     return `¥${amount.toLocaleString()}`;
+}
+
+// 価格フォーマット（エイリアス）
+function formatPrice(price) {
+    return formatCurrency(price);
+}
+
+// ステータスの日本語化（マルチテナント用追加）
+function getStatusLabel(status) {
+    const statusMap = {
+        'confirmed': '確定',
+        'cancelled': 'キャンセル',
+        'completed': '完了',
+        'pending': '保留中'
+    };
+    return statusMap[status] || status;
+}
+
+// ステータスバッジのクラス（マルチテナント用追加）
+function getStatusClass(status) {
+    const classMap = {
+        'confirmed': 'status-confirmed',
+        'cancelled': 'status-cancelled',
+        'completed': 'status-completed',
+        'pending': 'status-pending'
+    };
+    return classMap[status] || 'status-default';
 }
 
 // トースト通知
@@ -192,6 +282,46 @@ function showToast(message, type = 'success') {
     }, 3000);
 }
 
+// APIリクエストのヘルパー関数（マルチテナント対応・互換性用）
+async function apiRequest(url, options = {}) {
+    const sessionToken = getSessionToken();
+    const tenantCode = getTenantCode();
+    
+    // ヘッダーにセッショントークンとテナントコードを追加
+    const headers = {
+        'Content-Type': 'application/json',
+        ...options.headers
+    };
+    
+    if (sessionToken) {
+        headers['X-Session-Token'] = sessionToken;
+    }
+    
+    if (tenantCode) {
+        headers['X-Tenant-Code'] = tenantCode;
+    }
+    
+    try {
+        const response = await fetch(url, {
+            ...options,
+            headers
+        });
+        
+        // 401エラーの場合はログイン画面へ
+        if (response.status === 401) {
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = 'login.html';
+            return null;
+        }
+        
+        return response;
+    } catch (error) {
+        console.error('APIリクエストエラー:', error);
+        throw error;
+    }
+}
+
 // アニメーション用CSS追加
 const style = document.createElement('style');
 style.textContent = `
@@ -216,27 +346,102 @@ style.textContent = `
             opacity: 0;
         }
     }
+    
+    /* ステータスバッジのスタイル（マルチテナント用追加） */
+    .status-confirmed {
+        background-color: #27ae60;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    
+    .status-cancelled {
+        background-color: #e74c3c;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    
+    .status-completed {
+        background-color: #3498db;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
+    
+    .status-pending {
+        background-color: #f39c12;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+    }
 `;
 document.head.appendChild(style);
+
+// サイドバーのアクティブ状態を設定（マルチテナント用追加）
+function setActiveNavItem() {
+    const currentPage = window.location.pathname.split('/').pop();
+    
+    // 両方のクラス名に対応（.nav-itemと.sidebar nav ul li）
+    const navItems = document.querySelectorAll('.nav-item, .sidebar nav ul li');
+    
+    navItems.forEach(item => {
+        // リンクを探す（直接またはa要素）
+        const link = item.tagName === 'A' ? item : item.querySelector('a');
+        if (link) {
+            const href = link.getAttribute('href');
+            if (href) {
+                const hrefPage = href.split('/').pop();
+                if (hrefPage === currentPage) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            }
+        }
+    });
+}
 
 // ページ読み込み時の共通処理
 document.addEventListener('DOMContentLoaded', function() {
     // ログインチェック（ログインページ以外）
     if (!window.location.pathname.includes('login.html')) {
-        checkAuth();
+        if (!checkAuth()) {
+            return;
+        }
     }
     
     // 現在の日付を表示
     displayCurrentDate();
     
     // アクティブなナビゲーションを設定
-    const currentPage = window.location.pathname.split('/').pop();
-    document.querySelectorAll('.nav-item').forEach(item => {
-        const href = item.getAttribute('href').split('/').pop();
-        if (href === currentPage) {
-            item.classList.add('active');
-        } else {
-            item.classList.remove('active');
-        }
-    });
+    setActiveNavItem();
+    
+    // テナント情報を表示（追加）
+    const currentTenantElement = document.getElementById('current-tenant');
+    if (currentTenantElement) {
+        const tenantName = localStorage.getItem('tenantName') || sessionStorage.getItem('tenantName');
+        currentTenantElement.textContent = tenantName || 'ビューティーサロン';
+    }
 });
+
+// エクスポート（他のJSファイルから使用可能にする）
+window.adminAPI = {
+    apiRequest,
+    checkAuth,
+    logout,
+    formatDate,
+    formatDateTime,
+    formatCurrency,
+    formatPrice,
+    getStatusLabel,
+    getStatusClass,
+    getSessionToken,
+    getTenantCode,
+    showToast,
+    AdminAPI
+};
