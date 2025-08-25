@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>売上分析 - らくポチビューティー管理画面</title>
+    <link rel="stylesheet" href="./css/admin-common.css">
+    <link rel="stylesheet" href="./css/analytics.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- ヘッダー -->
+    <header class="admin-header">
+        <div class="header-content">
+            <h1>らくポチビューティー管理画面</h1>
+            <div class="header-user">
+                <span id="admin-name">管理者</span>
+                <button onclick="logout()" class="logout-btn">ログアウト</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="admin-container">
+        <!-- サイドバー -->
+        <aside class="sidebar">
+            <nav>
+                <ul>
+                    <li><a href="dashboard.html">📊 ダッシュボード</a></li>
+                    <li><a href="reservations.html">📅 予約管理</a></li>
+                    <li><a href="customers.html">👥 顧客管理</a></li>
+                    <li><a href="menus.html">💇 メニュー管理</a></li>
+                    <li><a href="staff.html">👤 スタッフ管理</a></li>
+                    <li class="active"><a href="analytics.html">📈 売上分析</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <div class="page-header">
+                <h2>📈 売上分析</h2>
+                <div class="header-actions">
+                    <!-- 期間選択 -->
+                    <div class="period-selector">
+                        <select id="period-select">
+                            <option value="month">今月</option>
+                            <option value="last-month">先月</option>
+                            <option value="quarter">四半期</option>
+                            <option value="year">今年</option>
+                            <option value="custom">期間指定</option>
+                        </select>
+                        
+                        <!-- カスタム期間選択（初期は非表示） -->
+                        <div id="custom-period" style="display: none;">
+                            <input type="date" id="start-date">
+                            <span>〜</span>
+                            <input type="date" id="end-date">
+                            <button onclick="applyCustomPeriod()">適用</button>
+                        </div>
+                    </div>
+                    
+                    <button onclick="exportReport()" class="export-btn">📥 レポート出力</button>
+                </div>
+            </div>
+
+            <!-- サマリーカード -->
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <div class="card-icon">💰</div>
+                    <div class="card-content">
+                        <h3>売上合計</h3>
+                        <p class="card-value" id="total-sales">¥0</p>
+                        <span class="card-change positive">+0%</span>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-icon">📈</div>
+                    <div class="card-content">
+                        <h3>平均単価</h3>
+                        <p class="card-value" id="average-price">¥0</p>
+                        <span class="card-change positive">+0%</span>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-icon">🎯</div>
+                    <div class="card-content">
+                        <h3>予約件数</h3>
+                        <p class="card-value" id="total-bookings">0件</p>
+                        <span class="card-change positive">+0%</span>
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="card-icon">🔄</div>
+                    <div class="card-content">
+                        <h3>リピート率</h3>
+                        <p class="card-value" id="repeat-rate">0%</p>
+                        <span class="card-change negative">-0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- グラフエリア -->
+            <div class="charts-container">
+                <!-- 売上推移グラフ -->
+                <div class="chart-box full-width">
+                    <div class="chart-header">
+                        <h3>売上推移</h3>
+                        <div class="chart-controls">
+                            <button class="chart-btn active" data-view="daily">日別</button>
+                            <button class="chart-btn" data-view="weekly">週別</button>
+                            <button class="chart-btn" data-view="monthly">月別</button>
+                        </div>
+                    </div>
+                    <canvas id="sales-trend-chart"></canvas>
+                </div>
+
+                <!-- メニュー別売上 -->
+                <div class="chart-box half-width">
+                    <div class="chart-header">
+                        <h3>メニュー別売上</h3>
+                    </div>
+                    <canvas id="menu-sales-chart"></canvas>
+                    <div class="chart-legend" id="menu-legend"></div>
+                </div>
+
+                <!-- スタッフ別売上 -->
+                <div class="chart-box half-width">
+                    <div class="chart-header">
+                        <h3>スタッフ別売上</h3>
+                    </div>
+                    <canvas id="staff-sales-chart"></canvas>
+                    <div class="chart-legend" id="staff-legend"></div>
+                </div>
+
+                <!-- 時間帯別予約数 -->
+                <div class="chart-box half-width">
+                    <div class="chart-header">
+                        <h3>時間帯別予約数</h3>
+                    </div>
+                    <canvas id="hourly-bookings-chart"></canvas>
+                </div>
+
+                <!-- 曜日別売上 -->
+                <div class="chart-box half-width">
+                    <div class="chart-header">
+                        <h3>曜日別売上</h3>
+                    </div>
+                    <canvas id="weekday-sales-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- 詳細テーブル -->
+            <div class="details-section">
+                <div class="section-header">
+                    <h3>売上詳細</h3>
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" data-tab="menu">メニュー別</button>
+                        <button class="tab-btn" data-tab="staff">スタッフ別</button>
+                        <button class="tab-btn" data-tab="customer">顧客別</button>
+                    </div>
+                </div>
+
+                <!-- メニュー別詳細 -->
+                <div class="tab-content active" id="menu-tab">
+                    <table class="detail-table">
+                        <thead>
+                            <tr>
+                                <th>メニュー名</th>
+                                <th>予約数</th>
+                                <th>売上</th>
+                                <th>構成比</th>
+                                <th>前期比</th>
+                            </tr>
+                        </thead>
+                        <tbody id="menu-detail-tbody">
+                            <!-- JavaScriptで動的に生成 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- スタッフ別詳細 -->
+                <div class="tab-content" id="staff-tab" style="display: none;">
+                    <table class="detail-table">
+                        <thead>
+                            <tr>
+                                <th>スタッフ名</th>
+                                <th>予約数</th>
+                                <th>売上</th>
+                                <th>平均単価</th>
+                                <th>前期比</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-detail-tbody">
+                            <!-- JavaScriptで動的に生成 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 顧客別詳細 -->
+                <div class="tab-content" id="customer-tab" style="display: none;">
+                    <table class="detail-table">
+                        <thead>
+                            <tr>
+                                <th>顧客名</th>
+                                <th>来店回数</th>
+                                <th>累計売上</th>
+                                <th>平均単価</th>
+                                <th>最終来店</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customer-detail-tbody">
+                            <!-- JavaScriptで動的に生成 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- インサイト -->
+            <div class="insights-section">
+                <h3>📊 分析インサイト</h3>
+                <div class="insights-grid">
+                    <div class="insight-card">
+                        <div class="insight-icon">🎯</div>
+                        <div class="insight-content">
+                            <h4>売上TOP商品</h4>
+                            <p id="top-menu">カット+カラー</p>
+                            <span class="insight-detail">全体の35%を占めています</span>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-icon">⏰</div>
+                        <div class="insight-content">
+                            <h4>ピークタイム</h4>
+                            <p id="peak-time">14:00-16:00</p>
+                            <span class="insight-detail">予約が最も多い時間帯</span>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-icon">👑</div>
+                        <div class="insight-content">
+                            <h4>VIP顧客</h4>
+                            <p id="vip-count">12名</p>
+                            <span class="insight-detail">月3回以上来店</span>
+                        </div>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-icon">📈</div>
+                        <div class="insight-content">
+                            <h4>成長率</h4>
+                            <p id="growth-rate">+15%</p>
+                            <span class="insight-detail">前月比の売上成長</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- レポート出力モーダル -->
+    <div id="export-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeExportModal()">&times;</span>
+            <h3>レポート出力</h3>
+            <div class="export-options">
+                <label>
+                    <input type="checkbox" checked> 売上サマリー
+                </label>
+                <label>
+                    <input type="checkbox" checked> グラフデータ
+                </label>
+                <label>
+                    <input type="checkbox" checked> 詳細テーブル
+                </label>
+                <label>
+                    <input type="checkbox"> 顧客リスト
+                </label>
+            </div>
+            <div class="export-format">
+                <label>出力形式：</label>
+                <select id="export-format">
+                    <option value="pdf">PDF</option>
+                    <option value="excel">Excel</option>
+                    <option value="csv">CSV</option>
+                </select>
+            </div>
+            <button onclick="downloadReport()" class="primary-btn">ダウンロード</button>
+        </div>
+    </div>
+
+    <script src="./js/admin-common.js"></script>
+    <script src="./js/analytics.js"></script>
+</body>
+</html>
