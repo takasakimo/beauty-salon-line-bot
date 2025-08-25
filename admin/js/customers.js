@@ -1,4 +1,4 @@
-// 顧客管理画面のJavaScript
+// 顧客管理画面のJavaScript（マルチテナント対応版）
 
 // グローバル変数
 let allCustomers = [];
@@ -8,62 +8,199 @@ let currentCustomerId = null;
 
 // ページ読み込み時の処理
 document.addEventListener('DOMContentLoaded', function() {
-    // 認証チェック
-    if (!localStorage.getItem('adminLoggedIn')) {
-        window.location.href = 'login.html';
+    // 認証チェック（admin-common.jsのcheckAuth()を使用）
+    if (!checkAuth()) {
         return;
     }
+    
+    // テナント情報を表示
+    displayTenantInfo();
     
     // 初期データ読み込み
     loadCustomers();
     loadStatistics();
 });
 
-// 顧客データの読み込み
-async function loadCustomers() {
-    try {
-        const response = await fetch('/api/admin/customers');
-        if (!response.ok) throw new Error('顧客データの取得に失敗しました');
-        
-        const customers = await response.json();
-        allCustomers = customers;
-        
-        // 各顧客の予約情報も取得
-        for (let customer of allCustomers) {
-            const reservationsResponse = await fetch(`/api/reservations/user/${customer.line_user_id}`);
-            if (reservationsResponse.ok) {
-                const reservations = await reservationsResponse.json();
-                customer.reservations = reservations;
-                customer.visitCount = reservations.filter(r => r.status === 'completed').length;
-                customer.totalSpent = calculateTotalSpent(reservations);
-                customer.lastVisit = getLastVisitDate(reservations);
-                customer.customerStatus = getCustomerStatus(customer);
+// テナント情報を表示（マルチテナント用追加）
+function displayTenantInfo() {
+    const tenantName = localStorage.getItem('tenantName') || sessionStorage.getItem('tenantName');
+    const tenantCode = getTenantCode();
+    
+    if (tenantName) {
+        // テナント情報バーを表示
+        const tenantAlert = document.getElementById('tenant-alert');
+        if (tenantAlert) {
+            tenantAlert.style.display = 'block';
+            document.getElementById('tenant-name-display').textContent = tenantName;
+            
+            // プランを表示（デモ用）
+            const planMap = {
+                'beauty-salon-001': 'Premiumプラン',
+                'beauty-salon-002': 'Basicプラン',
+                'beauty-salon-003': 'Basicプラン'
+            };
+            const planElement = document.getElementById('tenant-plan');
+            if (planElement) {
+                planElement.textContent = planMap[tenantCode] || 'Basicプラン';
             }
         }
-        
-        displayCustomers(allCustomers);
-        updateCustomerCount(allCustomers.length);
-    } catch (error) {
-        console.error('Error loading customers:', error);
-        showError('顧客データの読み込みに失敗しました');
     }
 }
 
-// 統計データの読み込み
+// 顧客データの読み込み（マルチテナント対応）
+async function loadCustomers() {
+    try {
+        // AdminAPIクラスを使用（マルチテナント対応済み）
+        const customers = await AdminAPI.get('/admin/customers');
+        
+        if (customers) {
+            allCustomers = customers;
+            
+            // 各顧客の予約情報も取得
+            for (let customer of allCustomers) {
+                try {
+                    // 予約情報の取得もマルチテナント対応
+                    const reservations = await AdminAPI.get(`/reservations/user/${customer.line_user_id}`);
+                    if (reservations) {
+                        customer.reservations = reservations;
+                        customer.visitCount = reservations.filter(r => r.status === 'completed').length;
+                        customer.totalSpent = calculateTotalSpent(reservations);
+                        customer.lastVisit = getLastVisitDate(reservations);
+                        customer.customerStatus = getCustomerStatus(customer);
+                    }
+                } catch (err) {
+                    console.log(`予約情報取得エラー（顧客: ${customer.line_user_id}）:`, err);
+                    customer.reservations = [];
+                    customer.visitCount = 0;
+                    customer.totalSpent = 0;
+                    customer.lastVisit = null;
+                    customer.customerStatus = 'new';
+                }
+            }
+            
+            displayCustomers(allCustomers);
+            updateCustomerCount(allCustomers.length);
+        }
+    } catch (error) {
+        console.error('Error loading customers:', error);
+        showError('顧客データの読み込みに失敗しました');
+        
+        // デモデータを表示
+        displayDemoCustomers();
+    }
+}
+
+// デモ顧客データを表示（マルチテナント対応）
+function displayDemoCustomers() {
+    const tenantCode = getTenantCode();
+    let demoCustomers = [];
+    
+    if (tenantCode === 'beauty-salon-001') {
+        demoCustomers = [
+            {
+                line_user_id: 'U001',
+                real_name: '山田花子',
+                phone_number: '090-1234-5678',
+                registered_date: '2024-01-15',
+                visitCount: 12,
+                lastVisit: '2025-01-20',
+                totalSpent: 84000,
+                customerStatus: 'vip'
+            },
+            {
+                line_user_id: 'U002',
+                real_name: '佐藤太郎',
+                phone_number: '080-2345-6789',
+                registered_date: '2024-03-20',
+                visitCount: 8,
+                lastVisit: '2025-01-18',
+                totalSpent: 56000,
+                customerStatus: 'regular'
+            },
+            {
+                line_user_id: 'U003',
+                real_name: '鈴木美咲',
+                phone_number: '070-3456-7890',
+                registered_date: '2025-01-05',
+                visitCount: 2,
+                lastVisit: '2025-01-22',
+                totalSpent: 14000,
+                customerStatus: 'new'
+            }
+        ];
+    } else if (tenantCode === 'beauty-salon-002') {
+        demoCustomers = [
+            {
+                line_user_id: 'U101',
+                real_name: '渡辺美穂',
+                phone_number: '090-9876-5432',
+                registered_date: '2024-06-10',
+                visitCount: 6,
+                lastVisit: '2025-01-15',
+                totalSpent: 42000,
+                customerStatus: 'regular'
+            },
+            {
+                line_user_id: 'U102',
+                real_name: '伊藤健太',
+                phone_number: '080-8765-4321',
+                registered_date: '2024-11-20',
+                visitCount: 3,
+                lastVisit: '2024-12-28',
+                totalSpent: 21000,
+                customerStatus: 'inactive'
+            }
+        ];
+    } else {
+        demoCustomers = [
+            {
+                line_user_id: 'U201',
+                real_name: '中村涼子',
+                phone_number: '090-5555-6666',
+                registered_date: '2024-08-15',
+                visitCount: 10,
+                lastVisit: '2025-01-19',
+                totalSpent: 95000,
+                customerStatus: 'vip'
+            }
+        ];
+    }
+    
+    allCustomers = demoCustomers;
+    displayCustomers(allCustomers);
+    updateCustomerCount(allCustomers.length);
+}
+
+// 統計データの読み込み（マルチテナント対応）
 async function loadStatistics() {
     try {
-        const response = await fetch('/api/admin/statistics');
-        if (!response.ok) throw new Error('統計データの取得に失敗しました');
+        // AdminAPIクラスを使用（マルチテナント対応済み）
+        const stats = await AdminAPI.get('/admin/statistics');
         
-        const stats = await response.json();
-        
-        // 統計カードの更新
-        document.getElementById('totalCustomers').textContent = stats.totalCustomers || '0';
-        document.getElementById('newCustomersMonth').textContent = stats.newCustomersMonth || '0';
-        document.getElementById('regularCustomers').textContent = stats.regularCustomers || '0';
-        document.getElementById('averageSpending').textContent = `¥${(stats.averageSpending || 0).toLocaleString()}`;
+        if (stats) {
+            // 統計カードの更新
+            document.getElementById('totalCustomers').textContent = stats.totalCustomers || '0';
+            document.getElementById('newCustomersMonth').textContent = stats.newCustomersMonth || '0';
+            document.getElementById('regularCustomers').textContent = stats.regularCustomers || '0';
+            document.getElementById('averageSpending').textContent = `¥${(stats.averageSpending || 0).toLocaleString()}`;
+        }
     } catch (error) {
         console.error('Error loading statistics:', error);
+        
+        // テナントごとのデモ統計
+        const tenantCode = getTenantCode();
+        const statsMap = {
+            'beauty-salon-001': { total: 156, newMonth: 12, regular: 45, avgSpending: 7200 },
+            'beauty-salon-002': { total: 89, newMonth: 8, regular: 28, avgSpending: 6800 },
+            'beauty-salon-003': { total: 67, newMonth: 5, regular: 22, avgSpending: 8500 }
+        };
+        
+        const demoStats = statsMap[tenantCode] || { total: 100, newMonth: 10, regular: 30, avgSpending: 7000 };
+        
+        document.getElementById('totalCustomers').textContent = demoStats.total;
+        document.getElementById('newCustomersMonth').textContent = demoStats.newMonth;
+        document.getElementById('regularCustomers').textContent = demoStats.regular;
+        document.getElementById('averageSpending').textContent = `¥${demoStats.avgSpending.toLocaleString()}`;
     }
 }
 
@@ -300,39 +437,34 @@ function filterCustomers(filterType) {
     updateCustomerCount(filtered.length);
 }
 
-// 顧客メモの保存
+// 顧客メモの保存（マルチテナント対応）
 async function saveCustomerMemo() {
     if (!currentCustomerId) return;
     
     const memo = document.getElementById('customerMemo').value;
     
     // TODO: APIエンドポイントが実装されたら有効化
-    alert('メモ機能は現在開発中です');
+    showToast('メモ機能は現在開発中です', 'info');
     
     /*
     try {
-        const response = await fetch(`/api/admin/customers/${currentCustomerId}/memo`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ memo })
-        });
+        // AdminAPIクラスを使用（マルチテナント対応）
+        const response = await AdminAPI.put(`/admin/customers/${currentCustomerId}/memo`, { memo });
         
-        if (response.ok) {
-            alert('メモを保存しました');
-        } else {
-            throw new Error('メモの保存に失敗しました');
+        if (response) {
+            showToast('メモを保存しました', 'success');
         }
     } catch (error) {
         console.error('Error saving memo:', error);
-        alert('メモの保存に失敗しました');
+        showToast('メモの保存に失敗しました', 'error');
     }
     */
 }
 
 // 顧客データのエクスポート
 function exportCustomerData() {
+    const tenantName = localStorage.getItem('tenantName') || sessionStorage.getItem('tenantName') || 'ビューティーサロン';
+    
     // CSV形式でエクスポート
     const headers = ['顧客名', '電話番号', '登録日', '来店回数', '累計金額', 'ステータス'];
     const rows = allCustomers.map(c => [
@@ -344,7 +476,8 @@ function exportCustomerData() {
         getStatusLabel(c.customerStatus || 'new')
     ]);
     
-    let csv = headers.join(',') + '\n';
+    let csv = `${tenantName} - 顧客データ\n\n`;
+    csv += headers.join(',') + '\n';
     rows.forEach(row => {
         csv += row.map(cell => `"${cell}"`).join(',') + '\n';
     });
@@ -355,13 +488,18 @@ function exportCustomerData() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     
+    const tenantCode = getTenantCode();
+    const filename = `customers_${tenantCode}_${new Date().toISOString().slice(0, 10)}.csv`;
+    
     link.setAttribute('href', url);
-    link.setAttribute('download', `customers_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', filename);
     link.style.visibility = 'hidden';
     
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    showToast('顧客データをエクスポートしました', 'success');
 }
 
 // ヘルパー関数
