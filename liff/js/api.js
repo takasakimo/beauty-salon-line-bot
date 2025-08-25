@@ -1,16 +1,20 @@
 // API基本設定
 const API_BASE_URL = window.location.origin + '/api';
 
-// APIヘルパー関数
+// APIヘルパー関数（テナント対応版）
 class API {
     // GETリクエスト
     static async get(endpoint) {
         try {
+            // テナント情報を含むヘッダーを作成
+            const tenantHeaders = TenantManager.getHeaders();
+            
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`
+                    'Authorization': `Bearer ${userProfile?.userId}`,
+                    ...tenantHeaders  // テナント情報を追加
                 }
             });
             
@@ -28,11 +32,15 @@ class API {
     // POSTリクエスト
     static async post(endpoint, data) {
         try {
+            // テナント情報を含むヘッダーを作成
+            const tenantHeaders = TenantManager.getHeaders();
+            
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`
+                    'Authorization': `Bearer ${userProfile?.userId}`,
+                    ...tenantHeaders  // テナント情報を追加
                 },
                 body: JSON.stringify(data)
             });
@@ -51,11 +59,15 @@ class API {
     // PUTリクエスト
     static async put(endpoint, data) {
         try {
+            // テナント情報を含むヘッダーを作成
+            const tenantHeaders = TenantManager.getHeaders();
+            
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`
+                    'Authorization': `Bearer ${userProfile?.userId}`,
+                    ...tenantHeaders  // テナント情報を追加
                 },
                 body: JSON.stringify(data)
             });
@@ -74,11 +86,15 @@ class API {
     // DELETEリクエスト
     static async delete(endpoint) {
         try {
+            // テナント情報を含むヘッダーを作成
+            const tenantHeaders = TenantManager.getHeaders();
+            
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`
+                    'Authorization': `Bearer ${userProfile?.userId}`,
+                    ...tenantHeaders  // テナント情報を追加
                 }
             });
             
@@ -94,13 +110,17 @@ class API {
     }
 }
 
-// 顧客API
+// 顧客API（テナント対応版）
 const CustomerAPI = {
-    // 顧客登録
+    // 顧客登録（テナント情報も一緒に送信）
     register: async (customerData) => {
+        // テナントコードを追加
+        const tenantCode = TenantManager.getTenantCode();
+        
         return await API.post('/customers/register', {
             ...customerData,
-            line_user_id: userProfile.userId
+            line_user_id: userProfile.userId,
+            tenant_code: tenantCode  // テナント情報を追加
         });
     },
     
@@ -115,13 +135,17 @@ const CustomerAPI = {
     }
 };
 
-// 予約API
+// 予約API（テナント対応版）
 const ReservationAPI = {
-    // 予約作成
+    // 予約作成（テナント情報も一緒に送信）
     create: async (reservationData) => {
+        // テナントコードを追加
+        const tenantCode = TenantManager.getTenantCode();
+        
         return await API.post('/reservations', {
             ...reservationData,
-            customer_id: userProfile.userId
+            customer_id: userProfile.userId,
+            tenant_code: tenantCode  // テナント情報を追加
         });
     },
     
@@ -140,15 +164,15 @@ const ReservationAPI = {
         return await API.delete(`/reservations/${reservationId}`);
     },
     
-    // 空き時間取得
+    // 空き時間取得（テナント別）
     getAvailableSlots: async (date, menuId) => {
         return await API.get(`/reservations/available-slots?date=${date}&menu_id=${menuId}`);
     }
 };
 
-// メニューAPI
+// メニューAPI（テナント対応版）
 const MenuAPI = {
-    // メニュー一覧取得
+    // メニュー一覧取得（テナント別）
     list: async () => {
         return await API.get('/menus');
     },
@@ -159,9 +183,9 @@ const MenuAPI = {
     }
 };
 
-// スタッフAPI
+// スタッフAPI（テナント対応版）
 const StaffAPI = {
-    // スタッフ一覧取得
+    // スタッフ一覧取得（テナント別）
     list: async () => {
         return await API.get('/staff');
     },
@@ -171,3 +195,6 @@ const StaffAPI = {
         return await API.get(`/staff/${staffId}`);
     }
 };
+
+// デバッグ用：現在のテナント情報を確認
+console.log('API Module Loaded - Current Tenant:', TenantManager.getTenantCode());

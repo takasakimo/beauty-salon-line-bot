@@ -1,200 +1,254 @@
-// メニューデータを保持
-let allMenus = [];
-let currentCategory = 'all';
-
-// メニューのカテゴリー定義
-const menuCategories = {
-    1: 'cut',      // カット
-    2: 'color',    // カラー
-    3: 'perm',     // パーマ
-    4: 'treatment', // トリートメント
-    5: 'treatment', // ヘッドスパ
-    6: 'color',    // カット+カラー
-    7: 'perm',     // カット+パーマ
-    8: 'all'       // フルコース
-};
-
-// メニューのアイコン定義
-const menuIcons = {
-    1: '✂️',  // カット
-    2: '🎨',  // カラー
-    3: '🌊',  // パーマ
-    4: '💆‍♀️', // トリートメント
-    5: '🧖‍♀️', // ヘッドスパ
-    6: '✨',  // カット+カラー
-    7: '💫',  // カット+パーマ
-    8: '👑'   // フルコース
-};
-
-// メニューの説明文
-const menuDescriptions = {
-    1: 'お客様の骨格や髪質に合わせた、あなただけのスタイルをご提案します。',
-    2: '最新のトレンドカラーから、お客様に似合うパーソナルカラーまで幅広く対応。',
-    3: 'ナチュラルなウェーブから、しっかりカールまで、理想のスタイルを実現。',
-    4: '髪の内側から潤いを与え、艶やかな美髪へと導きます。',
-    5: '頭皮の血行を促進し、リラックス効果も抜群。至福のひとときを。',
-    6: 'カットとカラーをセットで。トータルコーディネートでイメージチェンジ。',
-    7: 'カットとパーマの組み合わせで、動きのある立体的なスタイルに。',
-    8: 'カット、カラー、トリートメントの全てを含む、贅沢なフルメニュー。'
-};
-
-// LIFF初期化を待つ
-function waitForLiff() {
-    return new Promise((resolve) => {
-        const checkLiff = setInterval(() => {
-            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-                clearInterval(checkLiff);
-                resolve();
-            }
-        }, 100);
-        
-        // 10秒でタイムアウト
-        setTimeout(() => {
-            clearInterval(checkLiff);
-            resolve();
-        }, 10000);
-    });
-}
-
-// ページ読み込み時の初期化
-document.addEventListener('DOMContentLoaded', async function() {
-    try {
-        // LIFF初期化を待つ
-        await waitForLiff();
-        
-        // メニュー一覧を読み込み
-        await loadMenus();
-        
-        // コンテンツを表示
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('main-content').style.display = 'block';
-        
-    } catch (error) {
-        console.error('初期化エラー:', error);
-        alert('ページの初期化に失敗しました。\n' + error.message);
-    }
-});
-
-// メニュー一覧を読み込み
-async function loadMenus() {
-    try {
-        const response = await fetch('/api/menus', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('メニューの取得に失敗しました');
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <title>メニュー一覧 - らくポチビューティー</title>
+    
+    <!-- LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/style.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* メニュー一覧専用スタイル */
+        .menu-header-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
         }
         
-        allMenus = await response.json();
-        displayMenus();
+        .menu-header-section h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
         
-    } catch (error) {
-        console.error('メニュー読み込みエラー:', error);
-        alert('メニューの読み込みに失敗しました。');
-    }
-}
-
-// メニューを表示
-function displayMenus() {
-    const menuList = document.getElementById('menu-list');
-    menuList.innerHTML = '';
-    
-    allMenus.forEach((menu, index) => {
-        const menuCard = createMenuCard(menu, index);
-        menuList.appendChild(menuCard);
-    });
-}
-
-// メニューカードを作成
-function createMenuCard(menu, index) {
-    const card = document.createElement('div');
-    card.className = 'menu-card';
-    card.dataset.category = menuCategories[menu.menu_id] || 'all';
-    
-    // 人気メニューかどうか（例：カット+カラー、フルコース）
-    const isPopular = [6, 8].includes(menu.menu_id);
-    
-    card.innerHTML = `
-        <div class="menu-image">
-            ${menuIcons[menu.menu_id] || '💇‍♀️'}
-            ${isPopular ? '<span class="menu-badge">人気</span>' : ''}
-        </div>
-        <div class="menu-info">
-            ${isPopular ? '<span class="popular-badge">🌟 人気メニュー</span>' : ''}
-            <div class="menu-header">
-                <h3 class="menu-name">${menu.name}</h3>
-                <span class="menu-price">¥${menu.price.toLocaleString()}</span>
-            </div>
-            <p class="menu-description">
-                ${menuDescriptions[menu.menu_id] || 'プロのスタイリストが丁寧に施術いたします。'}
-            </p>
-            <div class="menu-details">
-                <div class="detail-item">
-                    <span class="detail-icon">⏱</span>
-                    <span>${menu.duration}分</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-icon">📍</span>
-                    <span>全スタッフ対応可</span>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // クリックで予約画面へ
-    card.onclick = () => {
-        if (confirm(`「${menu.name}」を予約しますか？`)) {
-            // 選択したメニュー情報をセッションストレージに保存
-            sessionStorage.setItem('selectedMenu', JSON.stringify(menu));
-            window.location.href = './reservation.html';
+        .menu-header-section p {
+            margin: 10px 0 0;
+            font-size: 14px;
+            opacity: 0.9;
         }
-    };
-    
-    return card;
-}
-
-// カテゴリーでフィルタリング
-function filterByCategory(category) {
-    currentCategory = category;
-    
-    // タブのアクティブ状態を更新
-    document.querySelectorAll('.category-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    event.target.classList.add('active');
-    
-    // メニューカードの表示/非表示を切り替え
-    document.querySelectorAll('.menu-card').forEach(card => {
-        if (category === 'all' || card.dataset.category === category || card.dataset.category === 'all') {
-            card.style.display = 'block';
-            // アニメーション
-            setTimeout(() => {
-                card.style.opacity = '1';
-                card.style.transform = 'translateY(0)';
-            }, 10);
-        } else {
-            card.style.opacity = '0';
-            card.style.transform = 'translateY(20px)';
-            setTimeout(() => {
-                card.style.display = 'none';
-            }, 300);
+        
+        #category-tabs {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 15px;
+            background: white;
+            border-bottom: 1px solid #eee;
+            -webkit-overflow-scrolling: touch;
         }
-    });
-}
-
-// アニメーション用のスタイル追加
-document.addEventListener('DOMContentLoaded', function() {
-    const style = document.createElement('style');
-    style.textContent = `
+        
+        #category-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+        
+        #category-tabs::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        #category-tabs::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 2px;
+        }
+        
+        .menu-container {
+            padding: 20px;
+            background: #f5f5f5;
+            min-height: calc(100vh - 200px);
+        }
+        
+        #menu-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
         .menu-card {
-            opacity: 1;
-            transform: translateY(0);
-            transition: opacity 0.3s ease, transform 0.3s ease;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
         }
-    `;
-    document.head.appendChild(style);
-});
+        
+        .menu-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+        
+        .menu-image {
+            position: relative;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .menu-info {
+            padding: 15px;
+        }
+        
+        .menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .menu-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+            margin: 0;
+            flex: 1;
+        }
+        
+        .menu-price {
+            font-size: 18px;
+            font-weight: 700;
+            color: #ff6b6b;
+            white-space: nowrap;
+        }
+        
+        .menu-description {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.5;
+            margin: 10px 0;
+        }
+        
+        .menu-details {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+            color: #888;
+        }
+        
+        .detail-icon {
+            font-size: 16px;
+        }
+        
+        /* 戻るボタン */
+        .back-button {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            border: 2px solid #667eea;
+            color: #667eea;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-weight: 700;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            cursor: pointer;
+            z-index: 100;
+        }
+        
+        .back-button:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        /* ローディング画面 */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* レスポンシブ対応 */
+        @media (max-width: 768px) {
+            #menu-list {
+                grid-template-columns: 1fr;
+                padding: 10px;
+            }
+            
+            .menu-container {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ローディング画面 -->
+    <div id="loading" class="loading-screen">
+        <div class="spinner"></div>
+        <p>メニューを読み込み中...</p>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <main id="main-content" style="display: none;">
+        <!-- ヘッダー -->
+        <div class="menu-header-section">
+            <h1>メニュー一覧</h1>
+            <p>お好みのメニューをお選びください</p>
+        </div>
+
+        <!-- カテゴリータブ -->
+        <div id="category-tabs">
+            <!-- JavaScriptで動的に生成 -->
+        </div>
+
+        <!-- メニューコンテナ -->
+        <div class="menu-container">
+            <div id="menu-list">
+                <!-- メニューカードがここに動的に追加される -->
+            </div>
+        </div>
+
+        <!-- 戻るボタン -->
+        <button class="back-button" onclick="window.location.href='./index.html'">
+            ホームに戻る
+        </button>
+    </main>
+
+    <!-- JavaScriptファイル -->
+    <script src="./js/tenant-manager.js"></script>  <!-- 最初に読み込む -->
+    <script src="./js/liff-init.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/menu.js"></script>  <!-- メニュー専用JS -->
+</body>
+</html>

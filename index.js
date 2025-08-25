@@ -86,12 +86,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ===========================
-// テナントID取得ミドルウェア（新規追加）
+// テナントID取得ミドルウェア（LIFF対応版）
 // ===========================
 async function getTenantId(req, res, next) {
     try {
-        // ヘッダーまたはクエリパラメータからテナントコードを取得
-        const tenantCode = req.headers['x-tenant-code'] || req.query.tenant || 'beauty-salon-001';
+        // ヘッダー、クエリパラメータ、ボディからテナントコードを取得
+        const tenantCode = req.headers['x-tenant-code'] || 
+                          req.query.tenant || 
+                          req.body.tenant_code || 
+                          'beauty-salon-001';
         
         const result = await pgClient.query(
             'SELECT tenant_id, is_active FROM tenants WHERE tenant_code = $1',
@@ -99,29 +102,23 @@ async function getTenantId(req, res, next) {
         );
 
         if (result.rows.length === 0) {
-            // テナントが存在しない場合はデフォルトテナントを使用
-            const defaultResult = await pgClient.query(
-                'SELECT tenant_id FROM tenants WHERE tenant_code = $1',
-                ['beauty-salon-001']
-            );
-            req.tenantId = defaultResult.rows[0].tenant_id;
-        } else {
-            if (!result.rows[0].is_active) {
-                return res.status(403).json({ error: 'このテナントは無効です' });
-            }
-            req.tenantId = result.rows[0].tenant_id;
+            // テナントが存在しない場合はエラー
+            return res.status(400).json({ error: 'テナントが見つかりません' });
         }
         
+        if (!result.rows[0].is_active) {
+            return res.status(403).json({ error: 'このテナントは無効です' });
+        }
+        
+        req.tenantId = result.rows[0].tenant_id;
         next();
     } catch (error) {
         console.error('テナントID取得エラー:', error);
-        // エラーの場合もデフォルトテナントで続行
-        req.tenantId = 1; // デフォルトテナントID
-        next();
+        res.status(500).json({ error: 'サーバーエラー' });
     }
 }
 
-// 管理者認証ミドルウェア（新規追加）
+// 管理者認証ミドルウェア
 async function authenticateAdmin(req, res, next) {
     try {
         const sessionToken = req.headers['x-session-token'];
@@ -143,7 +140,7 @@ async function authenticateAdmin(req, res, next) {
 }
 
 // ===========================
-// 認証API（新規追加）
+// 認証API
 // ===========================
 
 // 管理者ログイン（マルチテナント対応）
@@ -232,14 +229,16 @@ app.get('/api/tenants/active', async (req, res) => {
 });
 
 // ===========================
-// API エンドポイント（既存のものにテナントID対応を追加）
+// 顧客API（LIFF対応）
 // ===========================
 
-// 顧客API
+// 顧客情報取得（LIFF用）
 app.get('/api/customers/:lineUserId', getTenantId, async (req, res) => {
     try {
         const { lineUserId } = req.params;
-        const query = 'SELECT * FROM customers WHERE line_user_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
+        
+        // テナント別に顧客を取得
+        const query = 'SELECT * FROM customers WHERE line_user_id = $1 AND tenant_id = $2';
         const result = await pgClient.query(query, [lineUserId, req.tenantId]);
         
         if (result.rows.length === 0) {
@@ -253,22 +252,29 @@ app.get('/api/customers/:lineUserId', getTenantId, async (req, res) => {
     }
 });
 
+// 顧客登録（LIFF用・マルチテナント対応）
 app.post('/api/customers/register', getTenantId, async (req, res) => {
     try {
-        const { line_user_id, real_name, phone_number } = req.body;
+        const { line_user_id, real_name, phone_number, tenant_code } = req.body;
         
-        // 既存チェック
-        const checkQuery = 'SELECT * FROM customers WHERE line_user_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
-        const checkResult = await pgClient.query(checkQuery, [line_user_id, req.tenantId]);
+        // テナントコードが本文に含まれている場合は、それを優先
+        let actualTenantId = req.tenantId;
+        if (tenant_code) {
+            const tenantResult = await pgClient.query(
+                'SELECT tenant_id FROM tenants WHERE tenant_code = $1 AND is_active = true',
+                [tenant_code]
+            );
+            if (tenantResult.rows.length > 0) {
+                actualTenantId = tenantResult.rows[0].tenant_id;
+            }
+        }
+        
+        // 既存チェック（テナント別）
+        const checkQuery = 'SELECT * FROM customers WHERE line_user_id = $1 AND tenant_id = $2';
+        const checkResult = await pgClient.query(checkQuery, [line_user_id, actualTenantId]);
         
         if (checkResult.rows.length > 0) {
-            // 既存顧客にテナントIDを設定
-            if (!checkResult.rows[0].tenant_id) {
-                await pgClient.query(
-                    'UPDATE customers SET tenant_id = $1 WHERE line_user_id = $2',
-                    [req.tenantId, line_user_id]
-                );
-            }
+            // すでに登録済み
             return res.json({ 
                 success: true, 
                 message: 'Already registered',
@@ -282,7 +288,7 @@ app.post('/api/customers/register', getTenantId, async (req, res) => {
             VALUES ($1, $2, $3, NOW(), $4)
             RETURNING *
         `;
-        const result = await pgClient.query(insertQuery, [line_user_id, real_name, phone_number, req.tenantId]);
+        const result = await pgClient.query(insertQuery, [line_user_id, real_name, phone_number, actualTenantId]);
         
         res.json({ 
             success: true, 
@@ -295,6 +301,7 @@ app.post('/api/customers/register', getTenantId, async (req, res) => {
     }
 });
 
+// 顧客情報更新
 app.put('/api/customers/:lineUserId', getTenantId, async (req, res) => {
     try {
         const { lineUserId } = req.params;
@@ -303,7 +310,7 @@ app.put('/api/customers/:lineUserId', getTenantId, async (req, res) => {
         const updateQuery = `
             UPDATE customers 
             SET real_name = $2, phone_number = $3
-            WHERE line_user_id = $1 AND (tenant_id = $4 OR tenant_id IS NULL)
+            WHERE line_user_id = $1 AND tenant_id = $4
             RETURNING *
         `;
         const result = await pgClient.query(updateQuery, [lineUserId, real_name, phone_number, req.tenantId]);
@@ -319,16 +326,20 @@ app.put('/api/customers/:lineUserId', getTenantId, async (req, res) => {
     }
 });
 
-// 予約API
+// ===========================
+// 予約API（LIFF対応）
+// ===========================
+
+// ユーザーの予約一覧取得
 app.get('/api/reservations/user/:userId', getTenantId, async (req, res) => {
     try {
         const { userId } = req.params;
         const query = `
             SELECT r.*, m.name as menu_name, m.price, m.duration, s.name as staff_name
             FROM reservations r
-            JOIN menus m ON r.menu_id = m.menu_id
-            JOIN staff s ON r.staff_id = s.staff_id
-            WHERE r.customer_id = $1 AND (r.tenant_id = $2 OR r.tenant_id IS NULL)
+            JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $2
+            JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $2
+            WHERE r.customer_id = $1 AND r.tenant_id = $2
             ORDER BY r.reservation_date DESC
         `;
         const result = await pgClient.query(query, [userId, req.tenantId]);
@@ -339,16 +350,17 @@ app.get('/api/reservations/user/:userId', getTenantId, async (req, res) => {
     }
 });
 
+// 現在の予約取得
 app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
     try {
         const { userId } = req.params;
         const query = `
             SELECT r.*, m.name as menu_name, m.price, m.duration, s.name as staff_name
             FROM reservations r
-            JOIN menus m ON r.menu_id = m.menu_id
-            JOIN staff s ON r.staff_id = s.staff_id
+            JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $2
+            JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $2
             WHERE r.customer_id = $1 
-            AND (r.tenant_id = $2 OR r.tenant_id IS NULL)
+            AND r.tenant_id = $2
             AND r.reservation_date > NOW()
             AND r.status = 'confirmed'
             ORDER BY r.reservation_date ASC
@@ -367,16 +379,29 @@ app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
     }
 });
 
+// 予約作成
 app.post('/api/reservations', getTenantId, async (req, res) => {
     try {
-        const { customer_id, staff_id, menu_id, reservation_date } = req.body;
+        const { customer_id, staff_id, menu_id, reservation_date, tenant_code } = req.body;
+        
+        // テナントコードが本文に含まれている場合は、それを優先
+        let actualTenantId = req.tenantId;
+        if (tenant_code) {
+            const tenantResult = await pgClient.query(
+                'SELECT tenant_id FROM tenants WHERE tenant_code = $1 AND is_active = true',
+                [tenant_code]
+            );
+            if (tenantResult.rows.length > 0) {
+                actualTenantId = tenantResult.rows[0].tenant_id;
+            }
+        }
         
         const insertQuery = `
             INSERT INTO reservations (customer_id, staff_id, menu_id, reservation_date, status, created_at, tenant_id)
             VALUES ($1, $2, $3, $4, 'confirmed', NOW(), $5)
             RETURNING *
         `;
-        const result = await pgClient.query(insertQuery, [customer_id, staff_id, menu_id, reservation_date, req.tenantId]);
+        const result = await pgClient.query(insertQuery, [customer_id, staff_id, menu_id, reservation_date, actualTenantId]);
         
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
@@ -385,6 +410,7 @@ app.post('/api/reservations', getTenantId, async (req, res) => {
     }
 });
 
+// 予約キャンセル
 app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
     try {
         const { id } = req.params;
@@ -392,7 +418,7 @@ app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
         const updateQuery = `
             UPDATE reservations 
             SET status = 'cancelled', cancelled_at = NOW()
-            WHERE reservation_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+            WHERE reservation_id = $1 AND tenant_id = $2
             RETURNING *
         `;
         const result = await pgClient.query(updateQuery, [id, req.tenantId]);
@@ -408,6 +434,7 @@ app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
     }
 });
 
+// 空き時間取得
 app.get('/api/reservations/available-slots', getTenantId, async (req, res) => {
     try {
         const { date, menu_id } = req.query;
@@ -425,7 +452,7 @@ app.get('/api/reservations/available-slots', getTenantId, async (req, res) => {
             FROM reservations
             WHERE DATE(reservation_date) = $1
             AND status = 'confirmed'
-            AND (tenant_id = $2 OR tenant_id IS NULL)
+            AND tenant_id = $2
         `;
         const result = await pgClient.query(query, [date, req.tenantId]);
         const bookedSlots = result.rows.map(row => row.time);
@@ -439,10 +466,33 @@ app.get('/api/reservations/available-slots', getTenantId, async (req, res) => {
     }
 });
 
-// メニューAPI
+// ===========================
+// メニューAPI（LIFF対応）
+// ===========================
+
+// メニュー一覧取得（テナント別）
 app.get('/api/menus', getTenantId, async (req, res) => {
     try {
-        const query = 'SELECT * FROM menus WHERE (tenant_id = $1 OR tenant_id IS NULL) ORDER BY menu_id';
+        const query = `
+            SELECT menu_id, name, price, duration, 
+                   CASE 
+                       WHEN name LIKE '%カット%' AND name LIKE '%カラー%' THEN 'set'
+                       WHEN name LIKE '%カット%' AND name LIKE '%パーマ%' THEN 'set'
+                       WHEN name LIKE '%フルコース%' THEN 'special'
+                       WHEN name LIKE '%カット%' THEN 'cut'
+                       WHEN name LIKE '%カラー%' THEN 'color'
+                       WHEN name LIKE '%パーマ%' THEN 'perm'
+                       WHEN name LIKE '%トリートメント%' THEN 'treatment'
+                       WHEN name LIKE '%ヘッドスパ%' THEN 'spa'
+                       ELSE 'other'
+                   END as category,
+                   CASE 
+                       WHEN menu_id IN (6, 8) THEN true
+                       ELSE false
+                   END as is_popular
+            FROM menus 
+            WHERE tenant_id = $1 
+            ORDER BY menu_id`;
         const result = await pgClient.query(query, [req.tenantId]);
         res.json(result.rows);
     } catch (error) {
@@ -451,10 +501,11 @@ app.get('/api/menus', getTenantId, async (req, res) => {
     }
 });
 
+// メニュー詳細取得
 app.get('/api/menus/:id', getTenantId, async (req, res) => {
     try {
         const { id } = req.params;
-        const query = 'SELECT * FROM menus WHERE menu_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
+        const query = 'SELECT * FROM menus WHERE menu_id = $1 AND tenant_id = $2';
         const result = await pgClient.query(query, [id, req.tenantId]);
         
         if (result.rows.length === 0) {
@@ -468,10 +519,14 @@ app.get('/api/menus/:id', getTenantId, async (req, res) => {
     }
 });
 
-// スタッフAPI
+// ===========================
+// スタッフAPI（LIFF対応）
+// ===========================
+
+// スタッフ一覧取得（テナント別）
 app.get('/api/staff', getTenantId, async (req, res) => {
     try {
-        const query = 'SELECT * FROM staff WHERE (tenant_id = $1 OR tenant_id IS NULL) ORDER BY staff_id';
+        const query = 'SELECT * FROM staff WHERE tenant_id = $1 ORDER BY staff_id';
         const result = await pgClient.query(query, [req.tenantId]);
         res.json(result.rows);
     } catch (error) {
@@ -480,10 +535,11 @@ app.get('/api/staff', getTenantId, async (req, res) => {
     }
 });
 
+// スタッフ詳細取得
 app.get('/api/staff/:id', getTenantId, async (req, res) => {
     try {
         const { id } = req.params;
-        const query = 'SELECT * FROM staff WHERE staff_id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)';
+        const query = 'SELECT * FROM staff WHERE staff_id = $1 AND tenant_id = $2';
         const result = await pgClient.query(query, [id, req.tenantId]);
         
         if (result.rows.length === 0) {
@@ -498,10 +554,10 @@ app.get('/api/staff/:id', getTenantId, async (req, res) => {
 });
 
 // ===========================
-// 管理画面用APIエンドポイント（テナント対応）
+// 管理画面用APIエンドポイント
 // ===========================
 
-// 管理画面用：全顧客取得（詳細版）
+// 管理画面用：全顧客取得
 app.get('/api/admin/customers', authenticateAdmin, async (req, res) => {
     try {
         const query = `
@@ -524,16 +580,16 @@ app.get('/api/admin/customers', authenticateAdmin, async (req, res) => {
     }
 });
 
-// 管理画面用：全予約取得（日付フィルター付き）
+// 管理画面用：全予約取得
 app.get('/api/admin/reservations', authenticateAdmin, async (req, res) => {
     try {
         const { date } = req.query;
         let query = `
             SELECT r.*, c.real_name as customer_name, m.name as menu_name, m.price, m.duration, s.name as staff_name
             FROM reservations r
-            LEFT JOIN customers c ON r.customer_id = c.line_user_id
-            JOIN menus m ON r.menu_id = m.menu_id
-            JOIN staff s ON r.staff_id = s.staff_id
+            LEFT JOIN customers c ON r.customer_id = c.line_user_id AND c.tenant_id = $1
+            JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
+            JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
             WHERE r.tenant_id = $1
         `;
         
@@ -553,7 +609,7 @@ app.get('/api/admin/reservations', authenticateAdmin, async (req, res) => {
     }
 });
 
-// 管理画面用：統計データ取得（拡張版）
+// 管理画面用：統計データ取得
 app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
     try {
         // 総顧客数
@@ -588,7 +644,7 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
         const avgSpendingQuery = `
             SELECT AVG(m.price) as average
             FROM reservations r
-            JOIN menus m ON r.menu_id = m.menu_id
+            JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
             WHERE r.status = 'completed'
             AND r.tenant_id = $1
         `;
@@ -598,7 +654,7 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
         const monthlySalesQuery = `
             SELECT SUM(m.price) as total
             FROM reservations r
-            JOIN menus m ON r.menu_id = m.menu_id
+            JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
             WHERE r.status = 'completed'
             AND r.tenant_id = $1
             AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
@@ -619,7 +675,7 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
         const todaySalesQuery = `
             SELECT SUM(m.price) as total
             FROM reservations r
-            JOIN menus m ON r.menu_id = m.menu_id
+            JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
             WHERE DATE(r.reservation_date) = CURRENT_DATE
             AND r.status = 'confirmed'
             AND r.tenant_id = $1
@@ -646,7 +702,7 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
     }
 });
 
-// 管理画面用：メニュー更新
+// メニュー管理API
 app.put('/api/menus/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
@@ -671,7 +727,6 @@ app.put('/api/menus/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
-// 管理画面用：メニュー追加
 app.post('/api/menus', authenticateAdmin, async (req, res) => {
     try {
         const { name, price, duration } = req.body;
@@ -690,7 +745,6 @@ app.post('/api/menus', authenticateAdmin, async (req, res) => {
     }
 });
 
-// 管理画面用：メニュー削除
 app.delete('/api/menus/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
@@ -705,17 +759,10 @@ app.delete('/api/menus/:id', authenticateAdmin, async (req, res) => {
     }
 });
 
-// ===========================
-// スタッフ管理API（既存+テナント対応）
-// ===========================
-
-// スタッフ追加
+// スタッフ管理API
 app.post('/api/staff', authenticateAdmin, async (req, res) => {
     try {
         const { name, email, working_hours, role, phone, working_days, bio } = req.body;
-        
-        // working_daysを文字列に変換（配列の場合）
-        const workingDaysStr = Array.isArray(working_days) ? working_days.join(',') : working_days;
         
         const insertQuery = `
             INSERT INTO staff (name, email, working_hours, tenant_id)
@@ -723,7 +770,6 @@ app.post('/api/staff', authenticateAdmin, async (req, res) => {
             RETURNING *
         `;
         
-        // 基本情報のみを保存（既存のテーブル構造に合わせる）
         const result = await pgClient.query(insertQuery, [
             name, 
             email || null, 
@@ -731,27 +777,17 @@ app.post('/api/staff', authenticateAdmin, async (req, res) => {
             req.tenantId
         ]);
         
-        // 追加のフィールドは返却時に含める
-        const staffData = {
-            ...result.rows[0],
-            role: role,
-            phone: phone,
-            working_days: working_days,
-            bio: bio
-        };
-        
-        res.json(staffData);
+        res.json(result.rows[0]);
     } catch (error) {
         console.error('Error creating staff:', error);
         res.status(500).json({ error: 'Creation failed' });
     }
 });
 
-// スタッフ更新
 app.put('/api/staff/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, email, working_hours, role, phone, working_days, bio } = req.body;
+        const { name, email, working_hours, role } = req.body;
         
         const updateQuery = `
             UPDATE staff 
@@ -772,28 +808,17 @@ app.put('/api/staff/:id', authenticateAdmin, async (req, res) => {
             return res.status(404).json({ message: 'Staff not found' });
         }
         
-        // 追加のフィールドを含めて返却
-        const staffData = {
-            ...result.rows[0],
-            role: role,
-            phone: phone,
-            working_days: working_days,
-            bio: bio
-        };
-        
-        res.json(staffData);
+        res.json(result.rows[0]);
     } catch (error) {
         console.error('Error updating staff:', error);
         res.status(500).json({ error: 'Update failed' });
     }
 });
 
-// スタッフ削除
 app.delete('/api/staff/:id', authenticateAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        // 予約に関連付けられているスタッフは削除できないようにする
         const checkQuery = `
             SELECT COUNT(*) as count 
             FROM reservations 
@@ -826,4 +851,5 @@ app.get('/test', (req, res) => {
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
     console.log('マルチテナント機能が有効になりました');
+    console.log('LIFF対応が完了しました');
 });

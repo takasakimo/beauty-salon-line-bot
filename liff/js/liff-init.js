@@ -8,6 +8,17 @@ let isRegistered = false;
 // LIFF初期化
 async function initializeLiff() {
     try {
+        // テナント情報を初期化（最初に実行）
+        const tenantInfo = TenantManager.initialize();
+        
+        // テナント情報がない場合は処理を中断
+        if (!tenantInfo) {
+            console.error('テナント情報の初期化に失敗しました');
+            return;
+        }
+        
+        console.log('現在のテナント:', tenantInfo.code);
+        
         // LIFF初期化
         await liff.init({ liffId: LIFF_ID });
         
@@ -21,7 +32,7 @@ async function initializeLiff() {
         userProfile = await liff.getProfile();
         console.log('User Profile:', userProfile);
         
-        // ユーザー登録確認
+        // ユーザー登録確認（テナント情報付き）
         await checkUserRegistration();
         
         // 画面表示
@@ -33,10 +44,18 @@ async function initializeLiff() {
     }
 }
 
-// ユーザー登録確認
+// ユーザー登録確認（テナント対応版）
 async function checkUserRegistration() {
     try {
-        const response = await fetch(`/api/customers/${userProfile.userId}`);
+        // テナントコードをヘッダーに追加
+        const tenantHeaders = TenantManager.getHeaders();
+        
+        const response = await fetch(`/api/customers/${userProfile.userId}`, {
+            headers: {
+                ...tenantHeaders,
+                'Content-Type': 'application/json'
+            }
+        });
         
         if (response.ok) {
             const userData = await response.json();
@@ -48,7 +67,8 @@ async function checkUserRegistration() {
                 el.textContent = userData.real_name;
             });
             
-            // ローカルストレージに保存
+            // ローカルストレージに保存（テナント情報も含める）
+            userData.tenant_code = TenantManager.getTenantCode();
             localStorage.setItem('userData', JSON.stringify(userData));
         } else if (response.status === 404) {
             isRegistered = false;
@@ -95,10 +115,18 @@ function hideAllScreens() {
     });
 }
 
-// 現在の予約を読み込み
+// 現在の予約を読み込み（テナント対応版）
 async function loadCurrentReservation() {
     try {
-        const response = await fetch(`/api/reservations/current/${userProfile.userId}`);
+        // テナントコードをヘッダーに追加
+        const tenantHeaders = TenantManager.getHeaders();
+        
+        const response = await fetch(`/api/reservations/current/${userProfile.userId}`, {
+            headers: {
+                ...tenantHeaders,
+                'Content-Type': 'application/json'
+            }
+        });
         
         if (response.ok) {
             const reservation = await response.json();
