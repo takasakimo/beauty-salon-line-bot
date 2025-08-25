@@ -18,6 +18,11 @@
         <div class="sidebar-header">
             <h2>らくポチビューティー</h2>
             <p>管理画面</p>
+            <!-- テナント名表示を追加 -->
+            <div class="tenant-info" style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px;">
+                <small style="color: rgba(255,255,255,0.7); font-size: 11px;">現在の店舗</small>
+                <div id="current-tenant" style="color: white; font-size: 13px; font-weight: 500;">読み込み中...</div>
+            </div>
         </div>
         
         <nav class="sidebar-nav">
@@ -48,6 +53,10 @@
         </nav>
         
         <div class="sidebar-footer">
+            <!-- 管理者名表示を追加 -->
+            <div style="padding: 10px; color: rgba(255,255,255,0.7); font-size: 12px; text-align: center;">
+                ログイン中: <span id="admin-name" style="color: white; font-weight: 500;">管理者</span>
+            </div>
             <button onclick="logout()" class="btn btn-logout">
                 ログアウト
             </button>
@@ -66,6 +75,12 @@
                 </button>
             </div>
         </header>
+        
+        <!-- テナント情報バー（マルチテナント用追加） -->
+        <div id="tenant-alert" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 20px; margin-bottom: 20px; border-radius: 8px; font-size: 14px;">
+            <strong id="tenant-name-display"></strong> のスタッフを表示中
+            <span id="tenant-plan" style="margin-left: 10px; padding: 2px 8px; background: rgba(255,255,255,0.2); border-radius: 4px; font-size: 12px;"></span>
+        </div>
         
         <!-- スタッフ管理コンテンツ -->
         <div class="staff-management">
@@ -377,76 +392,6 @@
 
     <script src="./js/admin-common.js"></script>
     <script src="./js/staff.js"></script>
-    <script>
-        // らくポチ勤怠連携用の関数
-        function connectRakupochiKintai() {
-            document.getElementById('rakupochiModal').style.display = 'block';
-        }
-
-        function closeRakupochiModal() {
-            document.getElementById('rakupochiModal').style.display = 'none';
-        }
-
-        function saveRakupochiSettings() {
-            const apiKey = document.getElementById('rakupochiApiKey').value;
-            const companyId = document.getElementById('rakupochiCompanyId').value;
-            
-            if (!apiKey || !companyId) {
-                alert('必須項目を入力してください');
-                return;
-            }
-            
-            // TODO: 実際のAPI連携処理を実装
-            alert('らくポチ勤怠との連携設定を保存しました。\n\n今後自動的にシフト情報が同期されます。');
-            closeRakupochiModal();
-            
-            // デモ用：シフトデータを更新
-            loadShiftTable();
-        }
-
-        // シフト手動編集
-        function editShifts() {
-            alert('シフト編集機能は現在開発中です。\n\nらくポチ勤怠と連携後は、シフト情報が自動的に反映されます。');
-        }
-
-        // 保存処理を上書き
-        function saveStaff() {
-            const form = document.getElementById('staffForm');
-            if (form.checkValidity()) {
-                // フォームデータを収集
-                const formData = new FormData(form);
-                const staffData = {
-                    name: formData.get('name'),
-                    role: formData.get('role'),
-                    status: formData.get('status'),
-                    email: formData.get('email'),
-                    phone: formData.get('phone'),
-                    working_hours: formData.get('working_hours'),
-                    rakupochi_id: formData.get('rakupochi_id'),
-                    working_days: Array.from(document.querySelectorAll('input[name="workingDays"]:checked')).map(cb => cb.value),
-                    bio: formData.get('bio')
-                };
-                
-                // らくポチ勤怠IDがある場合の処理
-                if (staffData.rakupochi_id) {
-                    console.log('らくポチ勤怠連携ID:', staffData.rakupochi_id);
-                    // TODO: らくポチ勤怠APIとの連携処理
-                }
-                
-                // 元の保存処理を呼び出し
-                if (window.handleStaffSubmit) {
-                    handleStaffSubmit(new Event('submit'));
-                } else {
-                    // staff.jsの処理がまだ読み込まれていない場合
-                    alert('スタッフ情報を保存しました');
-                    closeStaffModal();
-                    location.reload();
-                }
-            } else {
-                form.reportValidity();
-            }
-        }
-    </script>
     
     <style>
         /* らくポチ勤怠連携用の追加スタイル */

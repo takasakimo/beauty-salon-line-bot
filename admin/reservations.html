@@ -18,6 +18,11 @@
         <div class="sidebar-header">
             <h2>らくポチビューティー</h2>
             <p>管理画面</p>
+            <!-- テナント名表示を追加 -->
+            <div class="tenant-info" style="margin-top: 10px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 5px;">
+                <small style="color: rgba(255,255,255,0.7); font-size: 11px;">現在の店舗</small>
+                <div id="current-tenant" style="color: white; font-size: 13px; font-weight: 500;">読み込み中...</div>
+            </div>
         </div>
         
         <nav class="sidebar-nav">
@@ -48,6 +53,10 @@
         </nav>
         
         <div class="sidebar-footer">
+            <!-- 管理者名表示を追加 -->
+            <div style="padding: 10px; color: rgba(255,255,255,0.7); font-size: 12px; text-align: center;">
+                ログイン中: <span id="admin-name" style="color: white; font-weight: 500;">管理者</span>
+            </div>
             <button onclick="logout()" class="btn btn-logout">
                 ログアウト
             </button>
@@ -66,6 +75,12 @@
                 </button>
             </div>
         </header>
+        
+        <!-- テナント情報バー（マルチテナント用追加） -->
+        <div id="tenant-alert" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 20px; margin-bottom: 20px; border-radius: 8px; font-size: 14px;">
+            <strong id="tenant-name-display"></strong> の予約データを表示中
+            <span id="tenant-plan" style="margin-left: 10px; padding: 2px 8px; background: rgba(255,255,255,0.2); border-radius: 4px; font-size: 12px;"></span>
+        </div>
         
         <!-- 予約管理コンテンツ -->
         <div class="reservation-management">
@@ -92,9 +107,9 @@
                 <div class="time-schedule">
                     <div class="time-header">
                         <div class="time-column">時間</div>
-                        <div class="staff-column">田中美香</div>
-                        <div class="staff-column">佐藤雅子</div>
-                        <div class="staff-column">山田花子</div>
+                        <div id="staff-columns" class="staff-columns">
+                            <!-- スタッフカラムが動的に生成されます -->
+                        </div>
                     </div>
                     <div id="time-slots" class="time-slots">
                         <!-- タイムスロットが動的に生成されます -->
@@ -113,9 +128,7 @@
                     </select>
                     <select id="staff-filter" onchange="filterReservations()">
                         <option value="all">すべてのスタッフ</option>
-                        <option value="1">田中美香</option>
-                        <option value="2">佐藤雅子</option>
-                        <option value="3">山田花子</option>
+                        <!-- スタッフオプションが動的に生成されます -->
                     </select>
                 </div>
                 
@@ -172,9 +185,6 @@
                             <label for="staff-select">スタッフ <span class="required">*</span></label>
                             <select id="staff-select" required>
                                 <option value="">選択してください</option>
-                                <option value="1">田中美香</option>
-                                <option value="2">佐藤雅子</option>
-                                <option value="3">山田花子</option>
                             </select>
                         </div>
                     </div>
@@ -202,6 +212,61 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeNewReservationModal()">キャンセル</button>
                 <button class="btn btn-primary" onclick="saveReservation()">予約登録</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 予約詳細モーダル -->
+    <div id="reservation-detail-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>予約詳細</h2>
+                <button class="modal-close" onclick="closeReservationDetail()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <label>予約ID</label>
+                        <div id="detail-id">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>顧客名</label>
+                        <div id="detail-customer">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>電話番号</label>
+                        <div id="detail-phone">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>メニュー</label>
+                        <div id="detail-menu">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>スタッフ</label>
+                        <div id="detail-staff">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>日時</label>
+                        <div id="detail-datetime">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>料金</label>
+                        <div id="detail-price">-</div>
+                    </div>
+                    <div class="detail-item">
+                        <label>ステータス</label>
+                        <div id="detail-status">-</div>
+                    </div>
+                    <div class="detail-item full-width">
+                        <label>備考</label>
+                        <div id="detail-notes">-</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="cancelReservation()">予約キャンセル</button>
+                <button class="btn btn-success" onclick="completeReservation()">完了にする</button>
+                <button class="btn btn-secondary" onclick="closeReservationDetail()">閉じる</button>
             </div>
         </div>
     </div>

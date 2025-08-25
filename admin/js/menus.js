@@ -24,8 +24,54 @@ const categoryNames = {
     'other': 'その他'
 };
 
+// テナント情報表示関数
+function displayTenantInfo() {
+    const tenantName = localStorage.getItem('tenantName') || sessionStorage.getItem('tenantName');
+    const tenantCode = getTenantCode();
+    
+    // サイドバーのテナント名を表示
+    const currentTenantEl = document.getElementById('current-tenant');
+    if (currentTenantEl && tenantName) {
+        currentTenantEl.textContent = tenantName;
+    }
+    
+    // 管理者名を表示
+    const adminName = localStorage.getItem('adminName') || sessionStorage.getItem('adminName');
+    const adminNameEl = document.getElementById('admin-name');
+    if (adminNameEl && adminName) {
+        adminNameEl.textContent = adminName;
+    }
+    
+    // メインコンテンツのテナント情報表示
+    if (tenantName) {
+        const tenantAlert = document.getElementById('tenant-alert');
+        if (tenantAlert) {
+            tenantAlert.style.display = 'block';
+            document.getElementById('tenant-name-display').textContent = tenantName;
+            
+            const planMap = {
+                'beauty-salon-001': 'Premiumプラン',
+                'beauty-salon-002': 'Basicプラン',
+                'beauty-salon-003': 'Basicプラン'
+            };
+            const planElement = document.getElementById('tenant-plan');
+            if (planElement) {
+                planElement.textContent = planMap[tenantCode] || 'Basicプラン';
+            }
+        }
+    }
+}
+
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', async function() {
+    // 認証チェック
+    if (!checkAuth()) {
+        return;
+    }
+    
+    // テナント情報表示
+    displayTenantInfo();
+    
     try {
         await loadMenus();
     } catch (error) {
@@ -37,17 +83,13 @@ document.addEventListener('DOMContentLoaded', async function() {
 // メニュー一覧を読み込み
 async function loadMenus() {
     try {
-        const response = await fetch('/api/menus');
-        
-        if (response.ok) {
-            allMenus = await response.json();
-            displayMenus();
-            updateCounts();
-        } else {
-            throw new Error('Failed to load menus');
-        }
+        // AdminAPIを使用（テナント情報が自動で付与される）
+        allMenus = await AdminAPI.get('/menus');
+        displayMenus();
+        updateCounts();
     } catch (error) {
         console.error('Error loading menus:', error);
+        // エラー時はテナント別のデモデータを表示
         displayDemoMenus();
     }
 }
@@ -107,19 +149,39 @@ function displayMenus() {
     }).join('');
 }
 
-// デモメニューを表示
+// デモメニューを表示（テナント別）
 function displayDemoMenus() {
-    allMenus = [
-        { menu_id: 1, name: 'カット', price: 4000, duration: 60 },
-        { menu_id: 2, name: 'カラー', price: 6000, duration: 90 },
-        { menu_id: 3, name: 'パーマ', price: 8000, duration: 120 },
-        { menu_id: 4, name: 'トリートメント', price: 3000, duration: 30 },
-        { menu_id: 5, name: 'ヘッドスパ', price: 4500, duration: 45 },
-        { menu_id: 6, name: 'カット+カラー', price: 9000, duration: 120 },
-        { menu_id: 7, name: 'カット+パーマ', price: 11000, duration: 150 },
-        { menu_id: 8, name: 'フルコース', price: 13000, duration: 180 }
-    ];
+    const tenantCode = getTenantCode();
     
+    // テナント別のデモデータ
+    const tenantMenus = {
+        'beauty-salon-001': [
+            { menu_id: 1, name: 'カット', price: 4000, duration: 60 },
+            { menu_id: 2, name: 'カラー', price: 6000, duration: 90 },
+            { menu_id: 3, name: 'パーマ', price: 8000, duration: 120 },
+            { menu_id: 4, name: 'トリートメント', price: 3000, duration: 30 },
+            { menu_id: 5, name: 'ヘッドスパ', price: 4500, duration: 45 },
+            { menu_id: 6, name: 'カット+カラー', price: 9000, duration: 120 },
+            { menu_id: 7, name: 'カット+パーマ', price: 11000, duration: 150 },
+            { menu_id: 8, name: 'フルコース', price: 13000, duration: 180 }
+        ],
+        'beauty-salon-002': [
+            { menu_id: 1, name: 'カット', price: 3500, duration: 45 },
+            { menu_id: 2, name: 'カラー', price: 5500, duration: 90 },
+            { menu_id: 3, name: 'パーマ', price: 7500, duration: 120 },
+            { menu_id: 4, name: 'トリートメント', price: 2500, duration: 30 },
+            { menu_id: 6, name: 'カット+カラー', price: 8500, duration: 120 }
+        ],
+        'beauty-salon-003': [
+            { menu_id: 1, name: 'フェイシャル', price: 8000, duration: 60 },
+            { menu_id: 2, name: 'ボディケア', price: 12000, duration: 90 },
+            { menu_id: 3, name: 'アロマトリートメント', price: 10000, duration: 75 },
+            { menu_id: 4, name: 'ヘッドスパ', price: 5000, duration: 45 },
+            { menu_id: 5, name: 'リンパマッサージ', price: 9000, duration: 60 }
+        ]
+    };
+    
+    allMenus = tenantMenus[tenantCode] || tenantMenus['beauty-salon-001'];
     displayMenus();
     updateCounts();
 }
@@ -129,9 +191,16 @@ function getCategoryFromId(menuId) {
     return categoryMap[menuId] || 'other';
 }
 
-// 予約数を取得（デモ用）
+// 予約数を取得（デモ用・テナント別）
 function getReservationCount(menuId) {
-    const counts = { 1: 45, 2: 38, 3: 25, 4: 20, 5: 15, 6: 52, 7: 18, 8: 12 };
+    const tenantCode = getTenantCode();
+    const countData = {
+        'beauty-salon-001': { 1: 45, 2: 38, 3: 25, 4: 20, 5: 15, 6: 52, 7: 18, 8: 12 },
+        'beauty-salon-002': { 1: 32, 2: 28, 3: 15, 4: 10, 6: 35 },
+        'beauty-salon-003': { 1: 25, 2: 30, 3: 22, 4: 18, 5: 20 }
+    };
+    
+    const counts = countData[tenantCode] || countData['beauty-salon-001'];
     return counts[menuId] || 0;
 }
 
@@ -228,12 +297,12 @@ async function saveMenu() {
     
     try {
         if (editingMenuId) {
-            // 更新
-            const response = await AdminAPI.put(`/menus/${editingMenuId}`, menuData);
+            // 更新（AdminAPIが自動でテナント情報を付与）
+            await AdminAPI.put(`/menus/${editingMenuId}`, menuData);
             showToast('メニューを更新しました', 'success');
         } else {
-            // 新規作成
-            const response = await AdminAPI.post('/menus', menuData);
+            // 新規作成（AdminAPIが自動でテナント情報を付与）
+            await AdminAPI.post('/menus', menuData);
             showToast('メニューを追加しました', 'success');
         }
         
@@ -273,6 +342,7 @@ async function confirmDelete() {
     if (!deleteTargetId) return;
     
     try {
+        // AdminAPIが自動でテナント情報を付与
         await AdminAPI.delete(`/menus/${deleteTargetId}`);
         showToast('メニューを削除しました', 'success');
         
