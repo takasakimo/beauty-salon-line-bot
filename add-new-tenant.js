@@ -4,7 +4,6 @@ const { Client } = require('pg');
 const NEW_TENANT = {
     tenant_code: 'beauty-salon-004',  // ユニークなコード
     salon_name: 'ヘアサロン福岡',      // サロン名
-    plan: 'Basic',                     // プラン（Basic/Premium）
     admin_username: 'admin',           // 管理者ユーザー名
     admin_password: 'admin123',        // 管理者パスワード
     admin_fullname: '管理者'           // 管理者の表示名
@@ -22,18 +21,25 @@ async function addNewTenant() {
         await client.connect();
         console.log('PostgreSQL connected');
 
-        // 1. テナント追加
+        // 1. まず既存のテーブル構造を確認
+        const checkColumns = await client.query(
+            `SELECT column_name FROM information_schema.columns 
+             WHERE table_name = 'tenants'`
+        );
+        console.log('テナントテーブルのカラム:', checkColumns.rows.map(r => r.column_name));
+
+        // 2. テナント追加（planカラムを除外）
         const tenantResult = await client.query(
-            `INSERT INTO tenants (tenant_code, salon_name, plan, is_active, created_at) 
-             VALUES ($1, $2, $3, true, CURRENT_TIMESTAMP) 
+            `INSERT INTO tenants (tenant_code, salon_name, is_active, created_at) 
+             VALUES ($1, $2, true, CURRENT_TIMESTAMP) 
              RETURNING tenant_id`,
-            [NEW_TENANT.tenant_code, NEW_TENANT.salon_name, NEW_TENANT.plan]
+            [NEW_TENANT.tenant_code, NEW_TENANT.salon_name]
         );
         
         const tenantId = tenantResult.rows[0].tenant_id;
         console.log(`✅ テナント追加完了: ${NEW_TENANT.salon_name} (ID: ${tenantId})`);
 
-        // 2. 管理者アカウント追加
+        // 3. 管理者アカウント追加
         const crypto = require('crypto');
         const passwordHash = crypto.createHash('sha256').update(NEW_TENANT.admin_password).digest('hex');
         
@@ -45,7 +51,7 @@ async function addNewTenant() {
         
         console.log(`✅ 管理者アカウント追加完了: ${NEW_TENANT.admin_username}`);
 
-        // 3. デフォルトメニュー追加（オプション）
+        // 4. デフォルトメニュー追加（オプション）
         const defaultMenus = [
             { name: 'カット', price: 4000, duration: 60 },
             { name: 'カラー', price: 6000, duration: 90 },
@@ -63,7 +69,7 @@ async function addNewTenant() {
         
         console.log(`✅ デフォルトメニュー追加完了`);
 
-        // 4. デフォルトスタッフ追加（オプション）
+        // 5. デフォルトスタッフ追加（オプション）
         const defaultStaff = [
             { name: 'スタッフA', email: 'staff-a@salon.com', working_hours: '10:00-19:00' },
             { name: 'スタッフB', email: 'staff-b@salon.com', working_hours: '11:00-20:00' }
@@ -87,6 +93,13 @@ async function addNewTenant() {
         console.log(`管理者ユーザー名: ${NEW_TENANT.admin_username}`);
         console.log(`管理者パスワード: ${NEW_TENANT.admin_password}`);
         console.log('========================================\n');
+
+        // 6. 登録確認
+        const verifyTenant = await client.query(
+            'SELECT * FROM tenants WHERE tenant_code = $1',
+            [NEW_TENANT.tenant_code]
+        );
+        console.log('登録されたテナント情報:', verifyTenant.rows[0]);
 
     } catch (error) {
         console.error('Error adding new tenant:', error);
