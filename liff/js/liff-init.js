@@ -11,13 +11,13 @@ async function initializeLiff() {
         // テナント情報を初期化（最初に実行）
         const tenantInfo = TenantManager.initialize();
         
-        // テナント情報がない場合は処理を中断
+        // テナント情報がない場合も続行（QRコード案内を表示）
         if (!tenantInfo) {
-            console.error('テナント情報の初期化に失敗しました');
-            return;
+            console.log('テナント情報が未設定 - QRコード案内を表示');
+            // 処理は続行する
+        } else {
+            console.log('現在のテナント:', tenantInfo.code);
         }
-        
-        console.log('現在のテナント:', tenantInfo.code);
         
         // LIFF初期化
         await liff.init({ liffId: LIFF_ID });
@@ -32,21 +32,37 @@ async function initializeLiff() {
         userProfile = await liff.getProfile();
         console.log('User Profile:', userProfile);
         
-        // ユーザー登録確認（テナント情報付き）
-        await checkUserRegistration();
-        
-        // 画面表示
-        showAppContent();
+        // テナント情報がある場合のみユーザー登録確認
+        if (tenantInfo) {
+            // ユーザー登録確認（テナント情報付き）
+            await checkUserRegistration();
+            
+            // 画面表示
+            showAppContent();
+        }
+        // テナント情報がない場合は、TenantManagerが案内を表示している
         
     } catch (error) {
         console.error('LIFF初期化エラー:', error);
-        alert('アプリの初期化に失敗しました。\n' + error.message);
+        // エラーでも案内は表示する
+        if (error.message && error.message.includes('404')) {
+            console.log('404エラーのため、続行します');
+        } else {
+            alert('アプリの初期化に失敗しました。\n' + error.message);
+        }
     }
 }
 
 // ユーザー登録確認（テナント対応版）
 async function checkUserRegistration() {
     try {
+        // テナントコードを確認
+        const tenantCode = TenantManager.getTenantCode();
+        if (!tenantCode) {
+            console.log('テナントコードが未設定のため、登録確認をスキップ');
+            return;
+        }
+        
         // テナントコードをヘッダーに追加
         const tenantHeaders = TenantManager.getHeaders();
         
@@ -118,6 +134,13 @@ function hideAllScreens() {
 // 現在の予約を読み込み（テナント対応版）
 async function loadCurrentReservation() {
     try {
+        // テナントコードを確認
+        const tenantCode = TenantManager.getTenantCode();
+        if (!tenantCode) {
+            console.log('テナントコードが未設定のため、予約取得をスキップ');
+            return;
+        }
+        
         // テナントコードをヘッダーに追加
         const tenantHeaders = TenantManager.getHeaders();
         
