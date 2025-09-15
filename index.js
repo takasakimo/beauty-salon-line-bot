@@ -232,6 +232,28 @@ app.get('/api/tenants/active', async (req, res) => {
 // 顧客API（LIFF対応）
 // ===========================
 
+// 顧客情報確認（LIFF用）
+app.post('/api/customers/check', getTenantId, async (req, res) => {
+    try {
+        const { line_user_id } = req.body;
+        
+        const query = 'SELECT * FROM customers WHERE line_user_id = $1 AND tenant_id = $2';
+        const result = await pgClient.query(query, [line_user_id, req.tenantId]);
+        
+        if (result.rows.length === 0) {
+            return res.json({ exists: false });
+        }
+        
+        res.json({ 
+            exists: true,
+            customer: result.rows[0]
+        });
+    } catch (error) {
+        console.error('顧客確認エラー:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // 顧客情報取得（LIFF用）
 app.get('/api/customers/:lineUserId', getTenantId, async (req, res) => {
     try {
@@ -255,40 +277,40 @@ app.get('/api/customers/:lineUserId', getTenantId, async (req, res) => {
 // 顧客登録（LIFF用・マルチテナント対応）
 app.post('/api/customers/register', getTenantId, async (req, res) => {
     try {
-        const { line_user_id, real_name, phone_number, tenant_code } = req.body;
-        
-        // テナントコードが本文に含まれている場合は、それを優先
-        let actualTenantId = req.tenantId;
-        if (tenant_code) {
-            const tenantResult = await pgClient.query(
-                'SELECT tenant_id FROM tenants WHERE tenant_code = $1 AND is_active = true',
-                [tenant_code]
-            );
-            if (tenantResult.rows.length > 0) {
-                actualTenantId = tenantResult.rows[0].tenant_id;
-            }
-        }
+        const { line_user_id, display_name, picture_url, real_name, phone_number } = req.body;
         
         // 既存チェック（テナント別）
         const checkQuery = 'SELECT * FROM customers WHERE line_user_id = $1 AND tenant_id = $2';
-        const checkResult = await pgClient.query(checkQuery, [line_user_id, actualTenantId]);
+        const checkResult = await pgClient.query(checkQuery, [line_user_id, req.tenantId]);
         
         if (checkResult.rows.length > 0) {
-            // すでに登録済み
+            // すでに登録済み - 情報を更新
+            const updateQuery = `
+                UPDATE customers 
+                SET display_name = $2, picture_url = $3, real_name = $4, phone_number = $5
+                WHERE line_user_id = $1 AND tenant_id = $6
+                RETURNING *
+            `;
+            const updateResult = await pgClient.query(updateQuery, [
+                line_user_id, display_name, picture_url, real_name, phone_number, req.tenantId
+            ]);
+            
             return res.json({ 
                 success: true, 
-                message: 'Already registered',
-                data: checkResult.rows[0]
+                message: 'Customer information updated',
+                data: updateResult.rows[0]
             });
         }
         
         // 新規登録
         const insertQuery = `
-            INSERT INTO customers (line_user_id, real_name, phone_number, registered_date, tenant_id)
-            VALUES ($1, $2, $3, NOW(), $4)
+            INSERT INTO customers (tenant_id, line_user_id, display_name, picture_url, real_name, phone_number, registered_date)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
             RETURNING *
         `;
-        const result = await pgClient.query(insertQuery, [line_user_id, real_name, phone_number, actualTenantId]);
+        const result = await pgClient.query(insertQuery, [
+            req.tenantId, line_user_id, display_name, picture_url, real_name, phone_number
+        ]);
         
         res.json({ 
             success: true, 
@@ -379,34 +401,73 @@ app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
     }
 });
 
-// 予約作成
+// 予約作成（修正版）
 app.post('/api/reservations', getTenantId, async (req, res) => {
     try {
-        const { customer_id, staff_id, menu_id, reservation_date, tenant_code } = req.body;
-        
-        // テナントコードが本文に含まれている場合は、それを優先
-        let actualTenantId = req.tenantId;
-        if (tenant_code) {
-            const tenantResult = await pgClient.query(
-                'SELECT tenant_id FROM tenants WHERE tenant_code = $1 AND is_active = true',
-                [tenant_code]
+        // リクエストボディから必要な情報を取得
+        const { 
+            line_user_id,
+            customer_name,
+            menu_id, 
+            staff_id, 
+            reservation_date, 
+            status = 'confirmed'
+        } = req.body;
+
+        console.log('予約作成リクエスト:', req.body);
+        console.log('テナントID:', req.tenantId);
+
+        // 顧客情報を取得または作成
+        let customerResult = await pgClient.query(
+            'SELECT customer_id FROM customers WHERE line_user_id = $1 AND tenant_id = $2',
+            [line_user_id, req.tenantId]
+        );
+
+        let customerId;
+        if (customerResult.rows.length === 0) {
+            // 顧客が存在しない場合は作成
+            const insertCustomerResult = await pgClient.query(
+                `INSERT INTO customers (tenant_id, line_user_id, display_name, real_name, registered_date) 
+                 VALUES ($1, $2, $3, $3, NOW()) 
+                 RETURNING customer_id`,
+                [req.tenantId, line_user_id, customer_name]
             );
-            if (tenantResult.rows.length > 0) {
-                actualTenantId = tenantResult.rows[0].tenant_id;
-            }
+            customerId = insertCustomerResult.rows[0].customer_id;
+            console.log('新規顧客作成:', customerId);
+        } else {
+            customerId = customerResult.rows[0].customer_id;
+            console.log('既存顧客:', customerId);
         }
         
+        // 予約を作成
         const insertQuery = `
-            INSERT INTO reservations (customer_id, staff_id, menu_id, reservation_date, status, created_at, tenant_id)
-            VALUES ($1, $2, $3, $4, 'confirmed', NOW(), $5)
-            RETURNING *
+            INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            RETURNING reservation_id
         `;
-        const result = await pgClient.query(insertQuery, [customer_id, staff_id, menu_id, reservation_date, actualTenantId]);
+        const result = await pgClient.query(insertQuery, [
+            req.tenantId, 
+            customerId, 
+            staff_id, 
+            menu_id, 
+            reservation_date, 
+            status
+        ]);
         
-        res.json({ success: true, data: result.rows[0] });
+        console.log('予約作成成功:', result.rows[0]);
+
+        res.json({ 
+            success: true, 
+            data: result.rows[0],
+            message: '予約が完了しました'
+        });
     } catch (error) {
-        console.error('Error creating reservation:', error);
-        res.status(500).json({ success: false, error: 'Reservation failed' });
+        console.error('予約作成エラー:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: '予約の作成に失敗しました',
+            details: error.message 
+        });
     }
 });
 
@@ -562,7 +623,9 @@ app.get('/api/admin/customers', authenticateAdmin, async (req, res) => {
     try {
         const query = `
             SELECT 
+                customer_id,
                 line_user_id,
+                display_name,
                 real_name,
                 phone_number,
                 address,
@@ -587,7 +650,7 @@ app.get('/api/admin/reservations', authenticateAdmin, async (req, res) => {
         let query = `
             SELECT r.*, c.real_name as customer_name, m.name as menu_name, m.price, m.duration, s.name as staff_name
             FROM reservations r
-            LEFT JOIN customers c ON r.customer_id = c.line_user_id AND c.tenant_id = $1
+            LEFT JOIN customers c ON r.customer_id = c.customer_id AND c.tenant_id = $1
             JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
             JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
             WHERE r.tenant_id = $1
@@ -627,13 +690,13 @@ app.get('/api/admin/statistics', authenticateAdmin, async (req, res) => {
         
         // 常連顧客数（5回以上来店）
         const regularCustomersQuery = `
-            SELECT COUNT(DISTINCT c.line_user_id) as total
+            SELECT COUNT(DISTINCT c.customer_id) as total
             FROM customers c
             WHERE c.tenant_id = $1
             AND (
                 SELECT COUNT(*) 
                 FROM reservations r 
-                WHERE r.customer_id = c.line_user_id 
+                WHERE r.customer_id = c.customer_id 
                 AND r.tenant_id = $1
                 AND r.status = 'completed'
             ) >= 5
