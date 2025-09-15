@@ -2,118 +2,121 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
     <title>予約 - らくポチビューティー</title>
-    <link rel="stylesheet" href="css/style.css">
-    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <!-- LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    
+    <!-- スタイルシート -->
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/reservation.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🎀 予約</h1>
-            <p id="salon-name">読み込み中...</p>
-        </header>
+    <!-- ヘッダー -->
+    <header class="header">
+        <button onclick="window.history.back()" class="back-button">←</button>
+        <h1 class="header-title">予約</h1>
+    </header>
 
+    <!-- メインコンテンツ -->
+    <main class="reservation-main">
         <!-- ステップインジケーター -->
         <div class="step-indicator">
-            <div class="step active" data-step="1">メニュー</div>
-            <div class="step" data-step="2">スタッフ</div>
-            <div class="step" data-step="3">日時</div>
-            <div class="step" data-step="4">確認</div>
+            <div class="step active" id="step-1-indicator">
+                <span class="step-number">1</span>
+                <span class="step-label">メニュー</span>
+            </div>
+            <div class="step" id="step-2-indicator">
+                <span class="step-number">2</span>
+                <span class="step-label">スタッフ</span>
+            </div>
+            <div class="step" id="step-3-indicator">
+                <span class="step-number">3</span>
+                <span class="step-label">日時</span>
+            </div>
+            <div class="step" id="step-4-indicator">
+                <span class="step-number">4</span>
+                <span class="step-label">確認</span>
+            </div>
         </div>
 
         <!-- ステップ1: メニュー選択 -->
-        <div id="step1" class="step-content active">
+        <div class="reservation-step" id="step1">
             <h2>メニューを選択してください</h2>
-            <div id="menu-list" class="menu-list">
-                <div class="loading">メニューを読み込み中...</div>
+            <div id="menu-list" class="selection-list">
+                <p class="loading-text">メニューを読み込み中...</p>
             </div>
-            <button id="next-to-step2" class="btn btn-primary" style="display: none;">次へ</button>
         </div>
 
         <!-- ステップ2: スタッフ選択 -->
-        <div id="step2" class="step-content">
+        <div class="reservation-step" id="step2" style="display: none;">
             <h2>スタッフを選択してください</h2>
-            <div id="staff-list" class="staff-list">
-                <div class="loading">スタッフを読み込み中...</div>
-            </div>
-            <div class="step-buttons">
-                <button id="back-to-step1" class="btn btn-secondary">戻る</button>
-                <button id="next-to-step3" class="btn btn-primary" style="display: none;">次へ</button>
+            <div id="staff-list" class="selection-list">
+                <p class="loading-text">スタッフを読み込み中...</p>
             </div>
         </div>
 
         <!-- ステップ3: 日時選択 -->
-        <div id="step3" class="step-content">
+        <div class="reservation-step" id="step3" style="display: none;">
             <h2>日時を選択してください</h2>
             
+            <!-- 日付選択 -->
             <div class="date-selection">
                 <h3>日付を選択</h3>
-                <div id="date-list" class="date-list">
-                    <div class="loading">日付を読み込み中...</div>
-                </div>
+                <div id="calendar" class="calendar-container"></div>
             </div>
-
-            <div class="time-selection" style="display: none;">
+            
+            <!-- 時間選択 -->
+            <div class="time-selection" id="time-selection" style="display: none;">
                 <h3>時間を選択</h3>
-                <div id="time-list" class="time-list">
-                    <div class="loading">時間を読み込み中...</div>
-                </div>
-            </div>
-
-            <div class="step-buttons">
-                <button id="back-to-step2" class="btn btn-secondary">戻る</button>
-                <button id="next-to-step4" class="btn btn-primary" style="display: none;">次へ</button>
+                <div id="time-slots" class="time-slots-container"></div>
             </div>
         </div>
 
         <!-- ステップ4: 確認 -->
-        <div id="step4" class="step-content">
+        <div class="reservation-step" id="step4" style="display: none;">
             <h2>予約内容を確認してください</h2>
+            <div class="confirmation-container">
+                <div class="confirmation-item">
+                    <span class="confirmation-label">メニュー:</span>
+                    <span class="confirmation-value" id="confirm-menu">-</span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">スタッフ:</span>
+                    <span class="confirmation-value" id="confirm-staff">-</span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">日時:</span>
+                    <span class="confirmation-value" id="confirm-datetime">-</span>
+                </div>
+                <div class="confirmation-item">
+                    <span class="confirmation-label">料金:</span>
+                    <span class="confirmation-value" id="confirm-price">-</span>
+                </div>
+            </div>
             
-            <div class="reservation-summary">
-                <div class="summary-item">
-                    <span class="label">メニュー:</span>
-                    <span id="summary-menu">-</span>
-                </div>
-                <div class="summary-item">
-                    <span class="label">スタッフ:</span>
-                    <span id="summary-staff">-</span>
-                </div>
-                <div class="summary-item">
-                    <span class="label">日時:</span>
-                    <span id="summary-datetime">-</span>
-                </div>
-                <div class="summary-item">
-                    <span class="label">料金:</span>
-                    <span id="summary-price">-</span>
-                </div>
-            </div>
-
-            <div class="step-buttons">
-                <button id="back-to-step3" class="btn btn-secondary">戻る</button>
-                <button id="confirm-reservation" class="btn btn-primary">予約を確定する</button>
-            </div>
+            <button class="submit-button" onclick="submitReservation()">予約を確定する</button>
         </div>
 
-        <!-- 完了画面 -->
-        <div id="completion" class="step-content">
-            <div class="completion-message">
-                <h2>🎉 予約が完了しました！</h2>
-                <p>予約確認メッセージをお送りしました。</p>
-                
-                <div class="completion-actions">
-                    <button onclick="location.href='index.html'" class="btn btn-primary">ホームに戻る</button>
-                    <button onclick="location.href='history.html'" class="btn btn-secondary">予約履歴を見る</button>
-                </div>
+        <!-- 完了メッセージ -->
+        <div class="reservation-step" id="step-complete" style="display: none;">
+            <div class="complete-container">
+                <div class="complete-icon">🎉</div>
+                <h2>予約が完了しました！</h2>
+                <p class="complete-message">予約確認メッセージをお送りしました。</p>
+                <button class="home-button" onclick="window.location.href='index.html'">ホームに戻る</button>
             </div>
         </div>
-    </div>
+    </main>
 
-    <!-- JavaScriptファイルの読み込み -->
-    <script src="js/tenant-manager.js"></script>
-    <script src="js/liff-init.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/reservation.js"></script>
+    <!-- JavaScriptファイル -->
+    <script src="./js/tenant-manager.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/liff-init.js"></script>
+    <script src="./js/reservation.js"></script>
 </body>
 </html>
