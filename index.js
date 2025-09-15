@@ -401,7 +401,7 @@ app.get('/api/reservations/current/:userId', getTenantId, async (req, res) => {
     }
 });
 
-// 予約作成（修正版）
+// 予約作成（DB構造に合わせた修正版）
 app.post('/api/reservations', getTenantId, async (req, res) => {
     try {
         // リクエストボディから必要な情報を取得
@@ -419,35 +419,31 @@ app.post('/api/reservations', getTenantId, async (req, res) => {
 
         // 顧客情報を取得または作成
         let customerResult = await pgClient.query(
-            'SELECT customer_id FROM customers WHERE line_user_id = $1 AND tenant_id = $2',
+            'SELECT line_user_id FROM customers WHERE line_user_id = $1 AND tenant_id = $2',
             [line_user_id, req.tenantId]
         );
 
-        let customerId;
         if (customerResult.rows.length === 0) {
             // 顧客が存在しない場合は作成
-            const insertCustomerResult = await pgClient.query(
+            await pgClient.query(
                 `INSERT INTO customers (tenant_id, line_user_id, display_name, real_name, registered_date) 
-                 VALUES ($1, $2, $3, $3, NOW()) 
-                 RETURNING customer_id`,
+                 VALUES ($1, $2, $3, $3, NOW())`,
                 [req.tenantId, line_user_id, customer_name]
             );
-            customerId = insertCustomerResult.rows[0].customer_id;
-            console.log('新規顧客作成:', customerId);
+            console.log('新規顧客作成:', line_user_id);
         } else {
-            customerId = customerResult.rows[0].customer_id;
-            console.log('既存顧客:', customerId);
+            console.log('既存顧客:', line_user_id);
         }
         
-        // 予約を作成
+        // 予約を作成（customer_idフィールドにline_user_idを入れる）
         const insertQuery = `
-            INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, created_at)
+            INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, created_date)
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             RETURNING reservation_id
         `;
         const result = await pgClient.query(insertQuery, [
             req.tenantId, 
-            customerId, 
+            line_user_id,  // customer_idカラムにline_user_idを保存
             staff_id, 
             menu_id, 
             reservation_date, 
