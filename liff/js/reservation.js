@@ -1,4 +1,4 @@
-// reservation.js（完全版 - マルチテナント対応）
+// reservation.js（完全版 - 予約送信エラー修正）
 
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', async function() {
@@ -19,6 +19,24 @@ document.addEventListener('DOMContentLoaded', async function() {
         // LIFF初期化
         await liff.init({ liffId: '2007971454-kL9LXL2O' });
         console.log('LIFF初期化完了');
+        
+        // ログイン状態確認
+        if (!liff.isLoggedIn()) {
+            console.log('未ログイン状態');
+            if (!liff.isInClient()) {
+                liff.login();
+                return;
+            }
+        }
+        
+        // プロフィール取得してグローバルに保存
+        try {
+            const profile = await liff.getProfile();
+            window.userProfile = profile;
+            console.log('ユーザープロフィール取得:', profile);
+        } catch (err) {
+            console.error('プロフィール取得エラー:', err);
+        }
         
         // メニューとスタッフのロード
         await loadMenus();
@@ -354,9 +372,14 @@ function showConfirmation() {
     window.scrollTo(0, 0);
 }
 
-// 予約送信
+// 予約送信（修正版）
 async function submitReservation() {
     console.log('予約送信開始');
+    
+    // ボタンを無効化（二重送信防止）
+    const submitBtn = event.target;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '送信中...';
     
     try {
         const menu = JSON.parse(sessionStorage.getItem('selectedMenu'));
@@ -365,19 +388,40 @@ async function submitReservation() {
         const time = sessionStorage.getItem('selectedTime');
         const tenantCode = TenantManager.getTenantCode();
         
-        // LIFFからユーザー情報を取得
-        const profile = await liff.getProfile();
+        // プロフィール情報を取得
+        let lineUserId, customerName;
+        
+        // まずwindow.userProfileを確認
+        if (window.userProfile && window.userProfile.userId) {
+            lineUserId = window.userProfile.userId;
+            customerName = window.userProfile.displayName;
+            console.log('既存のプロフィール使用:', window.userProfile);
+        } else {
+            // なければLIFFから再取得
+            try {
+                const profile = await liff.getProfile();
+                lineUserId = profile.userId;
+                customerName = profile.displayName;
+                window.userProfile = profile;
+                console.log('プロフィール再取得:', profile);
+            } catch (err) {
+                console.error('プロフィール取得エラー:', err);
+                // フォールバック
+                lineUserId = localStorage.getItem('line_user_id') || 'unknown_' + Date.now();
+                customerName = 'ゲスト';
+            }
+        }
         
         const reservationData = {
-            line_user_id: profile.userId,
-            customer_name: profile.displayName,
+            line_user_id: lineUserId,
+            customer_name: customerName,
             menu_id: menu.id,
             staff_id: staff.id,
             reservation_date: `${date} ${time}:00`,
             status: 'confirmed'
         };
         
-        console.log('予約データ:', reservationData);
+        console.log('送信する予約データ:', reservationData);
         
         const response = await fetch('/api/reservations', {
             method: 'POST',
@@ -388,23 +432,32 @@ async function submitReservation() {
             body: JSON.stringify(reservationData)
         });
         
+        console.log('レスポンスステータス:', response.status);
+        
+        const responseData = await response.json();
+        console.log('レスポンスデータ:', responseData);
+        
         if (!response.ok) {
-            throw new Error('予約の送信に失敗しました');
+            throw new Error(responseData.details || responseData.error || '予約の送信に失敗しました');
         }
         
-        const result = await response.json();
-        console.log('予約完了:', result);
+        console.log('予約完了:', responseData);
         
         // 完了画面を表示
         document.getElementById('step4').style.display = 'none';
         document.getElementById('step-complete').style.display = 'block';
+        window.scrollTo(0, 0);
         
         // セッションストレージをクリア
         sessionStorage.clear();
         
     } catch (error) {
         console.error('予約送信エラー:', error);
-        alert('予約の送信に失敗しました: ' + error.message);
+        alert(`予約の送信に失敗しました。\n\nエラー: ${error.message}\n\nもう一度お試しください。`);
+        
+        // ボタンを再度有効化
+        submitBtn.disabled = false;
+        submitBtn.textContent = '予約を確定する';
     }
 }
 
@@ -413,7 +466,11 @@ window.debugReservation = function() {
     console.log('=== デバッグ情報 ===');
     console.log('テナントコード:', TenantManager.getTenantCode());
     console.log('テナント情報:', TenantManager.currentTenant);
-    console.log('LocalStorage:', localStorage.getItem('tenant_info'));
+    console.log('ユーザープロフィール:', window.userProfile);
+    console.log('LocalStorage:', {
+        tenant_info: localStorage.getItem('tenant_info'),
+        line_user_id: localStorage.getItem('line_user_id')
+    });
     console.log('SessionStorage:', {
         menu: sessionStorage.getItem('selectedMenu'),
         staff: sessionStorage.getItem('selectedStaff'),
@@ -421,3 +478,10 @@ window.debugReservation = function() {
         time: sessionStorage.getItem('selectedTime')
     });
 };
+
+// グローバル関数として公開
+window.selectMenu = selectMenu;
+window.selectStaff = selectStaff;
+window.selectDate = selectDate;
+window.selectTime = selectTime;
+window.submitReservation = submitReservation;
