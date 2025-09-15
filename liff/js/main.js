@@ -1,28 +1,35 @@
+// main.js（完全版 - TenantManager対応）
+
 // ページナビゲーション（テナント情報を引き継ぎ）
 function navigateTo(page) {
-    // 現在のテナント情報を取得
-    let tenantParam = '';
-    if (window.currentTenant && window.currentTenant.tenant_code) {
-        tenantParam = `?tenant=${window.currentTenant.tenant_code}`;
+    // TenantManagerからテナント情報を取得
+    const tenantCode = TenantManager.getTenantCode();
+    
+    if (!tenantCode) {
+        // テナント未設定の場合
+        alert('店舗情報が設定されていません。\nQRコードから再度アクセスしてください。');
+        TenantManager.showSetupGuide();
+        return;
     }
     
-    console.log('ナビゲーション:', page, 'テナント:', tenantParam);
+    console.log('ナビゲーション:', page, 'テナント:', tenantCode);
     
+    // ページ遷移（テナント情報はLocalStorageに保存されているので、URLパラメータは不要）
     switch(page) {
         case 'reservation':
-            window.location.href = `/liff/reservation.html${tenantParam}`;
+            window.location.href = '/liff/reservation.html';
             break;
         case 'mypage':
-            window.location.href = `/liff/mypage.html${tenantParam}`;
+            window.location.href = '/liff/mypage.html';
             break;
         case 'menu':
-            window.location.href = `/liff/menu.html${tenantParam}`;
+            window.location.href = '/liff/menu.html';
             break;
         case 'history':
-            window.location.href = `/liff/history.html${tenantParam}`;
+            window.location.href = '/liff/history.html';
             break;
         default:
-            window.location.href = `/liff/index.html${tenantParam}`;
+            window.location.href = '/liff/index.html';
     }
 }
 
@@ -30,18 +37,25 @@ function navigateTo(page) {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('main.js初期化開始');
     
-    // テナント情報が設定されるまで待つ
-    const waitForTenant = () => {
-        if (window.currentTenant) {
-            console.log('テナント情報確認:', window.currentTenant);
-            initializePage();
-        } else {
-            console.log('テナント情報待ち...');
-            setTimeout(waitForTenant, 100);
-        }
+    // TenantManagerの初期化
+    const tenantInfo = TenantManager.initialize();
+    
+    if (!tenantInfo) {
+        console.log('テナント情報が設定されていません');
+        // TenantManagerが自動的にセットアップガイドを表示
+        return;
+    }
+    
+    console.log('テナント情報確認:', tenantInfo);
+    
+    // currentTenantをグローバルに設定（互換性のため）
+    window.currentTenant = {
+        tenant_code: tenantInfo.code,
+        tenant_name: TenantManager.getCurrentTenantName()
     };
     
-    waitForTenant();
+    // ページ初期化
+    initializePage();
 });
 
 // ページ初期化
@@ -70,7 +84,7 @@ function initializePage() {
             submitButton.textContent = '登録中...';
             
             try {
-                // API呼び出し
+                // API呼び出し（テナントヘッダー付き）
                 const result = await apiCall('/api/customers/register', 'POST', customerData);
                 
                 if (result && result.success) {
@@ -97,6 +111,12 @@ function initializePage() {
             }
         });
     }
+    
+    // 店舗名を表示（あれば）
+    const tenantNameElements = document.querySelectorAll('.tenant-name');
+    tenantNameElements.forEach(element => {
+        element.textContent = TenantManager.getCurrentTenantName();
+    });
 }
 
 // ホーム画面を表示
@@ -104,14 +124,22 @@ function showHomeScreen() {
     console.log('ホーム画面表示');
     
     // 画面切り替え
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('registration-screen').style.display = 'none';
-    document.getElementById('home-screen').style.display = 'block';
-    document.getElementById('main-content').style.display = 'block';
+    const loadingEl = document.getElementById('loading');
+    const registrationEl = document.getElementById('registration-screen');
+    const homeEl = document.getElementById('home-screen');
+    const mainEl = document.getElementById('main-content');
+    
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (registrationEl) registrationEl.style.display = 'none';
+    if (homeEl) homeEl.style.display = 'block';
+    if (mainEl) mainEl.style.display = 'block';
     
     // ユーザー名を表示
     if (window.userProfile && window.userProfile.real_name) {
-        document.querySelector('.user-name').textContent = window.userProfile.real_name;
+        const userNameElements = document.querySelectorAll('.user-name');
+        userNameElements.forEach(element => {
+            element.textContent = window.userProfile.real_name;
+        });
     }
     
     // 現在の予約を読み込み
@@ -123,10 +151,15 @@ function showRegistrationScreen() {
     console.log('登録画面表示');
     
     // 画面切り替え
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('home-screen').style.display = 'none';
-    document.getElementById('registration-screen').style.display = 'block';
-    document.getElementById('main-content').style.display = 'block';
+    const loadingEl = document.getElementById('loading');
+    const homeEl = document.getElementById('home-screen');
+    const registrationEl = document.getElementById('registration-screen');
+    const mainEl = document.getElementById('main-content');
+    
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (homeEl) homeEl.style.display = 'none';
+    if (registrationEl) registrationEl.style.display = 'block';
+    if (mainEl) mainEl.style.display = 'block';
 }
 
 // 現在の予約を読み込み
@@ -151,6 +184,8 @@ async function loadCurrentReservation() {
 function displayCurrentReservation(reservation) {
     const currentReservationDiv = document.getElementById('current-reservation');
     
+    if (!currentReservationDiv) return;
+    
     if (reservation) {
         const reservationDate = new Date(reservation.reservation_date);
         const dateString = reservationDate.toLocaleDateString('ja-JP', {
@@ -163,9 +198,13 @@ function displayCurrentReservation(reservation) {
             minute: '2-digit'
         });
         
-        currentReservationDiv.querySelector('.reservation-date').textContent = `${dateString} ${timeString}`;
-        currentReservationDiv.querySelector('.reservation-menu').textContent = reservation.menu_name || 'メニュー情報なし';
-        currentReservationDiv.querySelector('.reservation-staff').textContent = reservation.staff_name || 'スタッフ情報なし';
+        const dateEl = currentReservationDiv.querySelector('.reservation-date');
+        const menuEl = currentReservationDiv.querySelector('.reservation-menu');
+        const staffEl = currentReservationDiv.querySelector('.reservation-staff');
+        
+        if (dateEl) dateEl.textContent = `${dateString} ${timeString}`;
+        if (menuEl) menuEl.textContent = reservation.menu_name || 'メニュー情報なし';
+        if (staffEl) staffEl.textContent = reservation.staff_name || 'スタッフ情報なし';
         
         currentReservationDiv.style.display = 'block';
     } else {
@@ -212,6 +251,17 @@ if (typeof liff === 'undefined') {
         `;
     }
 }
+
+// デバッグ用関数
+window.debugMain = function() {
+    console.log('=== Main.js デバッグ情報 ===');
+    console.log('テナントコード:', TenantManager.getTenantCode());
+    console.log('テナント名:', TenantManager.getCurrentTenantName());
+    console.log('テナント情報:', TenantManager.currentTenant);
+    console.log('ユーザープロファイル:', window.userProfile);
+    console.log('LocalStorage - tenant_info:', localStorage.getItem('tenant_info'));
+    console.log('LocalStorage - userData:', localStorage.getItem('userData'));
+};
 
 // デバッグ用: コンソールにLIFF情報を表示
 console.log('main.js読み込み完了');
