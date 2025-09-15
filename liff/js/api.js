@@ -1,200 +1,124 @@
-// API基本設定
-const API_BASE_URL = window.location.origin + '/api';
+// api.js（完全版 - マルチテナント対応）
 
-// APIヘルパー関数（テナント対応版）
-class API {
-    // GETリクエスト
-    static async get(endpoint) {
-        try {
-            // テナント情報を含むヘッダーを作成
-            const tenantHeaders = TenantManager.getHeaders();
-            
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`,
-                    ...tenantHeaders  // テナント情報を追加
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('API GET Error:', error);
-            throw error;
-        }
-    }
+// API呼び出し用の共通関数
+async function apiCall(endpoint, method = 'GET', data = null) {
+    console.log(`API呼び出し: ${method} ${endpoint}`);
     
-    // POSTリクエスト
-    static async post(endpoint, data) {
-        try {
-            // テナント情報を含むヘッダーを作成
-            const tenantHeaders = TenantManager.getHeaders();
-            
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`,
-                    ...tenantHeaders  // テナント情報を追加
-                },
-                body: JSON.stringify(data)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('API POST Error:', error);
-            throw error;
+    try {
+        // テナント情報を取得
+        const tenantCode = TenantManager.getTenantCode();
+        if (!tenantCode) {
+            console.error('テナント情報が取得できません');
+            throw new Error('店舗情報が設定されていません');
         }
-    }
-    
-    // PUTリクエスト
-    static async put(endpoint, data) {
-        try {
-            // テナント情報を含むヘッダーを作成
-            const tenantHeaders = TenantManager.getHeaders();
-            
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`,
-                    ...tenantHeaders  // テナント情報を追加
-                },
-                body: JSON.stringify(data)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+        
+        // リクエストオプション
+        const options = {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Tenant-Code': tenantCode
             }
-            
-            return await response.json();
-        } catch (error) {
-            console.error('API PUT Error:', error);
-            throw error;
+        };
+        
+        // LINE User IDを追加（ある場合）
+        const lineUserId = localStorage.getItem('line_user_id');
+        if (lineUserId) {
+            options.headers['X-Line-User-Id'] = lineUserId;
         }
-    }
-    
-    // DELETEリクエスト
-    static async delete(endpoint) {
-        try {
-            // テナント情報を含むヘッダーを作成
-            const tenantHeaders = TenantManager.getHeaders();
-            
-            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${userProfile?.userId}`,
-                    ...tenantHeaders  // テナント情報を追加
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            return response.status === 204 ? null : await response.json();
-        } catch (error) {
-            console.error('API DELETE Error:', error);
-            throw error;
+        
+        // POSTやPUTの場合はボディを追加
+        if (data && (method === 'POST' || method === 'PUT')) {
+            options.body = JSON.stringify(data);
         }
+        
+        // API呼び出し
+        const response = await fetch(endpoint, options);
+        
+        // レスポンスのログ
+        console.log(`API応答: ${response.status}`);
+        
+        // エラーチェック
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('APIエラー:', errorText);
+            throw new Error(`APIエラー: ${response.status}`);
+        }
+        
+        // JSONレスポンスをパース
+        const result = await response.json();
+        console.log('API結果:', result);
+        
+        return result;
+        
+    } catch (error) {
+        console.error('API呼び出しエラー:', error);
+        throw error;
     }
 }
 
-// 顧客API（テナント対応版）
-const CustomerAPI = {
-    // 顧客登録（テナント情報も一緒に送信）
-    register: async (customerData) => {
-        // テナントコードを追加
-        const tenantCode = TenantManager.getTenantCode();
-        
-        return await API.post('/customers/register', {
-            ...customerData,
-            line_user_id: userProfile.userId,
-            tenant_code: tenantCode  // テナント情報を追加
-        });
-    },
+// 顧客登録API
+async function registerCustomer(customerData) {
+    console.log('顧客登録:', customerData);
     
-    // 顧客情報取得
-    get: async (userId) => {
-        return await API.get(`/customers/${userId}`);
-    },
-    
-    // 顧客情報更新
-    update: async (userId, data) => {
-        return await API.put(`/customers/${userId}`, data);
+    // LINEプロフィール情報を追加
+    if (window.userProfile) {
+        customerData.line_user_id = window.userProfile.userId;
+        customerData.display_name = window.userProfile.displayName;
+        customerData.picture_url = window.userProfile.pictureUrl;
     }
-};
+    
+    return await apiCall('/api/customers/register', 'POST', customerData);
+}
 
-// 予約API（テナント対応版）
-const ReservationAPI = {
-    // 予約作成（テナント情報も一緒に送信）
-    create: async (reservationData) => {
-        // テナントコードを追加
-        const tenantCode = TenantManager.getTenantCode();
-        
-        return await API.post('/reservations', {
-            ...reservationData,
-            customer_id: userProfile.userId,
-            tenant_code: tenantCode  // テナント情報を追加
-        });
-    },
+// 予約作成API
+async function createReservation(reservationData) {
+    console.log('予約作成:', reservationData);
     
-    // 予約一覧取得
-    list: async (userId) => {
-        return await API.get(`/reservations/user/${userId}`);
-    },
-    
-    // 現在の予約取得
-    getCurrent: async (userId) => {
-        return await API.get(`/reservations/current/${userId}`);
-    },
-    
-    // 予約キャンセル
-    cancel: async (reservationId) => {
-        return await API.delete(`/reservations/${reservationId}`);
-    },
-    
-    // 空き時間取得（テナント別）
-    getAvailableSlots: async (date, menuId) => {
-        return await API.get(`/reservations/available-slots?date=${date}&menu_id=${menuId}`);
+    // LINEユーザーIDを追加
+    if (window.userProfile) {
+        reservationData.line_user_id = window.userProfile.userId;
     }
-};
-
-// メニューAPI（テナント対応版）
-const MenuAPI = {
-    // メニュー一覧取得（テナント別）
-    list: async () => {
-        return await API.get('/menus');
-    },
     
-    // メニュー詳細取得
-    get: async (menuId) => {
-        return await API.get(`/menus/${menuId}`);
-    }
-};
+    return await apiCall('/api/reservations', 'POST', reservationData);
+}
 
-// スタッフAPI（テナント対応版）
-const StaffAPI = {
-    // スタッフ一覧取得（テナント別）
-    list: async () => {
-        return await API.get('/staff');
-    },
+// メニュー取得API
+async function getMenus() {
+    return await apiCall('/api/menus', 'GET');
+}
+
+// スタッフ取得API
+async function getStaff() {
+    return await apiCall('/api/staff', 'GET');
+}
+
+// 予約履歴取得API
+async function getReservationHistory() {
+    if (!window.userProfile || !window.userProfile.userId) {
+        throw new Error('ユーザー情報が取得できません');
+    }
     
-    // スタッフ詳細取得
-    get: async (staffId) => {
-        return await API.get(`/staff/${staffId}`);
-    }
-};
+    return await apiCall(`/api/reservations/history/${window.userProfile.userId}`, 'GET');
+}
 
-// デバッグ用：現在のテナント情報を確認
+// 現在の予約取得API
+async function getCurrentReservations() {
+    if (!window.userProfile || !window.userProfile.userId) {
+        throw new Error('ユーザー情報が取得できません');
+    }
+    
+    return await apiCall(`/api/reservations/current/${window.userProfile.userId}`, 'GET');
+}
+
+// グローバルに公開
+window.apiCall = apiCall;
+window.registerCustomer = registerCustomer;
+window.createReservation = createReservation;
+window.getMenus = getMenus;
+window.getStaff = getStaff;
+window.getReservationHistory = getReservationHistory;
+window.getCurrentReservations = getCurrentReservations;
+
+// API Module Loaded のログ
 console.log('API Module Loaded - Current Tenant:', TenantManager.getTenantCode());

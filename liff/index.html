@@ -92,10 +92,10 @@
         </div>
     </main>
 
-    <!-- JavaScriptファイル -->
-    <script src="./js/tenant-manager.js"></script>  <!-- 最初に読み込む（重要！） -->
-    <script src="./js/liff-init.js"></script>
-    <script src="./js/api.js"></script>
-    <script src="./js/main.js"></script>
+    <!-- JavaScriptファイル（順番重要！） -->
+    <script src="./js/tenant-manager.js"></script>  <!-- 1. 最初に読み込む -->
+    <script src="./js/api.js"></script>            <!-- 2. API関数を定義 -->
+    <script src="./js/liff-init.js"></script>       <!-- 3. LIFF初期化 -->
+    <script src="./js/main.js"></script>            <!-- 4. メイン処理 -->
 </body>
 </html>

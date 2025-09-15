@@ -84,16 +84,19 @@ function initializePage() {
             submitButton.textContent = '登録中...';
             
             try {
-                // API呼び出し（テナントヘッダー付き）
-                const result = await apiCall('/api/customers/register', 'POST', customerData);
+                // registerCustomer関数を使用（api.jsで定義）
+                const result = await registerCustomer(customerData);
                 
                 if (result && result.success) {
                     // 登録成功
                     alert('登録が完了しました！');
                     
                     // ユーザーデータを保存
-                    window.userProfile = result.data;
-                    localStorage.setItem('userData', JSON.stringify(result.data));
+                    window.userProfile = {
+                        ...window.userProfile,
+                        ...result.data
+                    };
+                    localStorage.setItem('userData', JSON.stringify(window.userProfile));
                     
                     // ホーム画面へ遷移
                     showHomeScreen();
