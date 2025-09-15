@@ -1,4 +1,4 @@
-// reservation.js（完全版）
+// reservation.js（完全版 - マルチテナント対応）
 
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', async function() {
@@ -10,17 +10,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         if (!tenantInfo) {
             console.error('テナント情報が取得できません');
-            // エラー表示
-            document.body.innerHTML = `
-                <div style="padding: 20px; text-align: center;">
-                    <h2 style="color: red;">店舗情報が見つかりません</h2>
-                    <p>ホーム画面から再度アクセスしてください。</p>
-                    <button onclick="window.location.href='index.html'" 
-                            style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; margin-top: 20px;">
-                        ホームに戻る
-                    </button>
-                </div>
-            `;
+            showError('店舗情報が見つかりません。ホーム画面から再度アクセスしてください。');
             return;
         }
         
@@ -34,21 +24,37 @@ document.addEventListener('DOMContentLoaded', async function() {
         await loadMenus();
         await loadStaff();
         
-        // デバッグ情報の表示
-        const debugInfo = document.getElementById('debug-info');
-        if (debugInfo) {
-            debugInfo.textContent = `テナント: ${tenantInfo.code}`;
-        }
-        
     } catch (error) {
         console.error('初期化エラー:', error);
-        alert('初期化中にエラーが発生しました: ' + error.message);
+        showError('初期化中にエラーが発生しました: ' + error.message);
     }
 });
+
+// エラー表示
+function showError(message) {
+    const menuList = document.getElementById('menu-list');
+    if (menuList) {
+        menuList.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: red;">
+                <p>${message}</p>
+                <button onclick="window.location.href='index.html'" 
+                        style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; margin-top: 20px;">
+                    ホームに戻る
+                </button>
+            </div>
+        `;
+    }
+}
 
 // メニュー一覧を読み込む
 async function loadMenus() {
     console.log('メニュー読み込み開始');
+    
+    const menuList = document.getElementById('menu-list');
+    if (!menuList) {
+        console.error('menu-list要素が見つかりません');
+        return;
+    }
     
     try {
         const tenantCode = TenantManager.getTenantCode();
@@ -56,47 +62,51 @@ async function loadMenus() {
             throw new Error('テナントコードが取得できません');
         }
         
+        console.log('API呼び出し: /api/menus, テナント:', tenantCode);
+        
         const response = await fetch('/api/menus', {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Tenant-Code': tenantCode
             }
         });
         
+        console.log('APIレスポンス:', response.status);
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.error('APIエラー:', errorText);
+            throw new Error(`メニュー取得エラー: ${response.status}`);
         }
         
         const menus = await response.json();
         console.log('取得したメニュー:', menus);
         
-        const menuList = document.getElementById('menu-list');
-        if (!menuList) {
-            console.error('menu-list要素が見つかりません');
+        if (!menus || menus.length === 0) {
+            menuList.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">メニューが登録されていません</p>';
             return;
         }
         
-        if (menus.length === 0) {
-            menuList.innerHTML = '<p style="text-align: center; color: #999;">メニューがありません</p>';
-            return;
-        }
-        
+        // メニューを表示
         menuList.innerHTML = menus.map(menu => `
-            <div class="menu-item" data-menu-id="${menu.menu_id}">
+            <div class="menu-item" data-menu-id="${menu.menu_id}" data-price="${menu.price}">
                 <h3>${menu.name}</h3>
                 <p class="duration">施術時間: ${menu.duration}分</p>
                 <p class="price">¥${Number(menu.price).toLocaleString()}</p>
-                <button onclick="selectMenu(${menu.menu_id}, '${menu.name}', ${menu.duration})" 
+                <button onclick="selectMenu(${menu.menu_id}, '${menu.name.replace(/'/g, "\\'")}', ${menu.duration}, ${menu.price})" 
                         class="select-btn">選択</button>
             </div>
         `).join('');
         
     } catch (error) {
         console.error('メニュー読み込みエラー:', error);
-        const menuList = document.getElementById('menu-list');
-        if (menuList) {
-            menuList.innerHTML = `<p style="color: red; text-align: center;">メニューの読み込みに失敗しました: ${error.message}</p>`;
-        }
+        menuList.innerHTML = `
+            <p style="color: red; text-align: center; padding: 20px;">
+                メニューの読み込みに失敗しました<br>
+                ${error.message}
+            </p>
+        `;
     }
 }
 
@@ -104,75 +114,94 @@ async function loadMenus() {
 async function loadStaff() {
     console.log('スタッフ読み込み開始');
     
+    const staffList = document.getElementById('staff-list');
+    if (!staffList) {
+        console.error('staff-list要素が見つかりません');
+        return;
+    }
+    
     try {
         const tenantCode = TenantManager.getTenantCode();
         if (!tenantCode) {
             throw new Error('テナントコードが取得できません');
         }
         
+        console.log('API呼び出し: /api/staff, テナント:', tenantCode);
+        
         const response = await fetch('/api/staff', {
+            method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Tenant-Code': tenantCode
             }
         });
         
+        console.log('APIレスポンス:', response.status);
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            console.error('APIエラー:', errorText);
+            throw new Error(`スタッフ取得エラー: ${response.status}`);
         }
         
         const staff = await response.json();
         console.log('取得したスタッフ:', staff);
         
-        const staffList = document.getElementById('staff-list');
-        if (!staffList) {
-            console.error('staff-list要素が見つかりません');
+        if (!staff || staff.length === 0) {
+            staffList.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">スタッフが登録されていません</p>';
             return;
         }
         
-        if (staff.length === 0) {
-            staffList.innerHTML = '<p style="text-align: center; color: #999;">スタッフがいません</p>';
-            return;
-        }
-        
+        // スタッフを表示
         staffList.innerHTML = staff.map(s => `
             <div class="staff-item" data-staff-id="${s.staff_id}">
                 <h3>${s.name}</h3>
-                <p>${s.role || 'スタッフ'}</p>
-                <button onclick="selectStaff(${s.staff_id}, '${s.name}')" 
+                <p class="role">${s.role || 'スタッフ'}</p>
+                <button onclick="selectStaff(${s.staff_id}, '${s.name.replace(/'/g, "\\'")}')" 
                         class="select-btn">選択</button>
             </div>
         `).join('');
         
     } catch (error) {
         console.error('スタッフ読み込みエラー:', error);
-        const staffList = document.getElementById('staff-list');
-        if (staffList) {
-            staffList.innerHTML = `<p style="color: red; text-align: center;">スタッフの読み込みに失敗しました: ${error.message}</p>`;
-        }
+        staffList.innerHTML = `
+            <p style="color: red; text-align: center; padding: 20px;">
+                スタッフの読み込みに失敗しました<br>
+                ${error.message}
+            </p>
+        `;
     }
 }
 
 // メニュー選択
-function selectMenu(menuId, menuName, duration) {
-    console.log('メニュー選択:', menuId, menuName, duration);
+function selectMenu(menuId, menuName, duration, price) {
+    console.log('メニュー選択:', menuId, menuName, duration, price);
     
     // 選択状態を保存
     sessionStorage.setItem('selectedMenu', JSON.stringify({
         id: menuId,
         name: menuName,
-        duration: duration
+        duration: duration,
+        price: price
     }));
     
     // UIを更新
     document.querySelectorAll('.menu-item').forEach(item => {
         item.classList.remove('selected');
     });
-    document.querySelector(`[data-menu-id="${menuId}"]`).classList.add('selected');
+    const selectedItem = document.querySelector(`[data-menu-id="${menuId}"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('selected');
+    }
     
-    // 次のステップを有効化
+    // ステップインジケーターを更新
+    document.getElementById('step-1-indicator').classList.add('active');
+    document.getElementById('step-2-indicator').classList.add('active');
+    
+    // 次のステップを表示
+    document.getElementById('step1').style.display = 'none';
     document.getElementById('step2').style.display = 'block';
-    document.getElementById('step2').scrollIntoView({ behavior: 'smooth' });
+    window.scrollTo(0, 0);
 }
 
 // スタッフ選択
@@ -189,11 +218,18 @@ function selectStaff(staffId, staffName) {
     document.querySelectorAll('.staff-item').forEach(item => {
         item.classList.remove('selected');
     });
-    document.querySelector(`[data-staff-id="${staffId}"]`).classList.add('selected');
+    const selectedItem = document.querySelector(`[data-staff-id="${staffId}"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('selected');
+    }
     
-    // 次のステップを有効化
+    // ステップインジケーターを更新
+    document.getElementById('step-3-indicator').classList.add('active');
+    
+    // 次のステップを表示
+    document.getElementById('step2').style.display = 'none';
     document.getElementById('step3').style.display = 'block';
-    document.getElementById('step3').scrollIntoView({ behavior: 'smooth' });
+    window.scrollTo(0, 0);
     
     // カレンダーを初期化
     initCalendar();
@@ -204,13 +240,11 @@ function initCalendar() {
     const calendarEl = document.getElementById('calendar');
     if (!calendarEl) return;
     
-    // 簡易カレンダーの実装
     const today = new Date();
     const year = today.getFullYear();
     const month = today.getMonth();
     
-    // カレンダーHTMLを生成
-    let calendarHtml = '<h3>' + year + '年' + (month + 1) + '月</h3>';
+    let calendarHtml = `<h3>${year}年${month + 1}月</h3>`;
     calendarHtml += '<div class="calendar-grid">';
     
     // 曜日ヘッダー
@@ -232,13 +266,14 @@ function initCalendar() {
     // 日付を表示
     for (let day = 1; day <= lastDay.getDate(); day++) {
         const date = new Date(year, month, day);
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const isToday = date.toDateString() === today.toDateString();
-        const isPast = date < today;
+        const isPast = date < today && !isToday;
         
-        if (isPast && !isToday) {
+        if (isPast) {
             calendarHtml += `<div class="calendar-day disabled">${day}</div>`;
         } else {
-            calendarHtml += `<div class="calendar-day available" onclick="selectDate('${date.toISOString().split('T')[0]}')">${day}</div>`;
+            calendarHtml += `<div class="calendar-day available" onclick="selectDate('${dateStr}', ${day})">${day}</div>`;
         }
     }
     
@@ -247,22 +282,19 @@ function initCalendar() {
 }
 
 // 日付選択
-function selectDate(date) {
-    console.log('日付選択:', date);
+function selectDate(dateStr, day) {
+    console.log('日付選択:', dateStr);
     
-    sessionStorage.setItem('selectedDate', date);
+    sessionStorage.setItem('selectedDate', dateStr);
     
     // 選択状態を表示
-    document.querySelectorAll('.calendar-day').forEach(day => {
-        day.classList.remove('selected');
+    document.querySelectorAll('.calendar-day').forEach(dayEl => {
+        dayEl.classList.remove('selected');
     });
     event.target.classList.add('selected');
     
     // 時間選択を表示
-    document.getElementById('step4').style.display = 'block';
-    document.getElementById('step4').scrollIntoView({ behavior: 'smooth' });
-    
-    // 時間スロットを生成
+    document.getElementById('time-selection').style.display = 'block';
     generateTimeSlots();
 }
 
@@ -274,7 +306,9 @@ function generateTimeSlots() {
     const slots = [];
     for (let hour = 10; hour <= 18; hour++) {
         slots.push(`${hour}:00`);
-        slots.push(`${hour}:30`);
+        if (hour < 18) {
+            slots.push(`${hour}:30`);
+        }
     }
     
     timeSlotsEl.innerHTML = slots.map(time => `
@@ -294,6 +328,9 @@ function selectTime(time) {
     });
     event.target.classList.add('selected');
     
+    // ステップインジケーターを更新
+    document.getElementById('step-4-indicator').classList.add('active');
+    
     // 確認画面を表示
     showConfirmation();
 }
@@ -305,22 +342,16 @@ function showConfirmation() {
     const date = sessionStorage.getItem('selectedDate');
     const time = sessionStorage.getItem('selectedTime');
     
-    const confirmationEl = document.getElementById('confirmation');
-    if (!confirmationEl) return;
+    // 確認画面の値を設定
+    document.getElementById('confirm-menu').textContent = menu.name;
+    document.getElementById('confirm-staff').textContent = staff.name;
+    document.getElementById('confirm-datetime').textContent = `${date} ${time}`;
+    document.getElementById('confirm-price').textContent = `¥${Number(menu.price).toLocaleString()}`;
     
-    confirmationEl.innerHTML = `
-        <h3>予約内容の確認</h3>
-        <div class="confirmation-details">
-            <p><strong>メニュー:</strong> ${menu.name}</p>
-            <p><strong>スタッフ:</strong> ${staff.name}</p>
-            <p><strong>日付:</strong> ${date}</p>
-            <p><strong>時間:</strong> ${time}</p>
-        </div>
-        <button onclick="submitReservation()" class="submit-btn">この内容で予約する</button>
-    `;
-    
-    confirmationEl.style.display = 'block';
-    confirmationEl.scrollIntoView({ behavior: 'smooth' });
+    // 確認画面を表示
+    document.getElementById('step3').style.display = 'none';
+    document.getElementById('step4').style.display = 'block';
+    window.scrollTo(0, 0);
 }
 
 // 予約送信
@@ -338,13 +369,15 @@ async function submitReservation() {
         const profile = await liff.getProfile();
         
         const reservationData = {
-            customerId: profile.userId,
-            customerName: profile.displayName,
-            menuId: menu.id,
-            staffId: staff.id,
-            date: date,
-            time: time
+            line_user_id: profile.userId,
+            customer_name: profile.displayName,
+            menu_id: menu.id,
+            staff_id: staff.id,
+            reservation_date: `${date} ${time}:00`,
+            status: 'confirmed'
         };
+        
+        console.log('予約データ:', reservationData);
         
         const response = await fetch('/api/reservations', {
             method: 'POST',
@@ -362,14 +395,12 @@ async function submitReservation() {
         const result = await response.json();
         console.log('予約完了:', result);
         
-        // 成功メッセージ
-        alert('予約が完了しました！');
+        // 完了画面を表示
+        document.getElementById('step4').style.display = 'none';
+        document.getElementById('step-complete').style.display = 'block';
         
         // セッションストレージをクリア
         sessionStorage.clear();
-        
-        // ホームに戻る
-        window.location.href = 'index.html';
         
     } catch (error) {
         console.error('予約送信エラー:', error);
