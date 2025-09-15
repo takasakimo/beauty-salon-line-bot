@@ -13,55 +13,48 @@ let reservationData = {
 // 現在のステップ
 let currentStep = 1;
 
-// LIFF初期化を待つ
-function waitForLiff() {
-    return new Promise((resolve) => {
-        const checkLiff = setInterval(() => {
-            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-                clearInterval(checkLiff);
-                resolve();
-            }
-        }, 100);
-        
-        // 10秒でタイムアウト
-        setTimeout(() => {
-            clearInterval(checkLiff);
-            resolve();
-        }, 10000);
-    });
-}
-
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('予約ページ初期化開始');
+    
     try {
-        // LIFF初期化を待つ
-        await waitForLiff();
-        
-        // userProfileが設定されるまで待つ
-        let waitCount = 0;
-        while ((!window.userProfile || !window.userProfile.userId) && waitCount < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            waitCount++;
-        }
-        
-        if (!window.userProfile || !window.userProfile.userId) {
-            console.error('ユーザー情報が取得できませんでした');
-            alert('ログイン情報が取得できませんでした。\nホーム画面から再度お試しください。');
+        // テナント情報の確認
+        if (!window.currentTenant) {
+            console.error('テナント情報が見つかりません');
+            alert('店舗情報が見つかりません。\nホーム画面から再度アクセスしてください。');
             window.location.href = './index.html';
             return;
         }
         
-        console.log('User Profile in reservation:', window.userProfile);
+        // サロン名を表示
+        document.getElementById('salon-name').textContent = window.currentTenant.salon_name;
         
-        // コンテンツを表示
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('main-content').style.display = 'block';
+        // LIFF初期化を待つ
+        if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+            console.log('LIFF初期化済み、メニュー読み込み開始');
+            await loadMenus();
+        } else {
+            console.log('LIFF初期化待ち...');
+            // LIFF初期化完了を待つ
+            const maxWait = 50; // 5秒
+            let waitCount = 0;
+            
+            const checkLiff = setInterval(async () => {
+                waitCount++;
+                if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+                    clearInterval(checkLiff);
+                    console.log('LIFF初期化完了、メニュー読み込み開始');
+                    await loadMenus();
+                } else if (waitCount >= maxWait) {
+                    clearInterval(checkLiff);
+                    console.log('LIFF初期化タイムアウト、メニュー読み込み続行');
+                    await loadMenus();
+                }
+            }, 100);
+        }
         
-        // メニュー一覧を読み込み
-        await loadMenus();
-        
-        // 日付選択の最小値・最大値を設定
-        setDateLimits();
+        // イベントリスナーを設定
+        setupEventListeners();
         
     } catch (error) {
         console.error('初期化エラー:', error);
@@ -69,25 +62,60 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 });
 
+// イベントリスナーを設定
+function setupEventListeners() {
+    // ステップ遷移ボタン
+    document.getElementById('next-to-step2').addEventListener('click', () => {
+        goToStep(2);
+        loadStaff();
+    });
+    
+    document.getElementById('back-to-step1').addEventListener('click', () => {
+        goToStep(1);
+    });
+    
+    document.getElementById('next-to-step3').addEventListener('click', () => {
+        goToStep(3);
+        loadAvailableDates();
+    });
+    
+    document.getElementById('back-to-step2').addEventListener('click', () => {
+        goToStep(2);
+    });
+    
+    document.getElementById('next-to-step4').addEventListener('click', () => {
+        goToStep(4);
+        showConfirmation();
+    });
+    
+    document.getElementById('back-to-step3').addEventListener('click', () => {
+        goToStep(3);
+    });
+    
+    document.getElementById('confirm-reservation').addEventListener('click', confirmReservation);
+}
+
 // メニュー一覧を読み込み
 async function loadMenus() {
+    console.log('メニュー読み込み開始');
+    const menuList = document.getElementById('menu-list');
+    
     try {
-        const response = await fetch('/api/menus', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        const response = await apiCall('/api/menus', 'GET');
         
-        if (!response.ok) {
-            throw new Error('メニューの取得に失敗しました');
+        if (!response || !Array.isArray(response)) {
+            throw new Error('メニューデータが無効です');
         }
         
-        const menus = await response.json();
-        const menuList = document.getElementById('menu-list');
+        console.log('メニュー取得成功:', response);
         menuList.innerHTML = '';
         
-        menus.forEach(menu => {
+        if (response.length === 0) {
+            menuList.innerHTML = '<div class="no-data">メニューが登録されていません</div>';
+            return;
+        }
+        
+        response.forEach(menu => {
             const menuCard = document.createElement('div');
             menuCard.className = 'menu-card';
             menuCard.innerHTML = `
@@ -96,18 +124,21 @@ async function loadMenus() {
                     <span class="menu-duration">${menu.duration}分</span>
                     <span class="menu-price">¥${menu.price.toLocaleString()}</span>
                 </div>
+                <div class="menu-description">${menu.description || ''}</div>
             `;
-            menuCard.onclick = () => selectMenu(menu);
+            menuCard.addEventListener('click', () => selectMenu(menu));
             menuList.appendChild(menuCard);
         });
     } catch (error) {
         console.error('メニュー読み込みエラー:', error);
-        alert('メニューの読み込みに失敗しました。');
+        menuList.innerHTML = '<div class="error">メニューの読み込みに失敗しました</div>';
     }
 }
 
 // メニューを選択
 function selectMenu(menu) {
+    console.log('メニュー選択:', menu);
+    
     // 選択状態をクリア
     document.querySelectorAll('.menu-card').forEach(card => {
         card.classList.remove('selected');
@@ -122,60 +153,53 @@ function selectMenu(menu) {
     reservationData.menu_price = menu.price;
     reservationData.menu_duration = menu.duration;
     
-    // 次のステップへ
-    setTimeout(() => {
-        goToStep(2);
-        loadStaff();
-    }, 300);
+    // 次へボタンを表示
+    document.getElementById('next-to-step2').style.display = 'block';
 }
 
 // スタッフ一覧を読み込み
 async function loadStaff() {
+    console.log('スタッフ読み込み開始');
+    const staffList = document.getElementById('staff-list');
+    
     try {
-        const response = await fetch('/api/staff', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        const response = await apiCall('/api/staff', 'GET');
         
-        if (!response.ok) {
-            throw new Error('スタッフ情報の取得に失敗しました');
+        if (!response || !Array.isArray(response)) {
+            throw new Error('スタッフデータが無効です');
         }
         
-        const staffList = await response.json();
-        const staffContainer = document.getElementById('staff-list');
-        staffContainer.innerHTML = '';
+        console.log('スタッフ取得成功:', response);
+        staffList.innerHTML = '';
         
-        staffList.forEach(staff => {
+        if (response.length === 0) {
+            staffList.innerHTML = '<div class="no-data">スタッフが登録されていません</div>';
+            return;
+        }
+        
+        response.forEach(staff => {
             const staffCard = document.createElement('div');
             staffCard.className = 'staff-card';
             staffCard.innerHTML = `
                 <div class="staff-avatar">${staff.name.charAt(0)}</div>
-                <div class="staff-name">${staff.name}</div>
-                <div class="staff-role">${getStaffRole(staff.staff_id)}</div>
+                <div class="staff-info">
+                    <div class="staff-name">${staff.name}</div>
+                    <div class="staff-role">${staff.position || 'スタッフ'}</div>
+                </div>
             `;
-            staffCard.onclick = () => selectStaff(staff);
-            staffContainer.appendChild(staffCard);
+            staffCard.addEventListener('click', () => selectStaff(staff));
+            staffList.appendChild(staffCard);
         });
     } catch (error) {
         console.error('スタッフ読み込みエラー:', error);
-        alert('スタッフ情報の読み込みに失敗しました。');
+        staffList.innerHTML = '<div class="error">スタッフ情報の読み込みに失敗しました</div>';
     }
-}
-
-// スタッフの役職を取得
-function getStaffRole(staffId) {
-    const roles = {
-        1: 'チーフスタイリスト',
-        2: 'スタイリスト',
-        3: 'アシスタント'
-    };
-    return roles[staffId] || 'スタッフ';
 }
 
 // スタッフを選択
 function selectStaff(staff) {
+    console.log('スタッフ選択:', staff);
+    
     // 選択状態をクリア
     document.querySelectorAll('.staff-card').forEach(card => {
         card.classList.remove('selected');
@@ -188,169 +212,190 @@ function selectStaff(staff) {
     reservationData.staff_id = staff.staff_id;
     reservationData.staff_name = staff.name;
     
-    // 次のステップへ
-    setTimeout(() => {
-        goToStep(3);
-    }, 300);
+    // 次へボタンを表示
+    document.getElementById('next-to-step3').style.display = 'block';
 }
 
-// 日付選択の制限を設定
-function setDateLimits() {
-    const dateInput = document.getElementById('reservation-date');
-    const today = new Date();
-    const maxDate = new Date();
-    maxDate.setMonth(maxDate.getMonth() + 2); // 2ヶ月先まで
+// 利用可能な日付を読み込み
+async function loadAvailableDates() {
+    console.log('日付読み込み開始');
+    const dateList = document.getElementById('date-list');
     
-    // 明日から予約可能にする
-    today.setDate(today.getDate() + 1);
-    
-    dateInput.min = formatDate(today);
-    dateInput.max = formatDate(maxDate);
-    
-    // 日付が変更されたら時間スロットを読み込み
-    dateInput.addEventListener('change', loadTimeSlots);
+    try {
+        // 今日から30日先まで生成
+        const dates = [];
+        const today = new Date();
+        
+        for (let i = 1; i <= 30; i++) {
+            const date = new Date(today);
+            date.setDate(today.getDate() + i);
+            
+            // 日曜日は除外（美容室の一般的な定休日）
+            if (date.getDay() !== 0) {
+                dates.push(date);
+            }
+        }
+        
+        dateList.innerHTML = '';
+        
+        dates.forEach(date => {
+            const dateCard = document.createElement('div');
+            dateCard.className = 'date-card';
+            
+            const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            
+            dateCard.innerHTML = `
+                <div class="date-month">${month}月</div>
+                <div class="date-day">${day}</div>
+                <div class="date-dayofweek">${dayOfWeek}</div>
+            `;
+            
+            dateCard.addEventListener('click', () => selectDate(date));
+            dateList.appendChild(dateCard);
+        });
+        
+    } catch (error) {
+        console.error('日付読み込みエラー:', error);
+        dateList.innerHTML = '<div class="error">日付の読み込みに失敗しました</div>';
+    }
 }
 
-// 日付フォーマット（YYYY-MM-DD）
-function formatDate(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+// 日付を選択
+function selectDate(date) {
+    console.log('日付選択:', date);
+    
+    // 選択状態をクリア
+    document.querySelectorAll('.date-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    // 選択したカードにクラスを追加
+    event.currentTarget.classList.add('selected');
+    
+    // 予約データを更新
+    reservationData.reservation_date = formatDate(date);
+    
+    // 時間選択を表示
+    loadTimeSlots(date);
 }
 
 // 時間スロットを読み込み
-async function loadTimeSlots() {
-    const selectedDate = document.getElementById('reservation-date').value;
-    if (!selectedDate) return;
-    
-    reservationData.reservation_date = selectedDate;
+async function loadTimeSlots(selectedDate) {
+    console.log('時間スロット読み込み開始');
+    const timeSelection = document.querySelector('.time-selection');
+    const timeList = document.getElementById('time-list');
     
     try {
-        // 空き時間を取得
-        const response = await fetch(`/api/reservations/available-slots?date=${selectedDate}&menu_id=${reservationData.menu_id}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error('空き時間の取得に失敗しました');
-        }
-        
-        const availableSlots = await response.json();
-        const timeSlotsContainer = document.getElementById('time-slots');
-        timeSlotsContainer.innerHTML = '';
-        
         // 営業時間（10:00-19:00）のスロットを生成
-        const allSlots = [];
+        const timeSlots = [];
         for (let hour = 10; hour < 19; hour++) {
-            allSlots.push(`${hour}:00`);
-            allSlots.push(`${hour}:30`);
+            timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
+            timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
         }
         
-        allSlots.forEach(time => {
-            const slotButton = document.createElement('button');
-            slotButton.className = 'time-slot';
-            slotButton.textContent = time;
-            
-            if (availableSlots.includes(time)) {
-                slotButton.onclick = () => selectTime(time);
-            } else {
-                slotButton.classList.add('disabled');
-                slotButton.disabled = true;
-            }
-            
-            timeSlotsContainer.appendChild(slotButton);
+        timeList.innerHTML = '';
+        
+        timeSlots.forEach(time => {
+            const timeCard = document.createElement('div');
+            timeCard.className = 'time-card';
+            timeCard.textContent = time;
+            timeCard.addEventListener('click', () => selectTime(time));
+            timeList.appendChild(timeCard);
         });
         
         // 時間選択エリアを表示
-        document.getElementById('time-selector').style.display = 'block';
+        timeSelection.style.display = 'block';
+        
     } catch (error) {
-        console.error('空き時間取得エラー:', error);
-        alert('空き時間の取得に失敗しました。');
+        console.error('時間スロット読み込みエラー:', error);
+        timeList.innerHTML = '<div class="error">時間の読み込みに失敗しました</div>';
     }
 }
 
 // 時間を選択
 function selectTime(time) {
+    console.log('時間選択:', time);
+    
     // 選択状態をクリア
-    document.querySelectorAll('.time-slot').forEach(slot => {
-        slot.classList.remove('selected');
+    document.querySelectorAll('.time-card').forEach(card => {
+        card.classList.remove('selected');
     });
     
-    // 選択したスロットにクラスを追加
-    event.target.classList.add('selected');
+    // 選択したカードにクラスを追加
+    event.currentTarget.classList.add('selected');
     
     // 予約データを更新
     reservationData.reservation_time = time;
     
-    // 次のステップへ
-    setTimeout(() => {
-        goToStep(4);
-        showConfirmation();
-    }, 300);
+    // 次へボタンを表示
+    document.getElementById('next-to-step4').style.display = 'block';
 }
 
 // 確認画面を表示
 function showConfirmation() {
+    console.log('確認画面表示');
+    
     const date = new Date(reservationData.reservation_date);
     const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
     const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
     
-    document.getElementById('confirm-menu').textContent = reservationData.menu_name;
-    document.getElementById('confirm-price').textContent = `¥${reservationData.menu_price.toLocaleString()}`;
-    document.getElementById('confirm-duration').textContent = `${reservationData.menu_duration}分`;
-    document.getElementById('confirm-staff').textContent = reservationData.staff_name;
-    document.getElementById('confirm-datetime').textContent = `${dateString} ${reservationData.reservation_time}`;
+    document.getElementById('summary-menu').textContent = reservationData.menu_name;
+    document.getElementById('summary-staff').textContent = reservationData.staff_name;
+    document.getElementById('summary-datetime').textContent = `${dateString} ${reservationData.reservation_time}`;
+    document.getElementById('summary-price').textContent = `¥${reservationData.menu_price.toLocaleString()}`;
 }
 
 // 予約を確定
 async function confirmReservation() {
-    const confirmButton = event.target;
+    console.log('予約確定開始');
+    const confirmButton = document.getElementById('confirm-reservation');
     confirmButton.disabled = true;
     confirmButton.textContent = '予約処理中...';
     
     try {
+        // ユーザー情報を確認
+        let userId = null;
+        if (window.userProfile && window.userProfile.userId) {
+            userId = window.userProfile.userId;
+        } else if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
+            const profile = await liff.getProfile();
+            userId = profile.userId;
+        }
+        
+        if (!userId) {
+            throw new Error('ユーザー情報が取得できません');
+        }
+        
         // 日時を結合
         const [hours, minutes] = reservationData.reservation_time.split(':');
         const reservationDateTime = new Date(reservationData.reservation_date);
         reservationDateTime.setHours(parseInt(hours), parseInt(minutes), 0);
         
         // 予約を作成
-        const response = await fetch('/api/reservations', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${window.userProfile.userId}`
-            },
-            body: JSON.stringify({
-                customer_id: window.userProfile.userId,
-                staff_id: reservationData.staff_id,
-                menu_id: reservationData.menu_id,
-                reservation_date: reservationDateTime.toISOString()
-            })
-        });
+        const reservationRequest = {
+            customer_id: userId,
+            staff_id: reservationData.staff_id,
+            menu_id: reservationData.menu_id,
+            reservation_date: reservationDateTime.toISOString(),
+            notes: ''
+        };
         
-        if (!response.ok) {
-            throw new Error('予約の作成に失敗しました');
-        }
+        console.log('予約リクエスト:', reservationRequest);
         
-        const result = await response.json();
+        const response = await apiCall('/api/reservations', 'POST', reservationRequest);
         
-        if (result.success) {
-            // 完了画面を表示
+        if (response && response.success) {
+            console.log('予約作成成功');
             showCompletion();
-            
-            // LINE通知を送信（オプション）
-            sendLineNotification();
         } else {
-            throw new Error(result.error || '予約の作成に失敗しました');
+            throw new Error(response.error || '予約の作成に失敗しました');
         }
+        
     } catch (error) {
         console.error('予約確定エラー:', error);
-        alert('予約の確定に失敗しました。もう一度お試しください。\n' + error.message);
+        alert('予約の確定に失敗しました。\n' + error.message);
         confirmButton.disabled = false;
         confirmButton.textContent = '予約を確定する';
     }
@@ -358,62 +403,27 @@ async function confirmReservation() {
 
 // 完了画面を表示
 function showCompletion() {
+    console.log('完了画面表示');
+    
     // すべてのステップを非表示
-    document.querySelectorAll('.reservation-step').forEach(step => {
-        step.style.display = 'none';
+    document.querySelectorAll('.step-content').forEach(step => {
+        step.classList.remove('active');
     });
     
     // 完了画面を表示
-    document.getElementById('completion').style.display = 'block';
-    
-    // 予約詳細を表示
-    const date = new Date(reservationData.reservation_date);
-    const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
-    const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
-    
-    document.getElementById('completion-details').innerHTML = `
-        <div class="confirmation-item">
-            <span class="confirmation-label">メニュー：</span>
-            <span>${reservationData.menu_name}</span>
-        </div>
-        <div class="confirmation-item">
-            <span class="confirmation-label">スタッフ：</span>
-            <span>${reservationData.staff_name}</span>
-        </div>
-        <div class="confirmation-item">
-            <span class="confirmation-label">日時：</span>
-            <span>${dateString} ${reservationData.reservation_time}</span>
-        </div>
-    `;
+    document.getElementById('completion').classList.add('active');
     
     // ステップインジケーターを非表示
     document.querySelector('.step-indicator').style.display = 'none';
 }
 
-// LINE通知を送信（オプション）
-async function sendLineNotification() {
-    // LIFFのsendMessagesを使用して通知
-    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
-        try {
-            const date = new Date(reservationData.reservation_date);
-            const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
-            const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
-            
-            await liff.sendMessages([{
-                type: 'text',
-                text: `✅ 予約が完了しました！\n\n【予約内容】\nメニュー: ${reservationData.menu_name}\nスタッフ: ${reservationData.staff_name}\n日時: ${dateString} ${reservationData.reservation_time}\n\nご来店をお待ちしております。`
-            }]);
-        } catch (error) {
-            console.error('LINE通知エラー:', error);
-        }
-    }
-}
-
 // ステップ遷移
 function goToStep(stepNumber) {
+    console.log('ステップ遷移:', stepNumber);
+    
     // すべてのステップを非表示
-    document.querySelectorAll('.reservation-step').forEach(step => {
-        step.style.display = 'none';
+    document.querySelectorAll('.step-content').forEach(step => {
+        step.classList.remove('active');
     });
     
     // ステップインジケーターを更新
@@ -426,8 +436,28 @@ function goToStep(stepNumber) {
     });
     
     // 対象のステップを表示
-    const stepIds = ['', 'menu-selection', 'staff-selection', 'datetime-selection', 'confirmation'];
-    document.getElementById(stepIds[stepNumber]).style.display = 'block';
+    const stepIds = ['', 'step1', 'step2', 'step3', 'step4'];
+    const targetStep = document.getElementById(stepIds[stepNumber]);
+    if (targetStep) {
+        targetStep.classList.add('active');
+    }
     
     currentStep = stepNumber;
+    
+    // 次へボタンの状態をリセット
+    const nextButtons = ['next-to-step2', 'next-to-step3', 'next-to-step4'];
+    nextButtons.forEach(buttonId => {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            button.style.display = 'none';
+        }
+    });
+}
+
+// 日付フォーマット（YYYY-MM-DD）
+function formatDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
