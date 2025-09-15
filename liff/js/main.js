@@ -1,25 +1,52 @@
-// ページナビゲーション
+// ページナビゲーション（テナント情報を引き継ぎ）
 function navigateTo(page) {
+    // 現在のテナント情報を取得
+    let tenantParam = '';
+    if (window.currentTenant && window.currentTenant.tenant_code) {
+        tenantParam = `?tenant=${window.currentTenant.tenant_code}`;
+    }
+    
+    console.log('ナビゲーション:', page, 'テナント:', tenantParam);
+    
     switch(page) {
         case 'reservation':
-            window.location.href = '/liff/reservation.html';
+            window.location.href = `/liff/reservation.html${tenantParam}`;
             break;
         case 'mypage':
-            window.location.href = '/liff/mypage.html';
+            window.location.href = `/liff/mypage.html${tenantParam}`;
             break;
         case 'menu':
-            window.location.href = '/liff/menu.html';
+            window.location.href = `/liff/menu.html${tenantParam}`;
             break;
         case 'history':
-            window.location.href = '/liff/history.html';
+            window.location.href = `/liff/history.html${tenantParam}`;
             break;
         default:
-            window.location.href = '/liff/index.html';
+            window.location.href = `/liff/index.html${tenantParam}`;
     }
 }
 
-// 登録フォームの処理
+// ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('main.js初期化開始');
+    
+    // テナント情報が設定されるまで待つ
+    const waitForTenant = () => {
+        if (window.currentTenant) {
+            console.log('テナント情報確認:', window.currentTenant);
+            initializePage();
+        } else {
+            console.log('テナント情報待ち...');
+            setTimeout(waitForTenant, 100);
+        }
+    };
+    
+    waitForTenant();
+});
+
+// ページ初期化
+function initializePage() {
+    // 登録フォームの処理
     const registrationForm = document.getElementById('registration-form');
     
     if (registrationForm) {
@@ -44,14 +71,14 @@ document.addEventListener('DOMContentLoaded', function() {
             
             try {
                 // API呼び出し
-                const result = await CustomerAPI.register(customerData);
+                const result = await apiCall('/api/customers/register', 'POST', customerData);
                 
-                if (result.success) {
+                if (result && result.success) {
                     // 登録成功
                     alert('登録が完了しました！');
-                    isRegistered = true;
                     
                     // ユーザーデータを保存
+                    window.userProfile = result.data;
                     localStorage.setItem('userData', JSON.stringify(result.data));
                     
                     // ホーム画面へ遷移
@@ -70,7 +97,81 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-});
+}
+
+// ホーム画面を表示
+function showHomeScreen() {
+    console.log('ホーム画面表示');
+    
+    // 画面切り替え
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('registration-screen').style.display = 'none';
+    document.getElementById('home-screen').style.display = 'block';
+    document.getElementById('main-content').style.display = 'block';
+    
+    // ユーザー名を表示
+    if (window.userProfile && window.userProfile.real_name) {
+        document.querySelector('.user-name').textContent = window.userProfile.real_name;
+    }
+    
+    // 現在の予約を読み込み
+    loadCurrentReservation();
+}
+
+// 登録画面を表示
+function showRegistrationScreen() {
+    console.log('登録画面表示');
+    
+    // 画面切り替え
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('home-screen').style.display = 'none';
+    document.getElementById('registration-screen').style.display = 'block';
+    document.getElementById('main-content').style.display = 'block';
+}
+
+// 現在の予約を読み込み
+async function loadCurrentReservation() {
+    try {
+        if (!window.userProfile || !window.userProfile.customer_id) {
+            return;
+        }
+        
+        const response = await apiCall('/api/reservations/current', 'GET');
+        
+        if (response && response.length > 0) {
+            const reservation = response[0];
+            displayCurrentReservation(reservation);
+        }
+    } catch (error) {
+        console.error('現在の予約取得エラー:', error);
+    }
+}
+
+// 現在の予約を表示
+function displayCurrentReservation(reservation) {
+    const currentReservationDiv = document.getElementById('current-reservation');
+    
+    if (reservation) {
+        const reservationDate = new Date(reservation.reservation_date);
+        const dateString = reservationDate.toLocaleDateString('ja-JP', {
+            month: 'long',
+            day: 'numeric',
+            weekday: 'short'
+        });
+        const timeString = reservationDate.toLocaleTimeString('ja-JP', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        currentReservationDiv.querySelector('.reservation-date').textContent = `${dateString} ${timeString}`;
+        currentReservationDiv.querySelector('.reservation-menu').textContent = reservation.menu_name || 'メニュー情報なし';
+        currentReservationDiv.querySelector('.reservation-staff').textContent = reservation.staff_name || 'スタッフ情報なし';
+        
+        currentReservationDiv.style.display = 'block';
+    } else {
+        currentReservationDiv.style.display = 'none';
+    }
+}
 
 // 登録データのバリデーション
 function validateRegistrationData(data) {
@@ -103,12 +204,19 @@ window.addEventListener('unhandledrejection', function(e) {
 // LIFFエラー時の処理
 if (typeof liff === 'undefined') {
     console.error('LIFF SDKが読み込まれていません');
-    document.getElementById('loading').innerHTML = `
-        <p style="color: red;">エラー: アプリを読み込めませんでした</p>
-        <p>LINEアプリから開いてください</p>
-    `;
+    const loadingDiv = document.getElementById('loading');
+    if (loadingDiv) {
+        loadingDiv.innerHTML = `
+            <p style="color: red;">エラー: アプリを読み込めませんでした</p>
+            <p>LINEアプリから開いてください</p>
+        `;
+    }
 }
 
 // デバッグ用: コンソールにLIFF情報を表示
-console.log('LIFF App Started');
-console.log('LIFF ID:', LIFF_ID);
+console.log('main.js読み込み完了');
+
+// グローバル関数として公開
+window.navigateTo = navigateTo;
+window.showHomeScreen = showHomeScreen;
+window.showRegistrationScreen = showRegistrationScreen;
