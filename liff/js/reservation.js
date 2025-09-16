@@ -372,7 +372,7 @@ function showConfirmation() {
     window.scrollTo(0, 0);
 }
 
-// 予約送信（修正版）
+// 予約送信（修正版 - タイムゾーン対応）
 async function submitReservation() {
     console.log('予約送信開始');
     
@@ -412,16 +412,23 @@ async function submitReservation() {
             }
         }
         
+        // JST時間をUTC時間に変換（-9時間）
+        const jstDateTime = new Date(`${date}T${time}:00`);
+        const utcDateTime = new Date(jstDateTime.getTime() - (9 * 60 * 60 * 1000));
+        const utcDateTimeStr = utcDateTime.toISOString().slice(0, 19).replace('T', ' ');
+        
         const reservationData = {
             line_user_id: lineUserId,
             customer_name: customerName,
             menu_id: menu.id,
             staff_id: staff.id,
-            reservation_date: `${date} ${time}:00`,
+            reservation_date: utcDateTimeStr,  // UTC時間で送信
             status: 'confirmed'
         };
         
         console.log('送信する予約データ:', reservationData);
+        console.log('JST時間:', `${date} ${time}:00`);
+        console.log('UTC時間:', utcDateTimeStr);
         
         const response = await fetch('/api/reservations', {
             method: 'POST',

@@ -95,13 +95,18 @@ async function loadReservations() {
         allReservations = await response.json();
         console.log('取得した予約:', allReservations);
         
-        // 現在時刻で分類
+        // 現在時刻で分類（JSTで比較）
         const now = new Date();
         upcomingReservations = [];
         pastReservations = [];
         
         allReservations.forEach(reservation => {
+            // UTC時間をJSTに変換して比較
             const reservationDate = new Date(reservation.reservation_date);
+            if (!reservation.reservation_date.includes('+')) {
+                reservationDate.setHours(reservationDate.getHours() + 9);
+            }
+            
             if (reservationDate > now && reservation.status === 'confirmed') {
                 upcomingReservations.push(reservation);
             } else {
@@ -174,7 +179,13 @@ function createReservationCard(reservation, isPast) {
     const card = document.createElement('div');
     card.className = `reservation-card ${isPast ? 'past' : ''} ${reservation.status === 'cancelled' ? 'cancelled' : ''}`;
     
+    // UTC時間をJSTに変換（+9時間）
     const date = new Date(reservation.reservation_date);
+    // PostgreSQLからの日時がUTCの場合、JSTに変換
+    if (!reservation.reservation_date.includes('+')) {
+        date.setHours(date.getHours() + 9);
+    }
+    
     const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
     const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
     const timeString = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
