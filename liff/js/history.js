@@ -340,7 +340,12 @@ function openCancelModal(reservationId) {
     
     if (!reservation) return;
     
+    // UTC時間をJSTに変換
     const date = new Date(reservation.reservation_date);
+    if (!reservation.reservation_date.includes('+')) {
+        date.setHours(date.getHours() + 9);
+    }
+    
     const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
     const dateString = `${date.getMonth() + 1}月${date.getDate()}日(${dayOfWeek})`;
     const timeString = `${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;

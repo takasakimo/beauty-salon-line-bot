@@ -472,6 +472,18 @@ app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
     try {
         const { id } = req.params;
         
+        // まず予約が存在するか確認
+        const checkQuery = `
+            SELECT * FROM reservations 
+            WHERE reservation_id = $1 AND tenant_id = $2
+        `;
+        const checkResult = await pgClient.query(checkQuery, [id, req.tenantId]);
+        
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Reservation not found' });
+        }
+        
+        // キャンセル処理（論理削除）
         const updateQuery = `
             UPDATE reservations 
             SET status = 'cancelled', cancelled_at = NOW()
@@ -480,14 +492,19 @@ app.delete('/api/reservations/:id', getTenantId, async (req, res) => {
         `;
         const result = await pgClient.query(updateQuery, [id, req.tenantId]);
         
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Reservation not found' });
-        }
+        console.log('予約キャンセル成功:', id);
         
-        res.json({ success: true, message: 'Reservation cancelled' });
+        res.json({ 
+            success: true, 
+            message: 'Reservation cancelled',
+            data: result.rows[0]
+        });
     } catch (error) {
         console.error('Error cancelling reservation:', error);
-        res.status(500).json({ error: 'Cancellation failed' });
+        res.status(500).json({ 
+            error: 'Cancellation failed',
+            details: error.message 
+        });
     }
 });
 
