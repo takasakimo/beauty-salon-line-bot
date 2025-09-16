@@ -1,3 +1,5 @@
+// history.js（完全版 - マルチテナント対応）
+
 // グローバル変数
 let allReservations = [];
 let upcomingReservations = [];
@@ -5,45 +7,48 @@ let pastReservations = [];
 let currentTab = 'upcoming';
 let cancelTargetId = null;
 
-// LIFF初期化を待つ
-function waitForLiff() {
-    return new Promise((resolve) => {
-        const checkLiff = setInterval(() => {
-            if (typeof liff !== 'undefined' && liff.isLoggedIn && liff.isLoggedIn()) {
-                clearInterval(checkLiff);
-                resolve();
-            }
-        }, 100);
-        
-        // 10秒でタイムアウト
-        setTimeout(() => {
-            clearInterval(checkLiff);
-            resolve();
-        }, 10000);
-    });
-}
-
 // ページ読み込み時の初期化
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('予約履歴ページ初期化開始');
+    
     try {
-        // LIFF初期化を待つ
-        await waitForLiff();
+        // テナント管理の初期化
+        const tenantInfo = TenantManager.initialize();
         
-        // userProfileが設定されるまで待つ
-        let waitCount = 0;
-        while ((!window.userProfile || !window.userProfile.userId) && waitCount < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            waitCount++;
-        }
-        
-        if (!window.userProfile || !window.userProfile.userId) {
-            console.error('ユーザー情報が取得できませんでした');
-            alert('ログイン情報が取得できませんでした。\nホーム画面から再度お試しください。');
+        if (!tenantInfo) {
+            console.error('テナント情報が取得できません');
+            alert('店舗情報が見つかりません。\nホーム画面から再度アクセスしてください。');
             window.location.href = './index.html';
             return;
         }
         
-        console.log('User Profile in history:', window.userProfile);
+        console.log('使用するテナント:', tenantInfo.code);
+        
+        // LIFF初期化
+        await liff.init({ liffId: '2007971454-kL9LXL2O' });
+        console.log('LIFF初期化完了');
+        
+        // ログイン状態確認
+        if (!liff.isLoggedIn()) {
+            console.log('未ログイン状態');
+            if (!liff.isInClient()) {
+                liff.login();
+                return;
+            }
+        }
+        
+        // プロフィール取得
+        let profile;
+        try {
+            profile = await liff.getProfile();
+            window.userProfile = profile;
+            console.log('ユーザープロフィール:', profile);
+        } catch (err) {
+            console.error('プロフィール取得エラー:', err);
+            alert('ユーザー情報の取得に失敗しました。');
+            window.location.href = './index.html';
+            return;
+        }
         
         // 予約履歴を読み込み
         await loadReservations();
@@ -55,25 +60,40 @@ document.addEventListener('DOMContentLoaded', async function() {
     } catch (error) {
         console.error('初期化エラー:', error);
         alert('ページの初期化に失敗しました。\n' + error.message);
+        window.location.href = './index.html';
     }
 });
 
 // 予約履歴を読み込み
 async function loadReservations() {
     try {
-        const response = await fetch(`/api/reservations/user/${window.userProfile.userId}`, {
+        const tenantCode = TenantManager.getTenantCode();
+        if (!tenantCode) {
+            throw new Error('テナントコードが取得できません');
+        }
+        
+        // customer_idとしてline_user_idを使用
+        const userId = window.userProfile.userId;
+        console.log('予約履歴取得 - ユーザーID:', userId);
+        
+        const response = await fetch(`/api/reservations/user/${userId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${window.userProfile.userId}`
+                'X-Tenant-Code': tenantCode
             }
         });
         
+        console.log('APIレスポンス:', response.status);
+        
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('APIエラー:', errorText);
             throw new Error('予約履歴の取得に失敗しました');
         }
         
         allReservations = await response.json();
+        console.log('取得した予約:', allReservations);
         
         // 現在時刻で分類
         const now = new Date();
@@ -103,7 +123,9 @@ async function loadReservations() {
         
     } catch (error) {
         console.error('予約履歴読み込みエラー:', error);
-        alert('予約履歴の読み込みに失敗しました。');
+        // エラーでも画面は表示（空の状態）
+        displayUpcomingReservations();
+        calculateStats();
     }
 }
 
@@ -167,6 +189,12 @@ function createReservationCard(reservation, isPast) {
         statusBadge = '<span class="status-badge confirmed">予約確定</span>';
     }
     
+    // 価格とメニュー名の安全な取得
+    const menuName = reservation.menu_name || 'メニュー情報なし';
+    const staffName = reservation.staff_name || 'スタッフ未定';
+    const price = reservation.price || 0;
+    const duration = reservation.duration || 60;
+    
     card.innerHTML = `
         ${statusBadge}
         <div class="reservation-date">${dateString}</div>
@@ -174,19 +202,19 @@ function createReservationCard(reservation, isPast) {
         <div class="reservation-details">
             <div class="detail-row">
                 <span class="detail-label">メニュー</span>
-                <span class="detail-value">${reservation.menu_name}</span>
+                <span class="detail-value">${menuName}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">担当</span>
-                <span class="detail-value">${reservation.staff_name}</span>
+                <span class="detail-value">${staffName}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">料金</span>
-                <span class="detail-value">¥${reservation.price.toLocaleString()}</span>
+                <span class="detail-value">¥${price.toLocaleString()}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">所要時間</span>
-                <span class="detail-value">${reservation.duration}分</span>
+                <span class="detail-value">${duration}分</span>
             </div>
         </div>
         ${createCardActions(reservation, isPast)}
@@ -272,7 +300,9 @@ function calculateStats() {
     // よく利用するメニュー
     const menuCounts = {};
     completedReservations.forEach(r => {
-        menuCounts[r.menu_name] = (menuCounts[r.menu_name] || 0) + 1;
+        if (r.menu_name) {
+            menuCounts[r.menu_name] = (menuCounts[r.menu_name] || 0) + 1;
+        }
     });
     const favoriteMenu = Object.keys(menuCounts).sort((a, b) => menuCounts[b] - menuCounts[a])[0];
     document.getElementById('favorite-menu').textContent = favoriteMenu || '-';
@@ -280,7 +310,9 @@ function calculateStats() {
     // 担当スタッフ
     const staffCounts = {};
     completedReservations.forEach(r => {
-        staffCounts[r.staff_name] = (staffCounts[r.staff_name] || 0) + 1;
+        if (r.staff_name) {
+            staffCounts[r.staff_name] = (staffCounts[r.staff_name] || 0) + 1;
+        }
     });
     const favoriteStaff = Object.keys(staffCounts).sort((a, b) => staffCounts[b] - staffCounts[a])[0];
     document.getElementById('favorite-staff').textContent = favoriteStaff || '-';
@@ -309,11 +341,11 @@ function openCancelModal(reservationId) {
         </div>
         <div class="detail-row">
             <span class="detail-label">メニュー</span>
-            <span class="detail-value">${reservation.menu_name}</span>
+            <span class="detail-value">${reservation.menu_name || 'メニュー情報なし'}</span>
         </div>
         <div class="detail-row">
             <span class="detail-label">担当</span>
-            <span class="detail-value">${reservation.staff_name}</span>
+            <span class="detail-value">${reservation.staff_name || 'スタッフ未定'}</span>
         </div>
     `;
     
@@ -335,11 +367,13 @@ async function confirmCancel() {
     confirmButton.textContent = 'キャンセル中...';
     
     try {
+        const tenantCode = TenantManager.getTenantCode();
+        
         const response = await fetch(`/api/reservations/${cancelTargetId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${window.userProfile.userId}`
+                'X-Tenant-Code': tenantCode
             }
         });
         
@@ -353,7 +387,7 @@ async function confirmCancel() {
         // リロード
         await loadReservations();
         
-        // LINE通知
+        // LINE通知（LINEアプリ内の場合）
         if (liff.isInClient && liff.isInClient()) {
             const reservation = upcomingReservations.find(r => r.reservation_id === cancelTargetId);
             if (reservation) {
@@ -363,7 +397,7 @@ async function confirmCancel() {
                 try {
                     await liff.sendMessages([{
                         type: 'text',
-                        text: `❌ 予約をキャンセルしました\n\n日時: ${dateString}\nメニュー: ${reservation.menu_name}`
+                        text: `❌ 予約をキャンセルしました\n\n日時: ${dateString}\nメニュー: ${reservation.menu_name || 'メニュー情報なし'}`
                     }]);
                 } catch (error) {
                     console.error('LINE通知エラー:', error);
@@ -387,9 +421,9 @@ function rebookReservation(reservationId) {
     // メニュー情報をセッションストレージに保存
     sessionStorage.setItem('rebookMenu', JSON.stringify({
         menu_id: reservation.menu_id,
-        menu_name: reservation.menu_name,
+        menu_name: reservation.menu_name || 'メニュー情報なし',
         staff_id: reservation.staff_id,
-        staff_name: reservation.staff_name
+        staff_name: reservation.staff_name || 'スタッフ未定'
     }));
     
     // 予約ページへ
@@ -403,3 +437,10 @@ document.addEventListener('click', function(event) {
         closeCancelModal();
     }
 });
+
+// グローバル関数として公開
+window.switchTab = switchTab;
+window.openCancelModal = openCancelModal;
+window.closeCancelModal = closeCancelModal;
+window.confirmCancel = confirmCancel;
+window.rebookReservation = rebookReservation;
