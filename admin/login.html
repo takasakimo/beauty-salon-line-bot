@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     
     <!-- CSSファイルがある場合 -->
-    <link rel="stylesheet" href="./css/login.css">
+    <link rel="stylesheet" href="/admin/css/login.css">
     
     <!-- インラインスタイル（CSSファイルがない場合のフォールバック） -->
     <style>
@@ -472,7 +472,7 @@
                     
                     // ダッシュボードへリダイレクト
                     setTimeout(() => {
-                        window.location.href = './dashboard.html';
+                        window.location.href = '/admin/dashboard';
                     }, 1000);
                 } else {
                     // エラーメッセージを表示
@@ -494,7 +494,7 @@
                     showMessage('ログイン成功！リダイレクト中...', 'success');
                     
                     setTimeout(() => {
-                        window.location.href = './dashboard.html';
+                        window.location.href = '/admin/dashboard';
                     }, 1000);
                 } else {
                     showMessage('ユーザー名またはパスワードが正しくありません', 'error');
@@ -563,7 +563,7 @@
         
         if (isLoggedIn) {
             // 既にログインしている場合はダッシュボードへ
-            window.location.href = './dashboard.html';
+            window.location.href = '/admin/dashboard';
         }
         
         // サーバーからテナント一覧を動的に取得（オプション）
