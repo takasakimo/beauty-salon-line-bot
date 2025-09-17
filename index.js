@@ -37,6 +37,43 @@ app.use('/', express.static(path.join(__dirname, 'liff')));
 // 管理画面用
 app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
+// 管理画面の静的ファイル提供
+app.use('/admin/css', express.static(path.join(__dirname, 'views/admin/css')));
+app.use('/admin/js', express.static(path.join(__dirname, 'views/admin/js')));
+
+// 管理画面のルーティング
+app.get('/admin', (req, res) => {
+    res.redirect('/admin/login');
+});
+
+app.get('/admin/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/login.html'));
+});
+
+app.get('/admin/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/dashboard.html'));
+});
+
+app.get('/admin/reservations', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/reservations.html'));
+});
+
+app.get('/admin/customers', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/customers.html'));
+});
+
+app.get('/admin/menus', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/menus.html'));
+});
+
+app.get('/admin/staff', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/staff.html'));
+});
+
+app.get('/admin/analytics', (req, res) => {
+    res.sendFile(path.join(__dirname, 'views/admin/analytics.html'));
+});
+
 // CORSヘッダー設定（LIFF用）
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
@@ -928,4 +965,5 @@ app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
     console.log('マルチテナント機能が有効になりました');
     console.log('LIFF対応が完了しました');
+    console.log('管理画面ルーティングが追加されました');
 });
