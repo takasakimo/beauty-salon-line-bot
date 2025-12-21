@@ -1,24 +1,38 @@
 {
   "name": "beauty-salon-line-bot",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "美容院予約管理システム - Next.js版",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:init": "node scripts/init-db.js",
+    "db:migrate": "node scripts/add-tenant-support.js",
+    "db:migrate-customers": "node scripts/migrate-customers-table.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@line/bot-sdk": "^8.0.2",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "pg": "^8.12.0"
+    "next": "^14.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "pg": "^8.12.0",
+    "bcryptjs": "^2.4.3",
+    "cookie": "^0.6.0",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "@types/node": "^20.10.6",
+    "@types/react": "^18.2.46",
+    "@types/react-dom": "^18.2.18",
+    "@types/pg": "^8.10.9",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie": "^0.6.0",
+    "typescript": "^5.3.3",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.0.4",
+    "tailwindcss": "^3.4.0",
+    "postcss": "^8.4.32",
+    "autoprefixer": "^10.4.16"
   }
 }
