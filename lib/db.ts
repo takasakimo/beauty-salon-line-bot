@@ -52,8 +52,7 @@ function getPool(): Pool {
       connectionString: databaseUrl,
       // Supabaseは常にSSLが必要（自己署名証明書を許可）
       ssl: {
-        rejectUnauthorized: false,
-        require: true
+        rejectUnauthorized: false
       },
       // 本番環境用の接続プール設定
       max: process.env.NODE_ENV === 'production' ? 20 : 10, // 最大接続数
