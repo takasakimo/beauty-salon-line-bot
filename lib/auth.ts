@@ -49,6 +49,8 @@ export async function authenticateAdmin(
   try {
     const actualTenantCode = tenantCode || 'beauty-salon-001';
     
+    console.log('管理者認証開始:', { username, tenantCode: actualTenantCode });
+    
     // テナント情報を取得
     const tenantResult = await query(
       'SELECT tenant_id, salon_name, is_active FROM tenants WHERE tenant_code = $1',
@@ -56,10 +58,12 @@ export async function authenticateAdmin(
     );
 
     if (tenantResult.rows.length === 0) {
+      console.error('テナントが見つかりません:', actualTenantCode);
       return { success: false, error: 'ログイン失敗：テナントが見つかりません' };
     }
 
     const tenant = tenantResult.rows[0];
+    console.log('テナント情報取得:', { tenantId: tenant.tenant_id, salonName: tenant.salon_name });
     
     if (!tenant.is_active) {
       return { success: false, error: 'このテナントは無効です' };
@@ -67,6 +71,7 @@ export async function authenticateAdmin(
 
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
+    console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
     
     // 管理者認証（まずユーザー名とテナントIDで検索）
     const adminCheckResult = await query(
@@ -77,17 +82,27 @@ export async function authenticateAdmin(
     );
 
     if (adminCheckResult.rows.length === 0) {
+      console.error('管理者が見つかりません:', { tenantId: tenant.tenant_id, username });
       return { success: false, error: 'ログイン失敗：ユーザー名またはテナントが正しくありません' };
     }
 
     const admin = adminCheckResult.rows[0];
+    console.log('管理者情報取得:', { adminId: admin.admin_id, username, isActive: admin.is_active });
 
     if (!admin.is_active) {
       return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
     }
 
     // パスワードの検証
-    if (admin.password_hash !== passwordHash) {
+    const storedHash = admin.password_hash || '';
+    const passwordMatch = storedHash === passwordHash;
+    console.log('パスワード検証:', { 
+      storedHash: storedHash.substring(0, 20) + '...', 
+      providedHash: passwordHash.substring(0, 20) + '...',
+      match: passwordMatch 
+    });
+
+    if (!passwordMatch) {
       return { success: false, error: 'ログイン失敗：パスワードが正しくありません' };
     }
 
