@@ -6,10 +6,12 @@ import crypto from 'crypto';
 const sessions = new Map<string, SessionData>();
 
 export interface SessionData {
-  adminId: number;
+  adminId?: number;
+  customerId?: number;
   tenantId: number;
-  username: string;
-  role: string;
+  username?: string;
+  email?: string;
+  role?: string;
   createdAt: number;
 }
 
@@ -117,7 +119,7 @@ export async function authenticateAdmin(
   }
 }
 
-// 認証ミドルウェア
+// 認証ミドルウェア（管理者用）
 export function getAuthFromRequest(request: NextRequest): SessionData | null {
   const sessionToken = request.cookies.get('session_token')?.value || 
                       request.headers.get('x-session-token');
@@ -127,7 +129,103 @@ export function getAuthFromRequest(request: NextRequest): SessionData | null {
   }
 
   const session = getSession(sessionToken);
-  return session || null;
+  // 管理者セッションかどうか確認（adminIdが存在する）
+  if (session && session.adminId) {
+    return session;
+  }
+  
+  return null;
+}
+
+// 顧客認証
+export async function authenticateCustomer(
+  email: string,
+  password: string,
+  tenantCode?: string
+): Promise<{ success: boolean; sessionToken?: string; customer?: any; tenant?: any; error?: string }> {
+  try {
+    const actualTenantCode = tenantCode || 'beauty-salon-001';
+    
+    // テナント情報を取得
+    const tenantResult = await query(
+      'SELECT tenant_id, salon_name, is_active FROM tenants WHERE tenant_code = $1',
+      [actualTenantCode]
+    );
+
+    if (tenantResult.rows.length === 0) {
+      return { success: false, error: 'ログイン失敗：テナントが見つかりません' };
+    }
+
+    const tenant = tenantResult.rows[0];
+    
+    if (!tenant.is_active) {
+      return { success: false, error: 'このテナントは無効です' };
+    }
+
+    // パスワードハッシュの生成
+    const passwordHash = hashPassword(password);
+    
+    // 顧客認証
+    const customerResult = await query(
+      `SELECT customer_id, real_name, email, phone_number 
+       FROM customers 
+       WHERE tenant_id = $1 AND email = $2 AND password_hash = $3`,
+      [tenant.tenant_id, email, passwordHash]
+    );
+
+    if (customerResult.rows.length === 0) {
+      return { success: false, error: 'ログイン失敗：メールアドレスまたはパスワードが正しくありません' };
+    }
+
+    const customer = customerResult.rows[0];
+    
+    // セッショントークンの生成
+    const sessionToken = generateSessionToken();
+    
+    // セッション情報を保存
+    setSession(sessionToken, {
+      customerId: customer.customer_id,
+      tenantId: tenant.tenant_id,
+      email: email,
+      createdAt: Date.now()
+    });
+
+    return {
+      success: true,
+      sessionToken,
+      customer: {
+        customerId: customer.customer_id,
+        realName: customer.real_name,
+        email: customer.email,
+        phoneNumber: customer.phone_number
+      },
+      tenant: {
+        tenantId: tenant.tenant_id,
+        salonName: tenant.salon_name
+      }
+    };
+  } catch (error) {
+    console.error('顧客認証エラー:', error);
+    return { success: false, error: 'サーバーエラー' };
+  }
+}
+
+// 顧客認証ミドルウェア
+export function getCustomerAuthFromRequest(request: NextRequest): SessionData | null {
+  const sessionToken = request.cookies.get('customer_session_token')?.value || 
+                      request.headers.get('x-customer-session-token');
+  
+  if (!sessionToken) {
+    return null;
+  }
+
+  const session = getSession(sessionToken);
+  // 顧客セッションかどうか確認（customerIdが存在する）
+  if (session && session.customerId) {
+    return session;
+  }
+  
+  return null;
 }
 
 

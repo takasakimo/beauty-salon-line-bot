@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getTenantIdFromRequest } from '@/lib/db';
+import { hashPassword } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, real_name, phone_number } = body;
+    const { email, real_name, phone_number, password } = body;
 
     // 既存チェック（テナント別、emailまたはphone_numberで）
     const checkQuery = email
@@ -25,16 +26,28 @@ export async function POST(request: NextRequest) {
     const checkResult = await query(checkQuery, checkParams);
 
     if (checkResult.rows.length > 0) {
-      // すでに登録済み - 情報を更新
-      const updateQuery = `
-        UPDATE customers 
-        SET real_name = $1, phone_number = $2, email = $3
-        WHERE ${email ? 'email' : 'phone_number'} = $4 AND tenant_id = $5
-        RETURNING *
-      `;
-      const updateParams = email
-        ? [real_name, phone_number, email, email, tenantId]
-        : [real_name, phone_number, email, phone_number, tenantId];
+      // すでに登録済み - 情報を更新（パスワードも更新する場合）
+      const passwordHash = password ? hashPassword(password) : null;
+      const updateQuery = passwordHash
+        ? `
+          UPDATE customers 
+          SET real_name = $1, phone_number = $2, email = $3, password_hash = $4
+          WHERE ${email ? 'email' : 'phone_number'} = $5 AND tenant_id = $6
+          RETURNING *
+        `
+        : `
+          UPDATE customers 
+          SET real_name = $1, phone_number = $2, email = $3
+          WHERE ${email ? 'email' : 'phone_number'} = $4 AND tenant_id = $5
+          RETURNING *
+        `;
+      const updateParams = passwordHash
+        ? email
+          ? [real_name, phone_number, email, passwordHash, email, tenantId]
+          : [real_name, phone_number, email, passwordHash, phone_number, tenantId]
+        : email
+          ? [real_name, phone_number, email, email, tenantId]
+          : [real_name, phone_number, email, phone_number, tenantId];
       
       const updateResult = await query(updateQuery, updateParams);
       
@@ -45,14 +58,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // パスワードハッシュの生成（パスワードが提供されている場合）
+    const passwordHash = password ? hashPassword(password) : null;
+
     // 新規登録
     const insertQuery = `
-      INSERT INTO customers (tenant_id, email, real_name, phone_number, registered_date)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO customers (tenant_id, email, real_name, phone_number, password_hash, registered_date)
+      VALUES ($1, $2, $3, $4, $5, NOW())
       RETURNING *
     `;
     const result = await query(insertQuery, [
-      tenantId, email || null, real_name, phone_number
+      tenantId, email || null, real_name, phone_number, passwordHash
     ]);
 
     return NextResponse.json({

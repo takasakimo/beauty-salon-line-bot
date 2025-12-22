@@ -12,19 +12,19 @@ export default function Home() {
       <div className="container mx-auto px-4 py-16">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-pink-100 rounded-full mb-6">
-              <SparklesIcon className="w-10 h-10 text-pink-600" />
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl mb-6 shadow-lg">
+              <SparklesIcon className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold mb-3 text-gray-900">
+            <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 tracking-tight">
               らくポチビューティー
             </h1>
-            <p className="text-gray-600 text-lg">
+            <p className="text-gray-500 text-base">
               美容院予約管理システム
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8 mb-6">
-            <h2 className="text-xl font-semibold mb-6 text-gray-800">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
+            <h2 className="text-lg font-semibold mb-6 text-gray-900">
               店舗コードを入力
             </h2>
             <div className="mb-6">
@@ -38,22 +38,30 @@ export default function Home() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Link
-                href={`/reservation?tenant=${tenantCode}`}
+                href={`/login?tenant=${tenantCode}&redirect=/reservation`}
                 className="bg-pink-600 hover:bg-pink-700 text-white font-medium py-3 px-6 rounded-lg text-center transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
               >
                 予約する
               </Link>
               <Link
-                href={`/mypage?tenant=${tenantCode}`}
+                href={`/login?tenant=${tenantCode}&redirect=/mypage`}
                 className="bg-white border-2 border-pink-600 text-pink-600 hover:bg-pink-50 font-medium py-3 px-6 rounded-lg text-center transition-all"
               >
                 マイページ
               </Link>
             </div>
+            <div className="mt-4 text-center">
+              <p className="text-sm text-gray-600">
+                初めてご利用の方は{' '}
+                <Link href={`/register?tenant=${tenantCode}`} className="text-pink-600 hover:text-pink-700 font-medium">
+                  新規登録
+                </Link>
+              </p>
+            </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8">
-            <h2 className="text-xl font-semibold mb-6 text-gray-800">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+            <h2 className="text-lg font-semibold mb-6 text-gray-900">
               スタッフの方はこちら
             </h2>
             <Link

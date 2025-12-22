@@ -35,11 +35,42 @@ function ReservationPageContent() {
     phone: ''
   });
   const [loading, setLoading] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [customer, setCustomer] = useState<any>(null);
 
   useEffect(() => {
+    checkAuth();
     loadMenus();
     loadStaff();
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      const response = await fetch('/api/customers/me', {
+        credentials: 'include'
+      });
+
+      if (response.status === 401) {
+        // 未認証 - ログインページにリダイレクト
+        router.push(`/login?tenant=${tenantCode}&redirect=/reservation`);
+        return;
+      }
+
+      if (response.ok) {
+        const customerData = await response.json();
+        setCustomer(customerData);
+        setCustomerInfo({
+          name: customerData.real_name || '',
+          email: customerData.email || '',
+          phone: customerData.phone_number || ''
+        });
+        setAuthenticated(true);
+      }
+    } catch (error) {
+      console.error('認証確認エラー:', error);
+      router.push(`/login?tenant=${tenantCode}&redirect=/reservation`);
+    }
+  };
 
   useEffect(() => {
     if (selectedMenu && selectedDate) {
@@ -114,10 +145,12 @@ function ReservationPageContent() {
           'Content-Type': 'application/json',
           'X-Tenant-Code': tenantCode
         },
+        credentials: 'include',
         body: JSON.stringify({
-          customer_name: customerInfo.name,
-          email: customerInfo.email,
-          phone_number: customerInfo.phone,
+          customer_id: customer?.customer_id,
+          email: customer?.email || customerInfo.email,
+          customer_name: customer?.real_name || customerInfo.name,
+          phone_number: customer?.phone_number || customerInfo.phone,
           menu_id: selectedMenu.menu_id,
           staff_id: selectedStaff.staff_id,
           reservation_date: reservationDate.toISOString()
@@ -150,17 +183,21 @@ function ReservationPageContent() {
     return dates;
   };
 
+  if (!authenticated) {
+    return null; // リダイレクト中
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-pink-50 py-8">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-8 text-gray-900 text-center">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          <h1 className="text-2xl font-bold mb-8 text-gray-900 text-center">
             予約フォーム
           </h1>
 
           {step === 'menu' && (
             <div>
-              <h2 className="text-2xl font-semibold mb-6">メニューを選択</h2>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">メニューを選択</h2>
               <div className="grid grid-cols-1 gap-4">
                 {menus.map((menu) => (
                   <button
@@ -168,8 +205,8 @@ function ReservationPageContent() {
                     onClick={() => handleMenuSelect(menu)}
                     className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
                   >
-                    <h3 className="text-xl font-semibold mb-2">{menu.name}</h3>
-                    <p className="text-gray-600">
+                    <h3 className="text-lg font-semibold mb-2 text-gray-900">{menu.name}</h3>
+                    <p className="text-gray-600 text-sm">
                       ¥{menu.price.toLocaleString()} / {menu.duration}分
                     </p>
                   </button>
@@ -180,7 +217,7 @@ function ReservationPageContent() {
 
           {step === 'staff' && (
             <div>
-              <h2 className="text-2xl font-semibold mb-6">スタッフを選択</h2>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">スタッフを選択</h2>
               <div className="grid grid-cols-1 gap-4">
                 {staff.map((staffMember) => (
                   <button
@@ -188,22 +225,25 @@ function ReservationPageContent() {
                     onClick={() => handleStaffSelect(staffMember)}
                     className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
                   >
-                    <h3 className="text-xl font-semibold">{staffMember.name}</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">{staffMember.name}</h3>
                   </button>
                 ))}
               </div>
               <button
                 onClick={() => setStep('menu')}
-                className="mt-4 text-pink-600 hover:text-pink-700"
+                className="mt-4 text-gray-600 hover:text-gray-900 transition-colors flex items-center"
               >
-                ← 戻る
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                戻る
               </button>
             </div>
           )}
 
           {step === 'date' && (
             <div>
-              <h2 className="text-2xl font-semibold mb-6">日付を選択</h2>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">日付を選択</h2>
               <div className="grid grid-cols-2 gap-4">
                 {getDateOptions().map((date) => {
                   const dateObj = new Date(date);
@@ -221,22 +261,25 @@ function ReservationPageContent() {
               </div>
               <button
                 onClick={() => setStep('staff')}
-                className="mt-4 text-pink-600 hover:text-pink-700"
+                className="mt-4 text-gray-600 hover:text-gray-900 transition-colors flex items-center"
               >
-                ← 戻る
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                戻る
               </button>
             </div>
           )}
 
           {step === 'time' && (
             <div>
-              <h2 className="text-2xl font-semibold mb-6">時間を選択</h2>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">時間を選択</h2>
               <div className="grid grid-cols-3 gap-4">
                 {availableSlots.map((slot) => (
                   <button
                     key={slot}
                     onClick={() => handleTimeSelect(slot)}
-                    className="p-4 border-2 border-pink-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all"
+                    className="p-4 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all shadow-sm hover:shadow-md"
                   >
                     {slot}
                   </button>
@@ -249,16 +292,19 @@ function ReservationPageContent() {
               )}
               <button
                 onClick={() => setStep('date')}
-                className="mt-4 text-pink-600 hover:text-pink-700"
+                className="mt-4 text-gray-600 hover:text-gray-900 transition-colors flex items-center"
               >
-                ← 戻る
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                戻る
               </button>
             </div>
           )}
 
           {step === 'confirm' && (
             <div>
-              <h2 className="text-2xl font-semibold mb-6">予約内容の確認</h2>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">予約内容の確認</h2>
               <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg mb-6">
                 <div className="space-y-3">
                   <div className="flex justify-between">
@@ -280,37 +326,24 @@ function ReservationPageContent() {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-4">お客様情報</h3>
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    placeholder="お名前"
-                    value={customerInfo.name}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  />
-                  <input
-                    type="email"
-                    placeholder="メールアドレス"
-                    value={customerInfo.email}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="電話番号"
-                    value={customerInfo.phone}
-                    onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                  />
+              {customer && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-medium">お客様:</span> {customer.real_name}様
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-medium">メール:</span> {customer.email}
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    <span className="font-medium">電話:</span> {customer.phone_number}
+                  </p>
                 </div>
-              </div>
+              )}
 
               <div className="flex gap-4">
                 <button
                   onClick={() => setStep('time')}
-                  className="flex-1 px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-6 py-3 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all"
                 >
                   戻る
                 </button>

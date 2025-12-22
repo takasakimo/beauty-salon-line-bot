@@ -8,9 +8,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:init": "node scripts/init-db.js",
+    "db:init": "node scripts/init-db-nextjs.js",
     "db:migrate": "node scripts/add-tenant-support.js",
-    "db:migrate-customers": "node scripts/migrate-customers-table.js"
+    "db:migrate-customers": "node scripts/migrate-customers-table.js",
+    "db:migrate-password": "node scripts/migrate-customer-password.js",
+    "db:migrate-password:vercel": "vercel env pull .env.local && node scripts/migrate-customer-password-vercel.js",
+    "db:check": "node scripts/check-db.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
