@@ -162,21 +162,21 @@ function MyPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-pink-200 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-pink-50 py-8">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold mb-8 text-pink-600 text-center">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-8 text-gray-900 text-center">
             マイページ
           </h1>
 
           {currentReservation && (
-            <div className="mb-8 p-6 bg-pink-50 rounded-lg">
-              <h2 className="text-xl font-semibold mb-4">現在の予約</h2>
-              <div className="space-y-2">
-                <p><strong>日時:</strong> {new Date(currentReservation.reservation_date).toLocaleString('ja-JP')}</p>
-                <p><strong>メニュー:</strong> {currentReservation.menu_name}</p>
-                <p><strong>スタッフ:</strong> {currentReservation.staff_name}</p>
-                <p><strong>料金:</strong> ¥{currentReservation.price.toLocaleString()}</p>
+            <div className="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-lg">
+              <h2 className="text-lg font-semibold mb-4 text-gray-900">現在の予約</h2>
+              <div className="space-y-2 text-sm">
+                <p className="text-gray-700"><span className="font-medium">日時:</span> {new Date(currentReservation.reservation_date).toLocaleString('ja-JP')}</p>
+                <p className="text-gray-700"><span className="font-medium">メニュー:</span> {currentReservation.menu_name}</p>
+                <p className="text-gray-700"><span className="font-medium">スタッフ:</span> {currentReservation.staff_name}</p>
+                <p className="text-gray-700"><span className="font-medium">料金:</span> ¥{currentReservation.price.toLocaleString()}</p>
               </div>
             </div>
           )}
@@ -221,9 +221,14 @@ function MyPageContent() {
 
 export default function MyPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-pink-100 to-pink-200 flex items-center justify-center">
-      <p>読み込み中...</p>
-    </div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
+          <p className="mt-4 text-gray-600">読み込み中...</p>
+        </div>
+      </div>
+    }>
       <MyPageContent />
     </Suspense>
   );

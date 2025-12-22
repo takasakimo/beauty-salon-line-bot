@@ -151,10 +151,10 @@ function ReservationPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-100 to-pink-200 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-pink-50 py-8">
       <div className="container mx-auto px-4 max-w-2xl">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold mb-8 text-pink-600 text-center">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-8 text-gray-900 text-center">
             予約フォーム
           </h1>
 
@@ -166,7 +166,7 @@ function ReservationPageContent() {
                   <button
                     key={menu.menu_id}
                     onClick={() => handleMenuSelect(menu)}
-                    className="p-6 border-2 border-pink-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all"
+                    className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
                   >
                     <h3 className="text-xl font-semibold mb-2">{menu.name}</h3>
                     <p className="text-gray-600">
@@ -186,7 +186,7 @@ function ReservationPageContent() {
                   <button
                     key={staffMember.staff_id}
                     onClick={() => handleStaffSelect(staffMember)}
-                    className="p-6 border-2 border-pink-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all"
+                    className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
                   >
                     <h3 className="text-xl font-semibold">{staffMember.name}</h3>
                   </button>
@@ -212,7 +212,7 @@ function ReservationPageContent() {
                     <button
                       key={date}
                       onClick={() => handleDateSelect(date)}
-                      className="p-4 border-2 border-pink-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all"
+                      className="p-4 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all shadow-sm hover:shadow-md"
                     >
                       {dateObj.getMonth() + 1}/{dateObj.getDate()}({dayName})
                     </button>
@@ -259,11 +259,25 @@ function ReservationPageContent() {
           {step === 'confirm' && (
             <div>
               <h2 className="text-2xl font-semibold mb-6">予約内容の確認</h2>
-              <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                <p className="mb-2"><strong>メニュー:</strong> {selectedMenu?.name}</p>
-                <p className="mb-2"><strong>スタッフ:</strong> {selectedStaff?.name}</p>
-                <p className="mb-2"><strong>日時:</strong> {selectedDate} {selectedTime}</p>
-                <p className="mb-2"><strong>料金:</strong> ¥{selectedMenu?.price.toLocaleString()}</p>
+              <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg mb-6">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-medium">メニュー:</span>
+                    <span className="text-gray-900">{selectedMenu?.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-medium">スタッフ:</span>
+                    <span className="text-gray-900">{selectedStaff?.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-medium">日時:</span>
+                    <span className="text-gray-900">{selectedDate} {selectedTime}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-300 pt-3">
+                    <span className="text-gray-600 font-semibold">料金:</span>
+                    <span className="text-gray-900 font-semibold text-lg">¥{selectedMenu?.price.toLocaleString()}</span>
+                  </div>
+                </div>
               </div>
 
               <div className="mb-6">
@@ -303,7 +317,7 @@ function ReservationPageContent() {
                 <button
                   onClick={handleConfirm}
                   disabled={loading || !customerInfo.name || !customerInfo.phone}
-                  className="flex-1 px-6 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 disabled:bg-gray-300"
+                  className="flex-1 px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-md hover:shadow-lg"
                 >
                   {loading ? '予約中...' : '予約確定'}
                 </button>
@@ -312,15 +326,19 @@ function ReservationPageContent() {
           )}
 
           {step === 'complete' && (
-            <div className="text-center">
-              <div className="text-6xl mb-4">✅</div>
-              <h2 className="text-2xl font-semibold mb-4">予約が完了しました！</h2>
+            <div className="text-center py-8">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-semibold mb-4 text-gray-900">予約が完了しました</h2>
               <p className="text-gray-600 mb-8">
                 ご予約ありがとうございます。当日お待ちしております。
               </p>
               <button
                 onClick={() => router.push(`/?tenant=${tenantCode}`)}
-                className="px-6 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600"
+                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg"
               >
                 ホームに戻る
               </button>
