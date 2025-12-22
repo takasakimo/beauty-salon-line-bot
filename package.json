@@ -13,7 +13,9 @@
     "db:migrate-customers": "node scripts/migrate-customers-table.js",
     "db:migrate-password": "node scripts/migrate-customer-password.js",
     "db:migrate-password:vercel": "vercel env pull .env.local && node scripts/migrate-customer-password-vercel.js",
-    "db:check": "node scripts/check-db.js"
+    "db:check": "node scripts/check-db.js",
+    "admin:create": "node scripts/create-admin.js",
+    "tenant:update": "node scripts/update-tenant-name.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

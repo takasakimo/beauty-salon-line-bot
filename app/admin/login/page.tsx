@@ -19,23 +19,19 @@ export default function AdminLogin() {
   const loadTenants = async () => {
     try {
       const response = await fetch('/api/tenants/active');
-      if (!response.ok) {
-        console.error('テナント一覧取得エラー:', response.status);
-        // デフォルトテナントを設定
-        setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'デフォルト美容室' }]);
-        return;
-      }
       const data = await response.json();
+      
+      // レスポンスが配列で、データが存在する場合
       if (Array.isArray(data) && data.length > 0) {
         setTenants(data);
       } else {
         // デフォルトテナントを設定
-        setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'デフォルト美容室' }]);
+        setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'らくポチビューティー' }]);
       }
     } catch (error) {
       console.error('テナント一覧取得エラー:', error);
       // エラー時もデフォルトテナントを設定
-      setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'デフォルト美容室' }]);
+      setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'らくポチビューティー' }]);
     }
   };
 
