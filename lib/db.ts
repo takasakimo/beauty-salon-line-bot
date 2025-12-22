@@ -16,25 +16,21 @@ function getPool(): Pool {
     };
     console.log('環境変数確認:', allEnvVars);
 
-    // 接続URLを取得（優先順位: POSTGRES_URL > DATABASE_URL > POSTGRES_URL_NON_POOLING）
+    // 接続URLを取得（優先順位: POSTGRES_URL > POSTGRES_URL_NON_POOLING > DATABASE_URL）
     // POSTGRES_URLを優先する理由: Supabaseの新しい形式（pooler）を使用するため
     let databaseUrl = process.env.POSTGRES_URL || 
-                      process.env.DATABASE_URL || 
-                      process.env.POSTGRES_URL_NON_POOLING;
+                      process.env.POSTGRES_URL_NON_POOLING ||
+                      process.env.DATABASE_URL;
     
     if (!databaseUrl) {
       console.error('データベース接続URLが見つかりません。環境変数を確認してください。');
-      throw new Error('DATABASE_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING environment variable is not set');
+      throw new Error('POSTGRES_URL, POSTGRES_URL_NON_POOLING, or DATABASE_URL environment variable is not set');
     }
 
-    // 古い形式のホスト名（db.xxx.supabase.co）を検出した場合は警告
+    // 古い形式のホスト名（db.xxx.supabase.co）を検出した場合はエラー
     if (databaseUrl.includes('db.') && databaseUrl.includes('.supabase.co') && !databaseUrl.includes('pooler')) {
-      console.warn('警告: 古い形式のデータベースURLが検出されました。POSTGRES_URLの使用を推奨します。');
-      // POSTGRES_URLが利用可能な場合はそれを使用
-      if (process.env.POSTGRES_URL) {
-        console.log('POSTGRES_URLに切り替えます');
-        databaseUrl = process.env.POSTGRES_URL;
-      }
+      console.error('エラー: 古い形式のデータベースURLが検出されました。Vercelの環境変数DATABASE_URLを削除するか、POSTGRES_URLと同じ値に更新してください。');
+      throw new Error('Invalid database URL format. Please use POSTGRES_URL instead of old DATABASE_URL format.');
     }
 
     // postgres://をpostgresql://に変換（pgライブラリは両方対応）
@@ -54,9 +50,10 @@ function getPool(): Pool {
 
     pool = new Pool({
       connectionString: databaseUrl,
-      // Supabaseは常にSSLが必要
+      // Supabaseは常にSSLが必要（自己署名証明書を許可）
       ssl: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        require: true
       },
       // 本番環境用の接続プール設定
       max: process.env.NODE_ENV === 'production' ? 20 : 10, // 最大接続数
