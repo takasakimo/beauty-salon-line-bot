@@ -43,7 +43,14 @@ export async function POST(request: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7 // 7日間
+        maxAge: 60 * 60 * 24 * 7, // 7日間
+        path: '/'
+      });
+      console.log('セッションクッキー設定:', {
+        token: result.sessionToken.substring(0, 10) + '...',
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 7
       });
     }
 

@@ -149,16 +149,30 @@ export function getAuthFromRequest(request: NextRequest): SessionData | null {
   const sessionToken = request.cookies.get('session_token')?.value || 
                       request.headers.get('x-session-token');
   
+  console.log('セッション認証チェック:', {
+    hasCookie: !!request.cookies.get('session_token'),
+    hasHeader: !!request.headers.get('x-session-token'),
+    sessionToken: sessionToken ? sessionToken.substring(0, 10) + '...' : null
+  });
+  
   if (!sessionToken) {
+    console.log('セッショントークンが見つかりません');
     return null;
   }
 
   const session = getSession(sessionToken);
+  console.log('セッション取得結果:', {
+    found: !!session,
+    hasAdminId: !!session?.adminId,
+    adminId: session?.adminId
+  });
+  
   // 管理者セッションかどうか確認（adminIdが存在する）
   if (session && session.adminId) {
     return session;
   }
   
+  console.log('管理者セッションが見つかりません');
   return null;
 }
 
