@@ -19,7 +19,9 @@ function getPool(): Pool {
       // 本番環境用の接続プール設定
       max: process.env.NODE_ENV === 'production' ? 20 : 10, // 最大接続数
       idleTimeoutMillis: 30000, // アイドル接続のタイムアウト
-      connectionTimeoutMillis: 2000, // 接続タイムアウト
+      connectionTimeoutMillis: 10000, // 接続タイムアウト（10秒に延長）
+      query_timeout: 30000, // クエリタイムアウト（30秒）
+      statement_timeout: 30000, // ステートメントタイムアウト（30秒）
     });
 
     // エラーハンドリング
