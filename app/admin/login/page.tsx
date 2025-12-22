@@ -54,7 +54,13 @@ export default function AdminLogin() {
         }),
       });
 
+      // レスポンスのステータスコードを確認
+      if (!response.ok) {
+        console.error('HTTPエラー:', response.status, response.statusText);
+      }
+
       const result = await response.json();
+      console.log('ログイン結果:', result);
 
       if (result.success) {
         router.push('/admin/dashboard');
@@ -63,7 +69,7 @@ export default function AdminLogin() {
       }
     } catch (error) {
       console.error('ログインエラー:', error);
-      setError('ログイン処理中にエラーが発生しました');
+      setError('ログイン処理中にエラーが発生しました: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setLoading(false);
     }
