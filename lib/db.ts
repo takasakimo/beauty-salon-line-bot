@@ -38,22 +38,35 @@ function getPool(): Pool {
       databaseUrl = databaseUrl.replace('postgres://', 'postgresql://');
     }
 
+    // 接続URLのSSL設定を確認・修正
+    // 接続文字列からsslmodeパラメータを削除し、pgライブラリのSSL設定を使用
+    const urlObj = new URL(databaseUrl);
+    const sslMode = urlObj.searchParams.get('sslmode');
+    
+    // sslmodeパラメータを削除（pgライブラリのsslオプションで制御するため）
+    urlObj.searchParams.delete('sslmode');
+    urlObj.searchParams.delete('supa'); // Supabase固有のパラメータも削除
+    const cleanDatabaseUrl = urlObj.toString();
+    
     // 接続URLのホスト名を確認
-    const urlMatch = databaseUrl.match(/@([^:/]+)/);
+    const urlMatch = cleanDatabaseUrl.match(/@([^:/]+)/);
     const hostname = urlMatch ? urlMatch[1] : 'unknown';
     console.log('データベース接続URL使用:', {
       hostname,
-      urlPreview: databaseUrl.replace(/:[^:@]+@/, ':****@').substring(0, 150),
-      hasSsl: databaseUrl.includes('sslmode'),
-      protocol: databaseUrl.substring(0, 12)
+      urlPreview: cleanDatabaseUrl.replace(/:[^:@]+@/, ':****@').substring(0, 150),
+      originalSslMode: sslMode,
+      protocol: cleanDatabaseUrl.substring(0, 12)
     });
 
+    // SSL設定（常にSSLを有効化し、自己署名証明書を許可）
+    const sslConfig = {
+      rejectUnauthorized: false
+    };
+
     pool = new Pool({
-      connectionString: databaseUrl,
+      connectionString: cleanDatabaseUrl,
       // Supabaseは常にSSLが必要（自己署名証明書を許可）
-      ssl: {
-        rejectUnauthorized: false
-      },
+      ssl: sslConfig,
       // 本番環境用の接続プール設定
       max: process.env.NODE_ENV === 'production' ? 20 : 10, // 最大接続数
       idleTimeoutMillis: 30000, // アイドル接続のタイムアウト
