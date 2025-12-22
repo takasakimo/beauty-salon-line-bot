@@ -16,7 +16,14 @@ function getPool(): Pool {
       throw new Error('DATABASE_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING environment variable is not set');
     }
 
-    console.log('データベース接続URL使用:', databaseUrl.replace(/:[^:@]+@/, ':****@'));
+    // 接続URLのホスト名を確認
+    const urlMatch = databaseUrl.match(/@([^:/]+)/);
+    const hostname = urlMatch ? urlMatch[1] : 'unknown';
+    console.log('データベース接続URL使用:', {
+      hostname,
+      urlPreview: databaseUrl.replace(/:[^:@]+@/, ':****@').substring(0, 100),
+      hasSsl: databaseUrl.includes('sslmode')
+    });
 
     pool = new Pool({
       connectionString: databaseUrl,
