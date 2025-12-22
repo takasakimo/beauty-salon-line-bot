@@ -7,13 +7,28 @@ let pool: Pool | null = null;
 // 接続プールの取得
 function getPool(): Pool {
   if (!pool) {
+    // すべての環境変数を確認
+    const allEnvVars = {
+      DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
+      POSTGRES_URL: process.env.POSTGRES_URL ? 'SET' : 'NOT SET',
+      POSTGRES_URL_NON_POOLING: process.env.POSTGRES_URL_NON_POOLING ? 'SET' : 'NOT SET',
+      NODE_ENV: process.env.NODE_ENV || 'NOT SET'
+    };
+    console.log('環境変数確認:', allEnvVars);
+
     // DATABASE_URLまたはPOSTGRES_URLを取得（優先順位: DATABASE_URL > POSTGRES_URL > POSTGRES_URL_NON_POOLING）
-    const databaseUrl = process.env.DATABASE_URL || 
-                        process.env.POSTGRES_URL || 
-                        process.env.POSTGRES_URL_NON_POOLING;
+    let databaseUrl = process.env.DATABASE_URL || 
+                      process.env.POSTGRES_URL || 
+                      process.env.POSTGRES_URL_NON_POOLING;
     
     if (!databaseUrl) {
+      console.error('データベース接続URLが見つかりません。環境変数を確認してください。');
       throw new Error('DATABASE_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING environment variable is not set');
+    }
+
+    // postgres://をpostgresql://に変換（pgライブラリは両方対応）
+    if (databaseUrl.startsWith('postgres://')) {
+      databaseUrl = databaseUrl.replace('postgres://', 'postgresql://');
     }
 
     // 接続URLのホスト名を確認
@@ -21,15 +36,17 @@ function getPool(): Pool {
     const hostname = urlMatch ? urlMatch[1] : 'unknown';
     console.log('データベース接続URL使用:', {
       hostname,
-      urlPreview: databaseUrl.replace(/:[^:@]+@/, ':****@').substring(0, 100),
-      hasSsl: databaseUrl.includes('sslmode')
+      urlPreview: databaseUrl.replace(/:[^:@]+@/, ':****@').substring(0, 150),
+      hasSsl: databaseUrl.includes('sslmode'),
+      protocol: databaseUrl.substring(0, 12)
     });
 
     pool = new Pool({
       connectionString: databaseUrl,
-      ssl: process.env.NODE_ENV === 'production' ? {
+      // Supabaseは常にSSLが必要
+      ssl: {
         rejectUnauthorized: false
-      } : false,
+      },
       // 本番環境用の接続プール設定
       max: process.env.NODE_ENV === 'production' ? 20 : 10, // 最大接続数
       idleTimeoutMillis: 30000, // アイドル接続のタイムアウト
