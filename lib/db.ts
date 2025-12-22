@@ -7,12 +7,16 @@ let pool: Pool | null = null;
 // 接続プールの取得
 function getPool(): Pool {
   if (!pool) {
-    // DATABASE_URLまたはPOSTGRES_URLを取得
-    const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    // DATABASE_URLまたはPOSTGRES_URLを取得（優先順位: DATABASE_URL > POSTGRES_URL > POSTGRES_URL_NON_POOLING）
+    const databaseUrl = process.env.DATABASE_URL || 
+                        process.env.POSTGRES_URL || 
+                        process.env.POSTGRES_URL_NON_POOLING;
     
     if (!databaseUrl) {
-      throw new Error('DATABASE_URL or POSTGRES_URL environment variable is not set');
+      throw new Error('DATABASE_URL, POSTGRES_URL, or POSTGRES_URL_NON_POOLING environment variable is not set');
     }
+
+    console.log('データベース接続URL使用:', databaseUrl.replace(/:[^:@]+@/, ':****@'));
 
     pool = new Pool({
       connectionString: databaseUrl,
