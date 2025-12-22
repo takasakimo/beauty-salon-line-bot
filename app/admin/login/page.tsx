@@ -19,10 +19,23 @@ export default function AdminLogin() {
   const loadTenants = async () => {
     try {
       const response = await fetch('/api/tenants/active');
+      if (!response.ok) {
+        console.error('テナント一覧取得エラー:', response.status);
+        // デフォルトテナントを設定
+        setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'デフォルト美容室' }]);
+        return;
+      }
       const data = await response.json();
-      setTenants(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setTenants(data);
+      } else {
+        // デフォルトテナントを設定
+        setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'デフォルト美容室' }]);
+      }
     } catch (error) {
       console.error('テナント一覧取得エラー:', error);
+      // エラー時もデフォルトテナントを設定
+      setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'デフォルト美容室' }]);
     }
   };
 
@@ -37,6 +50,7 @@ export default function AdminLogin() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           username,
           password,
@@ -86,12 +100,17 @@ export default function AdminLogin() {
                 value={tenantCode}
                 onChange={(e) => setTenantCode(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                disabled={loading}
               >
-                {tenants.map((tenant) => (
-                  <option key={tenant.tenant_code} value={tenant.tenant_code}>
-                    {tenant.salon_name}
-                  </option>
-                ))}
+                {tenants.length > 0 ? (
+                  tenants.map((tenant) => (
+                    <option key={tenant.tenant_code} value={tenant.tenant_code}>
+                      {tenant.salon_name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="beauty-salon-001">デフォルト美容室</option>
+                )}
               </select>
             </div>
             <div>
