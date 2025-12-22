@@ -8,11 +8,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { username, password, tenantCode } = body;
 
+    // バリデーション
+    if (!username || !password) {
+      return NextResponse.json(
+        { success: false, error: 'ユーザー名とパスワードを入力してください' },
+        { status: 400 }
+      );
+    }
+
     const result = await authenticateAdmin(username, password, tenantCode);
 
     if (!result.success) {
+      console.error('管理者認証失敗:', {
+        username,
+        tenantCode,
+        error: result.error
+      });
       return NextResponse.json(
-        { success: false, error: result.error },
+        { success: false, error: result.error || 'ログインに失敗しました' },
         { status: 401 }
       );
     }

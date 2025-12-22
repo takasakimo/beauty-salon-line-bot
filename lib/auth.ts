@@ -68,20 +68,29 @@ export async function authenticateAdmin(
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
     
-    // 管理者認証
-    const adminResult = await query(
-      `SELECT admin_id, full_name, role 
+    // 管理者認証（まずユーザー名とテナントIDで検索）
+    const adminCheckResult = await query(
+      `SELECT admin_id, full_name, role, password_hash, is_active
        FROM tenant_admins 
-       WHERE tenant_id = $1 AND username = $2 AND password_hash = $3 AND is_active = true`,
-      [tenant.tenant_id, username, passwordHash]
+       WHERE tenant_id = $1 AND username = $2`,
+      [tenant.tenant_id, username]
     );
 
-    if (adminResult.rows.length === 0) {
-      return { success: false, error: 'ログイン失敗：認証情報が正しくありません' };
+    if (adminCheckResult.rows.length === 0) {
+      return { success: false, error: 'ログイン失敗：ユーザー名またはテナントが正しくありません' };
     }
 
-    const admin = adminResult.rows[0];
-    
+    const admin = adminCheckResult.rows[0];
+
+    if (!admin.is_active) {
+      return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
+    }
+
+    // パスワードの検証
+    if (admin.password_hash !== passwordHash) {
+      return { success: false, error: 'ログイン失敗：パスワードが正しくありません' };
+    }
+
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
     
