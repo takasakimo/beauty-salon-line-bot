@@ -16,7 +16,8 @@
     "db:check": "node scripts/check-db.js",
     "admin:create": "node scripts/create-admin.js",
     "admin:check": "node scripts/check-admin.js",
-    "tenant:update": "node scripts/update-tenant-name.js"
+    "tenant:update": "node scripts/update-tenant-name.js",
+    "menus:seed": "node scripts/seed-menus.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
