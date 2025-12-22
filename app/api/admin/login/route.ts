@@ -50,8 +50,9 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error: any) {
     console.error('ログインエラー:', error);
+    const errorMessage = error?.message || String(error);
     return NextResponse.json(
-      { success: false, error: 'サーバーエラー' },
+      { success: false, error: `サーバーエラー: ${errorMessage}` },
       { status: 500 }
     );
   }

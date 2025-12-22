@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { query } from './db';
+import { NextRequest } from 'next/server';
+import { query } from '@/lib/db';
 import crypto from 'crypto';
 
 // セッション管理用の簡易ストア（本番環境ではRedisなどを推奨）
@@ -137,9 +137,10 @@ export async function authenticateAdmin(
         salonName: tenant.salon_name
       }
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('認証エラー:', error);
-    return { success: false, error: 'サーバーエラー' };
+    const errorMessage = error?.message || String(error);
+    return { success: false, error: `サーバーエラー: ${errorMessage}` };
   }
 }
 
