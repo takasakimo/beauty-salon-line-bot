@@ -113,10 +113,25 @@ async function initDatabase() {
         duration INTEGER NOT NULL,
         description TEXT,
         category VARCHAR(100),
+        is_active BOOLEAN DEFAULT true,
         created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
     console.log('✅ menusテーブルを作成しました');
+    
+    // 5-1. is_activeカラムが存在しない場合は追加（既存テーブル用）
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'menus' AND column_name = 'is_active'
+    `);
+    if (columnCheck.rows.length === 0) {
+      await client.query(`
+        ALTER TABLE menus 
+        ADD COLUMN is_active BOOLEAN DEFAULT true
+      `);
+      console.log('✅ is_activeカラムを追加しました');
+    }
 
     // 6. 予約テーブルの作成
     console.log('6. reservationsテーブルを作成中...');
