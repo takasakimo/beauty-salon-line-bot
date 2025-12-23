@@ -41,10 +41,21 @@ export default function MenuManagement() {
     try {
       const response = await fetch('/api/admin/menus', {
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (response.status === 401) {
+        console.error('認証エラー: 401 Unauthorized');
         router.push('/admin/login');
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('メニュー取得エラー:', response.status, errorData);
+        setError('メニューの取得に失敗しました');
         return;
       }
 
@@ -52,6 +63,7 @@ export default function MenuManagement() {
       setMenus(data);
     } catch (error) {
       console.error('メニュー取得エラー:', error);
+      setError('メニューの取得に失敗しました');
     } finally {
       setLoading(false);
     }
