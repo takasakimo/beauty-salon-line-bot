@@ -1,39 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function AdminLogin() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantCode, setTenantCode] = useState('beauty-salon-001');
-  const [tenants, setTenants] = useState<any[]>([]);
+  const [tenantCode, setTenantCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    loadTenants();
-  }, []);
-
-  const loadTenants = async () => {
-    try {
-      const response = await fetch('/api/tenants/active');
-      const data = await response.json();
-      
-      // レスポンスが配列で、データが存在する場合
-      if (Array.isArray(data) && data.length > 0) {
-        setTenants(data);
-      } else {
-        // デフォルトテナントを設定
-        setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'らくポチビューティー' }]);
-      }
-    } catch (error) {
-      console.error('テナント一覧取得エラー:', error);
-      // エラー時もデフォルトテナントを設定
-      setTenants([{ tenant_code: 'beauty-salon-001', salon_name: 'らくポチビューティー' }]);
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,26 +70,22 @@ export default function AdminLogin() {
           )}
           <div className="space-y-4">
             <div>
-              <label htmlFor="tenant" className="block text-sm font-medium text-gray-700">
-                店舗
+              <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700">
+                店舗コード
               </label>
-              <select
-                id="tenant"
+              <input
+                id="tenantCode"
+                type="text"
+                required
                 value={tenantCode}
                 onChange={(e) => setTenantCode(e.target.value)}
+                placeholder="例: beauty-salon-001"
                 className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                 disabled={loading}
-              >
-                {tenants.length > 0 ? (
-                  tenants.map((tenant) => (
-                    <option key={tenant.tenant_code} value={tenant.tenant_code}>
-                      {tenant.salon_name}
-                    </option>
-                  ))
-                ) : (
-                  <option value="beauty-salon-001">デフォルト美容室</option>
-                )}
-              </select>
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                店舗コードを入力してください
+              </p>
             </div>
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700">
@@ -126,6 +98,7 @@ export default function AdminLogin() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                disabled={loading}
               />
             </div>
             <div>
