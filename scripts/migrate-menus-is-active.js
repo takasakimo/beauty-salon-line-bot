@@ -3,6 +3,9 @@ require('dotenv').config({ path: '.env.local' });
 if (require('fs').existsSync('.env')) {
   require('dotenv').config({ path: '.env' });
 }
+if (require('fs').existsSync('.env.vercel')) {
+  require('dotenv').config({ path: '.env.vercel' });
+}
 const { Client } = require('pg');
 
 async function migrateMenusIsActive() {
