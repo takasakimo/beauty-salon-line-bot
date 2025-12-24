@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = getCustomerAuthFromRequest(request);
+    const session = await getCustomerAuthFromRequest(request);
     if (!session || !session.customerId) {
       return NextResponse.json(
         { error: '認証が必要です' },

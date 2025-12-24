@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 // 予約一覧取得（管理画面用）
 export async function GET(request: NextRequest) {
   try {
-    const session = getAuthFromRequest(request);
+    const session = await getAuthFromRequest(request);
     if (!session) {
       return NextResponse.json(
         { error: '認証が必要です' },
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 // 予約追加（管理画面用）
 export async function POST(request: NextRequest) {
   try {
-    const session = getAuthFromRequest(request);
+    const session = await getAuthFromRequest(request);
     if (!session) {
       return NextResponse.json(
         { error: '認証が必要です' },

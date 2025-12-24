@@ -10,7 +10,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = getAuthFromRequest(request);
+    const session = await getAuthFromRequest(request);
     if (!session) {
       return NextResponse.json(
         { error: '認証が必要です' },
@@ -98,7 +98,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = getAuthFromRequest(request);
+    const session = await getAuthFromRequest(request);
     if (!session) {
       return NextResponse.json(
         { error: '認証が必要です' },

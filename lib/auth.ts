@@ -2,9 +2,6 @@ import { NextRequest } from 'next/server';
 import { query } from '@/lib/db';
 import crypto from 'crypto';
 
-// セッション管理用の簡易ストア（本番環境ではRedisなどを推奨）
-const sessions = new Map<string, SessionData>();
-
 export interface SessionData {
   adminId?: number;
   customerId?: number;
@@ -20,19 +17,108 @@ export function generateSessionToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// セッションの保存
-export function setSession(token: string, data: SessionData): void {
-  sessions.set(token, data);
+// セッションの保存（データベース）
+export async function setSession(token: string, data: SessionData): Promise<void> {
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7日後
+  
+  try {
+    await query(
+      `INSERT INTO sessions (
+        session_token, 
+        admin_id, 
+        customer_id, 
+        tenant_id, 
+        username, 
+        email, 
+        role, 
+        created_at, 
+        expires_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
+      ON CONFLICT (session_token) 
+      DO UPDATE SET 
+        admin_id = EXCLUDED.admin_id,
+        customer_id = EXCLUDED.customer_id,
+        tenant_id = EXCLUDED.tenant_id,
+        username = EXCLUDED.username,
+        email = EXCLUDED.email,
+        role = EXCLUDED.role,
+        expires_at = EXCLUDED.expires_at`,
+      [
+        token,
+        data.adminId || null,
+        data.customerId || null,
+        data.tenantId,
+        data.username || null,
+        data.email || null,
+        data.role || null,
+        expiresAt
+      ]
+    );
+  } catch (error) {
+    console.error('セッション保存エラー:', error);
+    throw error;
+  }
 }
 
-// セッションの取得
-export function getSession(token: string): SessionData | undefined {
-  return sessions.get(token);
+// セッションの取得（データベース）
+export async function getSession(token: string): Promise<SessionData | undefined> {
+  try {
+    const result = await query(
+      `SELECT 
+        admin_id, 
+        customer_id, 
+        tenant_id, 
+        username, 
+        email, 
+        role, 
+        EXTRACT(EPOCH FROM created_at) * 1000 as created_at
+       FROM sessions 
+       WHERE session_token = $1 AND expires_at > CURRENT_TIMESTAMP`,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return undefined;
+    }
+
+    const row = result.rows[0];
+    return {
+      adminId: row.admin_id || undefined,
+      customerId: row.customer_id || undefined,
+      tenantId: row.tenant_id,
+      username: row.username || undefined,
+      email: row.email || undefined,
+      role: row.role || undefined,
+      createdAt: parseInt(row.created_at)
+    };
+  } catch (error) {
+    console.error('セッション取得エラー:', error);
+    return undefined;
+  }
 }
 
-// セッションの削除
-export function deleteSession(token: string): void {
-  sessions.delete(token);
+// セッションの削除（データベース）
+export async function deleteSession(token: string): Promise<void> {
+  try {
+    await query(
+      'DELETE FROM sessions WHERE session_token = $1',
+      [token]
+    );
+  } catch (error) {
+    console.error('セッション削除エラー:', error);
+  }
+}
+
+// 期限切れセッションのクリーンアップ
+export async function cleanupExpiredSessions(): Promise<void> {
+  try {
+    await query(
+      'DELETE FROM sessions WHERE expires_at < CURRENT_TIMESTAMP'
+    );
+  } catch (error) {
+    console.error('セッションクリーンアップエラー:', error);
+  }
 }
 
 // パスワードハッシュの生成
@@ -109,8 +195,8 @@ export async function authenticateAdmin(
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
     
-    // セッション情報を保存
-    setSession(sessionToken, {
+    // セッション情報を保存（データベース）
+    await setSession(sessionToken, {
       adminId: admin.admin_id,
       tenantId: tenant.tenant_id,
       username: username,
@@ -145,7 +231,7 @@ export async function authenticateAdmin(
 }
 
 // 認証ミドルウェア（管理者用）
-export function getAuthFromRequest(request: NextRequest): SessionData | null {
+export async function getAuthFromRequest(request: NextRequest): Promise<SessionData | null> {
   const sessionToken = request.cookies.get('session_token')?.value || 
                       request.headers.get('x-session-token');
   
@@ -160,7 +246,7 @@ export function getAuthFromRequest(request: NextRequest): SessionData | null {
     return null;
   }
 
-  const session = getSession(sessionToken);
+  const session = await getSession(sessionToken);
   console.log('セッション取得結果:', {
     found: !!session,
     hasAdminId: !!session?.adminId,
@@ -221,8 +307,8 @@ export async function authenticateCustomer(
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
     
-    // セッション情報を保存
-    setSession(sessionToken, {
+    // セッション情報を保存（データベース）
+    await setSession(sessionToken, {
       customerId: customer.customer_id,
       tenantId: tenant.tenant_id,
       email: email,
@@ -250,7 +336,7 @@ export async function authenticateCustomer(
 }
 
 // 顧客認証ミドルウェア
-export function getCustomerAuthFromRequest(request: NextRequest): SessionData | null {
+export async function getCustomerAuthFromRequest(request: NextRequest): Promise<SessionData | null> {
   const sessionToken = request.cookies.get('customer_session_token')?.value || 
                       request.headers.get('x-customer-session-token');
   
@@ -258,7 +344,7 @@ export function getCustomerAuthFromRequest(request: NextRequest): SessionData | 
     return null;
   }
 
-  const session = getSession(sessionToken);
+  const session = await getSession(sessionToken);
   // 顧客セッションかどうか確認（customerIdが存在する）
   if (session && session.customerId) {
     return session;

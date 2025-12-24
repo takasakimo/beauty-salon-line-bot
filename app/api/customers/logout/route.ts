@@ -5,11 +5,11 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const session = getCustomerAuthFromRequest(request);
+    const session = await getCustomerAuthFromRequest(request);
     if (session) {
       const sessionToken = request.cookies.get('customer_session_token')?.value;
       if (sessionToken) {
-        deleteSession(sessionToken);
+        await deleteSession(sessionToken);
       }
     }
 

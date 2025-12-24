@@ -168,6 +168,48 @@ async function initDatabase() {
       console.log('✅ デフォルトテナントは既に存在します');
     }
 
+    // 8. sessionsテーブルの作成
+    console.log('8. sessionsテーブルを作成中...');
+    const sessionsTableCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_name = 'sessions'
+    `);
+    
+    if (sessionsTableCheck.rows.length === 0) {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          session_token VARCHAR(255) PRIMARY KEY,
+          admin_id INTEGER,
+          customer_id INTEGER,
+          tenant_id INTEGER NOT NULL,
+          username VARCHAR(100),
+          email VARCHAR(255),
+          role VARCHAR(50),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          expires_at TIMESTAMP NOT NULL
+        )
+      `);
+      
+      // インデックスを作成
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_admin_id ON sessions(admin_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_customer_id ON sessions(customer_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_tenant_id ON sessions(tenant_id)
+      `);
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)
+      `);
+      
+      console.log('✅ sessionsテーブルを作成しました');
+    } else {
+      console.log('✅ sessionsテーブルは既に存在します');
+    }
+
     console.log('\n✅ データベースの初期化が完了しました！');
 
   } catch (error) {
