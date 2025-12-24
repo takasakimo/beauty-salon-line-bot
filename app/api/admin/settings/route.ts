@@ -17,8 +17,23 @@ export async function GET(request: NextRequest) {
 
     const tenantId = session.tenantId;
 
+    // closed_daysカラムが存在するかチェック
+    let selectColumns = 'max_concurrent_reservations, business_hours';
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'tenants' AND column_name = 'closed_days'`
+      );
+      if (columnCheck.rows.length > 0) {
+        selectColumns += ', closed_days';
+      }
+    } catch (checkError: any) {
+      console.error('closed_daysカラムチェックエラー:', checkError);
+    }
+
     const result = await query(
-      'SELECT max_concurrent_reservations, business_hours, closed_days FROM tenants WHERE tenant_id = $1',
+      `SELECT ${selectColumns} FROM tenants WHERE tenant_id = $1`,
       [tenantId]
     );
 
@@ -58,7 +73,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       max_concurrent_reservations: row.max_concurrent_reservations || 3,
       business_hours: businessHours,
-      closed_days: Array.isArray(closedDays) ? closedDays : []
+      closed_days: Array.isArray(closedDays) ? closedDays : (row.closed_days ? [] : [])
     });
   } catch (error: any) {
     console.error('設定取得エラー:', error);
@@ -111,10 +126,27 @@ export async function PUT(request: NextRequest) {
       paramIndex++;
     }
 
+    // closed_daysカラムが存在するかチェックしてから更新
     if (closed_days !== undefined) {
-      updates.push(`closed_days = $${paramIndex}`);
-      values.push(JSON.stringify(closed_days));
-      paramIndex++;
+      try {
+        // カラムの存在確認
+        const columnCheck = await query(
+          `SELECT column_name 
+           FROM information_schema.columns 
+           WHERE table_name = 'tenants' AND column_name = 'closed_days'`
+        );
+        
+        if (columnCheck.rows.length > 0) {
+          updates.push(`closed_days = $${paramIndex}`);
+          values.push(JSON.stringify(closed_days));
+          paramIndex++;
+        } else {
+          console.log('closed_daysカラムが存在しないため、スキップします');
+        }
+      } catch (checkError: any) {
+        console.error('closed_daysカラムチェックエラー:', checkError);
+        // エラーが発生しても続行
+      }
     }
 
     if (updates.length === 0) {
