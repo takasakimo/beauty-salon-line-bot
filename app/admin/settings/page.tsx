@@ -29,9 +29,27 @@ interface Staff {
   available_menus?: Array<{ menu_id: number; name: string }>;
 }
 
+interface BusinessHours {
+  [key: string]: {
+    open: string;
+    close: string;
+    isOpen: boolean;
+  };
+}
+
 export default function SettingsPage() {
   const router = useRouter();
   const [maxConcurrentReservations, setMaxConcurrentReservations] = useState<number>(3);
+  const [businessHours, setBusinessHours] = useState<BusinessHours>({
+    monday: { open: '10:00', close: '19:00', isOpen: true },
+    tuesday: { open: '10:00', close: '19:00', isOpen: true },
+    wednesday: { open: '10:00', close: '19:00', isOpen: true },
+    thursday: { open: '10:00', close: '19:00', isOpen: true },
+    friday: { open: '10:00', close: '19:00', isOpen: true },
+    saturday: { open: '10:00', close: '19:00', isOpen: true },
+    sunday: { open: '10:00', close: '19:00', isOpen: false }
+  });
+  const [closedDays, setClosedDays] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -72,6 +90,16 @@ export default function SettingsPage() {
       if (response.ok) {
         const data = await response.json();
         setMaxConcurrentReservations(data.max_concurrent_reservations || 3);
+        
+        // 営業時間を設定
+        if (data.business_hours && Object.keys(data.business_hours).length > 0) {
+          setBusinessHours(data.business_hours);
+        }
+        
+        // 定休日を設定
+        if (data.closed_days && Array.isArray(data.closed_days)) {
+          setClosedDays(data.closed_days);
+        }
       }
     } catch (error) {
       console.error('設定取得エラー:', error);
@@ -95,7 +123,9 @@ export default function SettingsPage() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          max_concurrent_reservations: maxConcurrentReservations
+          max_concurrent_reservations: maxConcurrentReservations,
+          business_hours: businessHours,
+          closed_days: closedDays
         })
       });
 
@@ -372,7 +402,145 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div className="flex justify-end">
+                {/* 営業時間設定 */}
+                <div className="border-t border-gray-200 pt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-4">
+                    営業時間
+                  </label>
+                  <p className="text-sm text-gray-500 mb-4">
+                    各曜日の営業時間を設定してください
+                  </p>
+                  <div className="space-y-3">
+                    {[
+                      { key: 'monday', label: '月曜日' },
+                      { key: 'tuesday', label: '火曜日' },
+                      { key: 'wednesday', label: '水曜日' },
+                      { key: 'thursday', label: '木曜日' },
+                      { key: 'friday', label: '金曜日' },
+                      { key: 'saturday', label: '土曜日' },
+                      { key: 'sunday', label: '日曜日' }
+                    ].map((day) => (
+                      <div key={day.key} className="flex items-center space-x-4">
+                        <div className="w-20">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={businessHours[day.key]?.isOpen ?? true}
+                              onChange={(e) => {
+                                setBusinessHours(prev => ({
+                                  ...prev,
+                                  [day.key]: {
+                                    ...prev[day.key],
+                                    isOpen: e.target.checked,
+                                    open: prev[day.key]?.open || '10:00',
+                                    close: prev[day.key]?.close || '19:00'
+                                  }
+                                }));
+                              }}
+                              className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                            />
+                            <span className="text-sm font-medium text-gray-700">{day.label}</span>
+                          </label>
+                        </div>
+                        {businessHours[day.key]?.isOpen && (
+                          <div className="flex items-center space-x-2 flex-1">
+                            <input
+                              type="time"
+                              value={businessHours[day.key]?.open || '10:00'}
+                              onChange={(e) => {
+                                setBusinessHours(prev => ({
+                                  ...prev,
+                                  [day.key]: {
+                                    ...prev[day.key],
+                                    open: e.target.value
+                                  }
+                                }));
+                              }}
+                              className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500 text-sm"
+                            />
+                            <span className="text-gray-500">〜</span>
+                            <input
+                              type="time"
+                              value={businessHours[day.key]?.close || '19:00'}
+                              onChange={(e) => {
+                                setBusinessHours(prev => ({
+                                  ...prev,
+                                  [day.key]: {
+                                    ...prev[day.key],
+                                    close: e.target.value
+                                  }
+                                }));
+                              }}
+                              className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500 text-sm"
+                            />
+                          </div>
+                        )}
+                        {!businessHours[day.key]?.isOpen && (
+                          <span className="text-sm text-gray-400">定休日</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 定休日設定（別の方法） */}
+                <div className="border-t border-gray-200 pt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-4">
+                    定休日（複数選択可）
+                  </label>
+                  <p className="text-sm text-gray-500 mb-4">
+                    定休日として設定する曜日を選択してください（営業時間の設定と連動します）
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {[
+                      { value: 0, label: '日曜日' },
+                      { value: 1, label: '月曜日' },
+                      { value: 2, label: '火曜日' },
+                      { value: 3, label: '水曜日' },
+                      { value: 4, label: '木曜日' },
+                      { value: 5, label: '金曜日' },
+                      { value: 6, label: '土曜日' }
+                    ].map((day) => (
+                      <label key={day.value} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={closedDays.includes(day.value)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setClosedDays(prev => [...prev, day.value]);
+                              // 営業時間の設定も更新
+                              const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                              setBusinessHours(prev => ({
+                                ...prev,
+                                [dayKeys[day.value]]: {
+                                  ...prev[dayKeys[day.value]],
+                                  isOpen: false
+                                }
+                              }));
+                            } else {
+                              setClosedDays(prev => prev.filter(d => d !== day.value));
+                              // 営業時間の設定も更新
+                              const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                              setBusinessHours(prev => ({
+                                ...prev,
+                                [dayKeys[day.value]]: {
+                                  ...prev[dayKeys[day.value]],
+                                  isOpen: true,
+                                  open: prev[dayKeys[day.value]]?.open || '10:00',
+                                  close: prev[dayKeys[day.value]]?.close || '19:00'
+                                }
+                              }));
+                            }
+                          }}
+                          className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-700">{day.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end border-t border-gray-200 pt-6">
                   <button
                     type="submit"
                     disabled={saving}

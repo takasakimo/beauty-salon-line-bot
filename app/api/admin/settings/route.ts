@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const tenantId = session.tenantId;
 
     const result = await query(
-      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      'SELECT max_concurrent_reservations, business_hours, closed_days FROM tenants WHERE tenant_id = $1',
       [tenantId]
     );
 
@@ -29,8 +29,36 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const row = result.rows[0];
+    
+    // business_hoursとclosed_daysをパース
+    let businessHours = {};
+    let closedDays: number[] = [];
+    
+    try {
+      if (row.business_hours) {
+        businessHours = typeof row.business_hours === 'string' 
+          ? JSON.parse(row.business_hours) 
+          : row.business_hours;
+      }
+    } catch (e) {
+      console.error('business_hoursのパースエラー:', e);
+    }
+    
+    try {
+      if (row.closed_days) {
+        closedDays = typeof row.closed_days === 'string' 
+          ? JSON.parse(row.closed_days) 
+          : row.closed_days;
+      }
+    } catch (e) {
+      console.error('closed_daysのパースエラー:', e);
+    }
+
     return NextResponse.json({
-      max_concurrent_reservations: result.rows[0].max_concurrent_reservations || 3
+      max_concurrent_reservations: row.max_concurrent_reservations || 3,
+      business_hours: businessHours,
+      closed_days: Array.isArray(closedDays) ? closedDays : []
     });
   } catch (error: any) {
     console.error('設定取得エラー:', error);
@@ -54,19 +82,57 @@ export async function PUT(request: NextRequest) {
 
     const tenantId = session.tenantId;
     const body = await request.json();
-    const { max_concurrent_reservations } = body;
+    const { max_concurrent_reservations, business_hours, closed_days } = body;
 
-    if (!max_concurrent_reservations || max_concurrent_reservations < 1) {
+    // 最大同時予約数のバリデーション
+    if (max_concurrent_reservations !== undefined) {
+      if (!max_concurrent_reservations || max_concurrent_reservations < 1) {
+        return NextResponse.json(
+          { error: '最大同時予約数は1以上である必要があります' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 更新するカラムを動的に構築
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (max_concurrent_reservations !== undefined) {
+      updates.push(`max_concurrent_reservations = $${paramIndex}`);
+      values.push(max_concurrent_reservations);
+      paramIndex++;
+    }
+
+    if (business_hours !== undefined) {
+      updates.push(`business_hours = $${paramIndex}`);
+      values.push(JSON.stringify(business_hours));
+      paramIndex++;
+    }
+
+    if (closed_days !== undefined) {
+      updates.push(`closed_days = $${paramIndex}`);
+      values.push(JSON.stringify(closed_days));
+      paramIndex++;
+    }
+
+    if (updates.length === 0) {
       return NextResponse.json(
-        { error: '最大同時予約数は1以上である必要があります' },
+        { error: '更新する項目が指定されていません' },
         { status: 400 }
       );
     }
 
-    const result = await query(
-      'UPDATE tenants SET max_concurrent_reservations = $1 WHERE tenant_id = $2 RETURNING max_concurrent_reservations',
-      [max_concurrent_reservations, tenantId]
-    );
+    values.push(tenantId);
+    const queryText = `
+      UPDATE tenants 
+      SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = $${paramIndex}
+      RETURNING max_concurrent_reservations, business_hours, closed_days
+    `;
+
+    const result = await query(queryText, values);
 
     if (result.rows.length === 0) {
       return NextResponse.json(
@@ -75,8 +141,36 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const row = result.rows[0];
+    
+    // business_hoursとclosed_daysをパース
+    let businessHours = {};
+    let closedDays: number[] = [];
+    
+    try {
+      if (row.business_hours) {
+        businessHours = typeof row.business_hours === 'string' 
+          ? JSON.parse(row.business_hours) 
+          : row.business_hours;
+      }
+    } catch (e) {
+      console.error('business_hoursのパースエラー:', e);
+    }
+    
+    try {
+      if (row.closed_days) {
+        closedDays = typeof row.closed_days === 'string' 
+          ? JSON.parse(row.closed_days) 
+          : row.closed_days;
+      }
+    } catch (e) {
+      console.error('closed_daysのパースエラー:', e);
+    }
+
     return NextResponse.json({
-      max_concurrent_reservations: result.rows[0].max_concurrent_reservations
+      max_concurrent_reservations: row.max_concurrent_reservations,
+      business_hours: businessHours,
+      closed_days: Array.isArray(closedDays) ? closedDays : []
     });
   } catch (error: any) {
     console.error('設定更新エラー:', error);

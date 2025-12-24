@@ -22,7 +22,8 @@
     "sessions:migrate": "node scripts/migrate-sessions-table.js",
     "max-concurrent:migrate": "node scripts/migrate-max-concurrent-reservations.js",
     "staff-menus:migrate": "node scripts/migrate-staff-menus.js",
-    "reservation-menus:migrate": "node scripts/migrate-reservation-menus.js"
+    "reservation-menus:migrate": "node scripts/migrate-reservation-menus.js",
+    "business-hours:migrate": "node scripts/migrate-business-hours.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
