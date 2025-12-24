@@ -3,7 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Cog6ToothIcon } from '@heroicons/react/24/outline';
+import { 
+  Cog6ToothIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  XMarkIcon
+} from '@heroicons/react/24/outline';
+
+interface Staff {
+  staff_id: number;
+  name: string;
+  email: string | null;
+  phone_number: string | null;
+  working_hours: string | null;
+  created_date: string;
+}
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -12,9 +27,23 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  
+  // 従業員管理用のstate
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(true);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [staffFormData, setStaffFormData] = useState({
+    name: '',
+    email: '',
+    phone_number: '',
+    working_hours: ''
+  });
+  const [staffError, setStaffError] = useState('');
 
   useEffect(() => {
     loadSettings();
+    loadStaff();
   }, []);
 
   const loadSettings = async () => {
@@ -75,6 +104,123 @@ export default function SettingsPage() {
       setError('設定の保存に失敗しました');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // 従業員管理関数
+  const loadStaff = async () => {
+    try {
+      const response = await fetch('/api/admin/staff', {
+        credentials: 'include',
+      });
+
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setStaff(data);
+      }
+    } catch (error) {
+      console.error('スタッフ取得エラー:', error);
+      setStaffError('スタッフの取得に失敗しました');
+    } finally {
+      setLoadingStaff(false);
+    }
+  };
+
+  const handleOpenStaffModal = (staffMember?: Staff) => {
+    if (staffMember) {
+      setEditingStaff(staffMember);
+      setStaffFormData({
+        name: staffMember.name,
+        email: staffMember.email || '',
+        phone_number: staffMember.phone_number || '',
+        working_hours: staffMember.working_hours || ''
+      });
+    } else {
+      setEditingStaff(null);
+      setStaffFormData({
+        name: '',
+        email: '',
+        phone_number: '',
+        working_hours: ''
+      });
+    }
+    setStaffError('');
+    setShowStaffModal(true);
+  };
+
+  const handleCloseStaffModal = () => {
+    setShowStaffModal(false);
+    setEditingStaff(null);
+    setStaffFormData({
+      name: '',
+      email: '',
+      phone_number: '',
+      working_hours: ''
+    });
+    setStaffError('');
+  };
+
+  const handleStaffSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStaffError('');
+
+    try {
+      const url = editingStaff 
+        ? `/api/admin/staff/${editingStaff.staff_id}`
+        : '/api/admin/staff';
+      
+      const method = editingStaff ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: staffFormData.name,
+          email: staffFormData.email || null,
+          phone_number: staffFormData.phone_number || null,
+          working_hours: staffFormData.working_hours || null
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '保存に失敗しました');
+      }
+
+      handleCloseStaffModal();
+      loadStaff();
+    } catch (error: any) {
+      setStaffError(error.message || '保存に失敗しました');
+    }
+  };
+
+  const handleDeleteStaff = async (staffId: number) => {
+    if (!confirm('このスタッフを削除してもよろしいですか？')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/staff/${staffId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '削除に失敗しました');
+      }
+
+      loadStaff();
+    } catch (error: any) {
+      alert(error.message || '削除に失敗しました');
     }
   };
 
@@ -188,8 +334,187 @@ export default function SettingsPage() {
               </div>
             </form>
           </div>
+
+          {/* 従業員管理セクション */}
+          <div className="bg-white shadow rounded-lg p-6 mt-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center">
+                <Cog6ToothIcon className="h-6 w-6 text-pink-600 mr-2" />
+                <h2 className="text-2xl font-bold text-gray-900">従業員管理</h2>
+              </div>
+              <button
+                onClick={() => handleOpenStaffModal()}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                従業員を追加
+              </button>
+            </div>
+
+            {staffError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {staffError}
+              </div>
+            )}
+
+            <div className="bg-white shadow overflow-hidden sm:rounded-md">
+              <ul className="divide-y divide-gray-200">
+                {loadingStaff ? (
+                  <li className="px-6 py-4 text-center text-gray-500">
+                    読み込み中...
+                  </li>
+                ) : staff.length === 0 ? (
+                  <li className="px-6 py-4 text-center text-gray-500">
+                    従業員が登録されていません
+                  </li>
+                ) : (
+                  staff.map((staffMember) => (
+                    <li key={staffMember.staff_id} className="px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-medium text-gray-900">
+                            {staffMember.name}
+                          </h3>
+                          <div className="mt-2 flex items-center text-sm text-gray-500 space-x-4">
+                            {staffMember.email && (
+                              <span>{staffMember.email}</span>
+                            )}
+                            {staffMember.phone_number && (
+                              <span>{staffMember.phone_number}</span>
+                            )}
+                            {staffMember.working_hours && (
+                              <span>勤務時間: {staffMember.working_hours}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleOpenStaffModal(staffMember)}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                          >
+                            <PencilIcon className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteStaff(staffMember.staff_id)}
+                            className="p-2 text-gray-400 hover:text-red-600"
+                          >
+                            <TrashIcon className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* 従業員追加・編集モーダル */}
+      {showStaffModal && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseStaffModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {editingStaff ? '従業員を編集' : '従業員を追加'}
+                  </h3>
+                  <button
+                    onClick={handleCloseStaffModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                {staffError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                    {staffError}
+                  </div>
+                )}
+
+                <form onSubmit={handleStaffSubmit}>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="staff_name" className="block text-sm font-medium text-gray-700 mb-1">
+                        名前 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="staff_name"
+                        required
+                        value={staffFormData.name}
+                        onChange={(e) => setStaffFormData({ ...staffFormData, name: e.target.value })}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="staff_email" className="block text-sm font-medium text-gray-700 mb-1">
+                        メールアドレス
+                      </label>
+                      <input
+                        type="email"
+                        id="staff_email"
+                        value={staffFormData.email}
+                        onChange={(e) => setStaffFormData({ ...staffFormData, email: e.target.value })}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="staff_phone" className="block text-sm font-medium text-gray-700 mb-1">
+                        電話番号
+                      </label>
+                      <input
+                        type="tel"
+                        id="staff_phone"
+                        value={staffFormData.phone_number}
+                        onChange={(e) => setStaffFormData({ ...staffFormData, phone_number: e.target.value })}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="staff_working_hours" className="block text-sm font-medium text-gray-700 mb-1">
+                        勤務時間
+                      </label>
+                      <input
+                        type="text"
+                        id="staff_working_hours"
+                        placeholder="例: 10:00-19:00"
+                        value={staffFormData.working_hours}
+                        onChange={(e) => setStaffFormData({ ...staffFormData, working_hours: e.target.value })}
+                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                    <button
+                      type="submit"
+                      className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-pink-600 text-base font-medium text-white hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 sm:col-start-2 sm:text-sm"
+                    >
+                      {editingStaff ? '更新' : '追加'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseStaffModal}
+                      className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 sm:mt-0 sm:col-start-1 sm:text-sm"
+                    >
+                      キャンセル
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
