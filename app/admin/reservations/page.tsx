@@ -75,6 +75,7 @@ export default function ReservationManagement() {
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [loadingTimes, setLoadingTimes] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
+  const [showCancelled, setShowCancelled] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -418,7 +419,7 @@ export default function ReservationManagement() {
     const grouped: { [key: string]: Reservation[] } = {};
     
     reservations
-      .filter(r => r.status !== 'cancelled' || viewMode === 'timeline') // タイムラインではキャンセルも表示
+      .filter(r => showCancelled || r.status !== 'cancelled')
       .sort((a, b) => new Date(a.reservation_date).getTime() - new Date(b.reservation_date).getTime())
       .forEach(reservation => {
         const date = new Date(reservation.reservation_date);
@@ -435,6 +436,11 @@ export default function ReservationManagement() {
       });
     
     return grouped;
+  };
+
+  // リスト表示用：フィルタリングされた予約を取得
+  const getFilteredReservations = () => {
+    return reservations.filter(r => showCancelled || r.status !== 'cancelled');
   };
 
   // 時間をフォーマット（HH:MM）
@@ -546,8 +552,8 @@ export default function ReservationManagement() {
             </div>
           )}
 
-          {/* タブ */}
-          <div className="mb-4 border-b border-gray-200">
+          {/* タブとキャンセル表示切り替え */}
+          <div className="mb-4 flex justify-between items-center border-b border-gray-200">
             <nav className="-mb-px flex space-x-8">
               <button
                 onClick={() => setViewMode('list')}
@@ -570,17 +576,35 @@ export default function ReservationManagement() {
                 タイムライン表示
               </button>
             </nav>
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showCancelled}
+                onChange={(e) => setShowCancelled(e.target.checked)}
+                className="sr-only"
+              />
+              <div className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors ${
+                showCancelled ? 'bg-pink-600' : 'bg-gray-300'
+              }`}>
+                <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${
+                  showCancelled ? 'translate-x-6' : 'translate-x-1'
+                }`}></span>
+              </div>
+              <span className="ml-3 text-sm font-medium text-gray-700">
+                キャンセル分表示
+              </span>
+            </label>
           </div>
 
           {viewMode === 'list' ? (
             <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
-              {reservations.length === 0 ? (
+              {getFilteredReservations().length === 0 ? (
                 <li className="px-6 py-4 text-center text-gray-500">
                   予約が登録されていません
                 </li>
               ) : (
-                reservations.map((reservation) => (
+                getFilteredReservations().map((reservation) => (
                   <li key={reservation.reservation_id} className="px-6 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
