@@ -678,7 +678,7 @@ export default function ReservationManagement() {
           </div>
           ) : (
             <div className="bg-white shadow overflow-hidden sm:rounded-md">
-              {reservations.length === 0 ? (
+              {Object.keys(groupReservationsByDate()).length === 0 ? (
                 <div className="px-6 py-4 text-center text-gray-500">
                   予約が登録されていません
                 </div>
