@@ -9,15 +9,33 @@ if (require('fs').existsSync('.env.vercel')) {
 const { Client } = require('pg');
 
 async function migrateSessionsTable() {
-  const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  // POSTGRES_URLを優先（Supabaseの新しい形式）
+  let databaseUrl = process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING || process.env.DATABASE_URL;
   
   if (!databaseUrl) {
     console.error('❌ DATABASE_URL環境変数が設定されていません');
     process.exit(1);
   }
 
+  // 古い形式のURLを検出した場合はエラー
+  if (databaseUrl.includes('db.') && databaseUrl.includes('.supabase.co') && !databaseUrl.includes('pooler')) {
+    console.error('❌ 古い形式のデータベースURLが検出されました。POSTGRES_URLを使用してください。');
+    process.exit(1);
+  }
+
+  // postgres://をpostgresql://に変換
+  if (databaseUrl.startsWith('postgres://')) {
+    databaseUrl = databaseUrl.replace('postgres://', 'postgresql://');
+  }
+
+  // 接続文字列からsslmodeパラメータを削除
+  const urlObj = new URL(databaseUrl);
+  urlObj.searchParams.delete('sslmode');
+  urlObj.searchParams.delete('supa');
+  const cleanDatabaseUrl = urlObj.toString();
+
   const client = new Client({
-    connectionString: databaseUrl,
+    connectionString: cleanDatabaseUrl,
     ssl: {
       rejectUnauthorized: false
     }
@@ -36,6 +54,13 @@ async function migrateSessionsTable() {
 
     if (tableCheck.rows.length > 0) {
       console.log('✅ sessionsテーブルは既に存在します');
+      // カラムの確認
+      const columnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'sessions'
+      `);
+      console.log(`   カラム数: ${columnCheck.rows.length}`);
       await client.end();
       return;
     }
