@@ -1,0 +1,194 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { query } from '@/lib/db';
+import { getAuthFromRequest } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
+
+// 予約一覧取得（管理画面用）
+export async function GET(request: NextRequest) {
+  try {
+    const session = getAuthFromRequest(request);
+    if (!session) {
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
+
+    const tenantId = session.tenantId;
+    const searchParams = request.nextUrl.searchParams;
+    const date = searchParams.get('date');
+    const status = searchParams.get('status');
+
+    let queryText = `
+      SELECT 
+        r.reservation_id,
+        r.reservation_date,
+        r.status,
+        r.price,
+        r.notes,
+        r.created_date,
+        c.customer_id,
+        c.real_name as customer_name,
+        c.email as customer_email,
+        c.phone_number as customer_phone,
+        m.menu_id,
+        m.name as menu_name,
+        m.price as menu_price,
+        m.duration as menu_duration,
+        s.staff_id,
+        s.name as staff_name
+      FROM reservations r
+      LEFT JOIN customers c ON r.customer_id = c.customer_id
+      LEFT JOIN menus m ON r.menu_id = m.menu_id
+      LEFT JOIN staff s ON r.staff_id = s.staff_id
+      WHERE r.tenant_id = $1
+    `;
+    const params: any[] = [tenantId];
+
+    // 日付フィルタ
+    if (date) {
+      queryText += ` AND DATE(r.reservation_date) = $${params.length + 1}`;
+      params.push(date);
+    }
+
+    // ステータスフィルタ
+    if (status) {
+      queryText += ` AND r.status = $${params.length + 1}`;
+      params.push(status);
+    }
+
+    queryText += ' ORDER BY r.reservation_date DESC';
+
+    const result = await query(queryText, params);
+
+    return NextResponse.json(result.rows);
+  } catch (error: any) {
+    console.error('Error fetching reservations:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// 予約追加（管理画面用）
+export async function POST(request: NextRequest) {
+  try {
+    const session = getAuthFromRequest(request);
+    if (!session) {
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
+
+    const tenantId = session.tenantId;
+    const body = await request.json();
+    const { 
+      customer_id,
+      customer_name,
+      customer_email,
+      customer_phone,
+      menu_id,
+      staff_id,
+      reservation_date,
+      status = 'confirmed',
+      notes
+    } = body;
+
+    // バリデーション
+    if (!menu_id || !staff_id || !reservation_date) {
+      return NextResponse.json(
+        { error: 'メニュー、スタッフ、予約日時は必須です' },
+        { status: 400 }
+      );
+    }
+
+    // 顧客IDが指定されていない場合は、emailまたはphone_numberで顧客を検索、または新規作成
+    let actualCustomerId = customer_id;
+    
+    if (!actualCustomerId) {
+      if (customer_email || customer_phone) {
+        const customerQuery = customer_email
+          ? 'SELECT customer_id FROM customers WHERE email = $1 AND tenant_id = $2'
+          : 'SELECT customer_id FROM customers WHERE phone_number = $1 AND tenant_id = $2';
+        const customerParams = customer_email ? [customer_email, tenantId] : [customer_phone, tenantId];
+        const customerResult = await query(customerQuery, customerParams);
+        
+        if (customerResult.rows.length > 0) {
+          actualCustomerId = customerResult.rows[0].customer_id;
+        } else if (customer_name) {
+          // 顧客が存在しない場合は作成
+          const insertCustomerQuery = `
+            INSERT INTO customers (tenant_id, email, real_name, phone_number, registered_date) 
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+            RETURNING customer_id
+          `;
+          const newCustomerResult = await query(insertCustomerQuery, [
+            tenantId, customer_email || null, customer_name, customer_phone || null
+          ]);
+          actualCustomerId = newCustomerResult.rows[0].customer_id;
+        }
+      }
+    }
+
+    if (!actualCustomerId) {
+      return NextResponse.json(
+        { error: '顧客情報が必要です' },
+        { status: 400 }
+      );
+    }
+
+    // メニューの価格を取得
+    const menuResult = await query(
+      'SELECT price FROM menus WHERE menu_id = $1 AND tenant_id = $2',
+      [menu_id, tenantId]
+    );
+
+    if (menuResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'メニューが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    const price = menuResult.rows[0].price;
+
+    // 予約を作成
+    const result = await query(
+      `INSERT INTO reservations (
+        tenant_id, 
+        customer_id, 
+        staff_id, 
+        menu_id, 
+        reservation_date, 
+        status, 
+        price,
+        notes,
+        created_date
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      RETURNING *`,
+      [
+        tenantId,
+        actualCustomerId,
+        staff_id,
+        menu_id,
+        reservation_date,
+        status,
+        price,
+        notes || null
+      ]
+    );
+
+    return NextResponse.json(result.rows[0]);
+  } catch (error: any) {
+    console.error('Error creating reservation:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
