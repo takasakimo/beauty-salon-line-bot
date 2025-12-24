@@ -16,6 +16,7 @@ interface Menu {
   name: string;
   price: number;
   duration: number;
+  is_active?: boolean;
 }
 
 interface Staff {
