@@ -11,6 +11,13 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 
+interface Menu {
+  menu_id: number;
+  name: string;
+  price: number;
+  duration: number;
+}
+
 interface Staff {
   staff_id: number;
   name: string;
@@ -18,6 +25,7 @@ interface Staff {
   phone_number: string | null;
   working_hours: string | null;
   created_date: string;
+  available_menus?: Array<{ menu_id: number; name: string }>;
 }
 
 export default function SettingsPage() {
@@ -40,10 +48,13 @@ export default function SettingsPage() {
     working_hours: ''
   });
   const [staffError, setStaffError] = useState('');
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadSettings();
     loadStaff();
+    loadMenus();
   }, []);
 
   const loadSettings = async () => {
@@ -131,6 +142,21 @@ export default function SettingsPage() {
     }
   };
 
+  const loadMenus = async () => {
+    try {
+      const response = await fetch('/api/admin/menus', {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setMenus(data.filter((m: Menu) => m.is_active));
+      }
+    } catch (error) {
+      console.error('メニュー取得エラー:', error);
+    }
+  };
+
   const handleOpenStaffModal = (staffMember?: Staff) => {
     if (staffMember) {
       setEditingStaff(staffMember);
@@ -140,6 +166,9 @@ export default function SettingsPage() {
         phone_number: staffMember.phone_number || '',
         working_hours: staffMember.working_hours || ''
       });
+      // 対応可能メニューを設定
+      const menuIds = staffMember.available_menus?.map(m => m.menu_id) || [];
+      setSelectedMenuIds(menuIds);
     } else {
       setEditingStaff(null);
       setStaffFormData({
@@ -148,6 +177,7 @@ export default function SettingsPage() {
         phone_number: '',
         working_hours: ''
       });
+      setSelectedMenuIds([]);
     }
     setStaffError('');
     setShowStaffModal(true);
@@ -162,7 +192,16 @@ export default function SettingsPage() {
       phone_number: '',
       working_hours: ''
     });
+    setSelectedMenuIds([]);
     setStaffError('');
+  };
+
+  const handleMenuToggle = (menuId: number) => {
+    setSelectedMenuIds(prev => 
+      prev.includes(menuId)
+        ? prev.filter(id => id !== menuId)
+        : [...prev, menuId]
+    );
   };
 
   const handleStaffSubmit = async (e: React.FormEvent) => {
@@ -186,7 +225,8 @@ export default function SettingsPage() {
           name: staffFormData.name,
           email: staffFormData.email || null,
           phone_number: staffFormData.phone_number || null,
-          working_hours: staffFormData.working_hours || null
+          working_hours: staffFormData.working_hours || null,
+          menu_ids: selectedMenuIds
         }),
       });
 
@@ -491,6 +531,36 @@ export default function SettingsPage() {
                         onChange={(e) => setStaffFormData({ ...staffFormData, working_hours: e.target.value })}
                         className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        対応可能なメニュー
+                      </label>
+                      <div className="max-h-60 overflow-y-auto border border-gray-300 rounded-md p-3">
+                        {menus.length === 0 ? (
+                          <p className="text-sm text-gray-500">メニューが登録されていません</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {menus.map((menu) => (
+                              <label key={menu.menu_id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedMenuIds.includes(menu.menu_id)}
+                                  onChange={() => handleMenuToggle(menu.menu_id)}
+                                  className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                                />
+                                <span className="text-sm text-gray-700">
+                                  {menu.name} (¥{menu.price.toLocaleString()}, {menu.duration}分)
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        選択したメニューのみ、このスタッフが対応可能になります
+                      </p>
                     </div>
                   </div>
 

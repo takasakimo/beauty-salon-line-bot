@@ -21,7 +21,7 @@ function ReservationPageContent() {
   const router = useRouter();
   const tenantCode = searchParams.get('tenant') || 'beauty-salon-001';
 
-  const [step, setStep] = useState<'menu' | 'staff' | 'date' | 'time' | 'confirm' | 'complete'>('menu');
+  const [step, setStep] = useState<'staff' | 'menu' | 'date' | 'time' | 'confirm' | 'complete'>('staff');
   const [menus, setMenus] = useState<Menu[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [selectedMenu, setSelectedMenu] = useState<Menu | null>(null);
@@ -40,9 +40,14 @@ function ReservationPageContent() {
 
   useEffect(() => {
     checkAuth();
-    loadMenus();
     loadStaff();
   }, []);
+
+  useEffect(() => {
+    if (selectedStaff || step === 'menu') {
+      loadMenus();
+    }
+  }, [selectedStaff, step]);
 
   const checkAuth = async () => {
     try {
@@ -80,7 +85,10 @@ function ReservationPageContent() {
 
   const loadMenus = async () => {
     try {
-      const response = await fetch(`/api/menus?tenant=${tenantCode}`);
+      const url = selectedStaff 
+        ? `/api/menus?tenant=${tenantCode}&staff_id=${selectedStaff.staff_id}`
+        : `/api/menus?tenant=${tenantCode}`;
+      const response = await fetch(url);
       const data = await response.json();
       setMenus(data);
     } catch (error) {
@@ -112,13 +120,13 @@ function ReservationPageContent() {
     }
   };
 
-  const handleMenuSelect = (menu: Menu) => {
-    setSelectedMenu(menu);
-    setStep('staff');
-  };
-
   const handleStaffSelect = (staffMember: Staff | null) => {
     setSelectedStaff(staffMember);
+    setStep('menu');
+  };
+
+  const handleMenuSelect = (menu: Menu) => {
+    setSelectedMenu(menu);
     setStep('date');
   };
 
@@ -195,29 +203,12 @@ function ReservationPageContent() {
             予約フォーム
           </h1>
 
-          {step === 'menu' && (
-            <div>
-              <h2 className="text-xl font-semibold mb-6 text-gray-800">メニューを選択</h2>
-              <div className="grid grid-cols-1 gap-4">
-                {menus.map((menu) => (
-                  <button
-                    key={menu.menu_id}
-                    onClick={() => handleMenuSelect(menu)}
-                    className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
-                  >
-                    <h3 className="text-lg font-semibold mb-2 text-gray-900">{menu.name}</h3>
-                    <p className="text-gray-600 text-sm">
-                      ¥{menu.price.toLocaleString()} / {menu.duration}分
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {step === 'staff' && (
             <div>
               <h2 className="text-xl font-semibold mb-6 text-gray-800">スタッフを選択</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                スタッフを選択すると、そのスタッフが対応可能なメニューのみが表示されます
+              </p>
               <div className="grid grid-cols-1 gap-4">
                 {staff.map((staffMember) => (
                   <button
@@ -236,8 +227,43 @@ function ReservationPageContent() {
                   <p className="text-sm text-gray-600 mt-1">スタッフを指定しない場合はこちらを選択してください</p>
                 </button>
               </div>
+            </div>
+          )}
+
+          {step === 'menu' && (
+            <div>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">メニューを選択</h2>
+              {selectedStaff && (
+                <p className="text-sm text-gray-600 mb-4">
+                  {selectedStaff.name}が対応可能なメニューを表示しています
+                </p>
+              )}
+              {menus.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">
+                    {selectedStaff 
+                      ? `${selectedStaff.name}が対応可能なメニューがありません`
+                      : 'メニューが登録されていません'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {menus.map((menu) => (
+                    <button
+                      key={menu.menu_id}
+                      onClick={() => handleMenuSelect(menu)}
+                      className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
+                    >
+                      <h3 className="text-lg font-semibold mb-2 text-gray-900">{menu.name}</h3>
+                      <p className="text-gray-600 text-sm">
+                        ¥{menu.price.toLocaleString()} / {menu.duration}分
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
-                onClick={() => setStep('menu')}
+                onClick={() => setStep('staff')}
                 className="mt-4 text-gray-600 hover:text-gray-900 transition-colors flex items-center"
               >
                 <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

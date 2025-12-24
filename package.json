@@ -20,7 +20,8 @@
     "menus:seed": "node scripts/seed-menus.js",
     "menus:migrate": "node scripts/migrate-menus-is-active.js",
     "sessions:migrate": "node scripts/migrate-sessions-table.js",
-    "max-concurrent:migrate": "node scripts/migrate-max-concurrent-reservations.js"
+    "max-concurrent:migrate": "node scripts/migrate-max-concurrent-reservations.js",
+    "staff-menus:migrate": "node scripts/migrate-staff-menus.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

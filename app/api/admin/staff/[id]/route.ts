@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, getPool } from '@/lib/db';
 import { getAuthFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export async function PUT(
     const tenantId = session.tenantId;
     const staffId = parseInt(params.id);
     const body = await request.json();
-    const { name, email, phone_number, working_hours } = body;
+    const { name, email, phone_number, working_hours, menu_ids } = body;
 
     // バリデーション
     if (!name) {
@@ -31,29 +31,81 @@ export async function PUT(
       );
     }
 
-    const result = await query(
-      `UPDATE staff 
-       SET name = $1, email = $2, phone_number = $3, working_hours = $4
-       WHERE staff_id = $5 AND tenant_id = $6
-       RETURNING *`,
-      [
-        name,
-        email || null,
-        phone_number || null,
-        working_hours || null,
-        staffId,
-        tenantId
-      ]
-    );
+    // トランザクション開始
+    const pool = getPool();
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
 
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'スタッフが見つかりません' },
-        { status: 404 }
+      // スタッフ情報を更新
+      const result = await client.query(
+        `UPDATE staff 
+         SET name = $1, email = $2, phone_number = $3, working_hours = $4
+         WHERE staff_id = $5 AND tenant_id = $6
+         RETURNING *`,
+        [
+          name,
+          email || null,
+          phone_number || null,
+          working_hours || null,
+          staffId,
+          tenantId
+        ]
       );
-    }
 
-    return NextResponse.json(result.rows[0]);
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { error: 'スタッフが見つかりません' },
+          { status: 404 }
+        );
+      }
+
+      // 既存の対応可能メニューを削除
+      await client.query(
+        `DELETE FROM staff_menus WHERE staff_id = $1 AND tenant_id = $2`,
+        [staffId, tenantId]
+      );
+
+      // 新しい対応可能メニューを追加
+      if (menu_ids && Array.isArray(menu_ids) && menu_ids.length > 0) {
+        for (const menuId of menu_ids) {
+          await client.query(
+            `INSERT INTO staff_menus (staff_id, menu_id, tenant_id)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (staff_id, menu_id) DO NOTHING`,
+            [staffId, menuId, tenantId]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+
+      // スタッフ情報と対応可能メニューを取得
+      const staffResult = await query(
+        `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date,
+                COALESCE(
+                  json_agg(
+                    json_build_object('menu_id', m.menu_id, 'name', m.name)
+                  ) FILTER (WHERE m.menu_id IS NOT NULL),
+                  '[]'::json
+                ) as available_menus
+         FROM staff s
+         LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
+         LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
+         WHERE s.staff_id = $1
+         GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date`,
+        [staffId]
+      );
+
+      return NextResponse.json(staffResult.rows[0]);
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('Error updating staff:', error);
     return NextResponse.json(

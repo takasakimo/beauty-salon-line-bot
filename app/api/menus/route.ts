@@ -13,24 +13,39 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const queryText = `
-      SELECT menu_id, name, price, duration, description,
+    const searchParams = request.nextUrl.searchParams;
+    const staffId = searchParams.get('staff_id');
+
+    let queryText = `
+      SELECT m.menu_id, m.name, m.price, m.duration, m.description,
              CASE 
-               WHEN name LIKE '%カット%' AND name LIKE '%カラー%' THEN 'set'
-               WHEN name LIKE '%カット%' AND name LIKE '%パーマ%' THEN 'set'
-               WHEN name LIKE '%フルコース%' THEN 'special'
-               WHEN name LIKE '%カット%' THEN 'cut'
-               WHEN name LIKE '%カラー%' THEN 'color'
-               WHEN name LIKE '%パーマ%' THEN 'perm'
-               WHEN name LIKE '%トリートメント%' THEN 'treatment'
-               WHEN name LIKE '%ヘッドスパ%' THEN 'spa'
+               WHEN m.name LIKE '%カット%' AND m.name LIKE '%カラー%' THEN 'set'
+               WHEN m.name LIKE '%カット%' AND m.name LIKE '%パーマ%' THEN 'set'
+               WHEN m.name LIKE '%フルコース%' THEN 'special'
+               WHEN m.name LIKE '%カット%' THEN 'cut'
+               WHEN m.name LIKE '%カラー%' THEN 'color'
+               WHEN m.name LIKE '%パーマ%' THEN 'perm'
+               WHEN m.name LIKE '%トリートメント%' THEN 'treatment'
+               WHEN m.name LIKE '%ヘッドスパ%' THEN 'spa'
                ELSE 'other'
              END as category
-      FROM menus 
-      WHERE tenant_id = $1 
-      ORDER BY menu_id
+      FROM menus m
+      WHERE m.tenant_id = $1 AND m.is_active = true
     `;
-    const result = await query(queryText, [tenantId]);
+    const params: any[] = [tenantId];
+
+    // スタッフが指定されている場合、対応可能メニューのみを取得
+    if (staffId) {
+      queryText += ` AND EXISTS (
+        SELECT 1 FROM staff_menus sm 
+        WHERE sm.staff_id = $2 AND sm.menu_id = m.menu_id
+      )`;
+      params.push(parseInt(staffId));
+    }
+
+    queryText += ' ORDER BY m.menu_id';
+    
+    const result = await query(queryText, params);
     
     return NextResponse.json(result.rows);
   } catch (error: any) {

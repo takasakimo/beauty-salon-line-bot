@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server';
 let pool: Pool | null = null;
 
 // 接続プールの取得
-function getPool(): Pool {
+export function getPool(): Pool {
   if (!pool) {
     // すべての環境変数を確認
     const allEnvVars = {
