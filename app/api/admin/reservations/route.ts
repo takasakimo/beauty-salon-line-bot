@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       params.push(status);
     }
 
-    queryText += ' ORDER BY r.reservation_date DESC';
+    queryText += ' ORDER BY r.reservation_date ASC';
 
     const result = await query(queryText, params);
 
