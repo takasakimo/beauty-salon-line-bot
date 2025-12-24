@@ -469,8 +469,8 @@ export default function SettingsPage() {
           <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseStaffModal}></div>
 
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full max-h-[90vh] flex flex-col">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto flex-1">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">
                     {editingStaff ? '従業員を編集' : '従業員を追加'}
@@ -547,36 +547,49 @@ export default function SettingsPage() {
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        対応可能なメニュー
+                        対応可能なメニュー <span className="text-gray-500 font-normal">({menus.length}件)</span>
                       </label>
-                      <div className="max-h-60 overflow-y-auto border border-gray-300 rounded-md p-3">
-                        {menus.length === 0 ? (
+                      {menus.length === 0 ? (
+                        <div className="border border-gray-300 rounded-md p-4 text-center">
                           <p className="text-sm text-gray-500">メニューが登録されていません</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {menus.map((menu) => (
-                              <label key={menu.menu_id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedMenuIds.includes(menu.menu_id)}
-                                  onChange={() => handleMenuToggle(menu.menu_id)}
-                                  className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                                />
-                                <span className="text-sm text-gray-700">
-                                  {menu.name} (¥{menu.price.toLocaleString()}, {menu.duration}分)
-                                </span>
-                              </label>
-                            ))}
+                          <p className="text-xs text-gray-400 mt-1">まずメニュー管理からメニューを追加してください</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="max-h-64 overflow-y-auto border border-gray-300 rounded-md p-3 bg-gray-50">
+                            <div className="space-y-2">
+                              {menus.map((menu) => (
+                                <label 
+                                  key={menu.menu_id} 
+                                  className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedMenuIds.includes(menu.menu_id)}
+                                    onChange={() => handleMenuToggle(menu.menu_id)}
+                                    className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded flex-shrink-0"
+                                  />
+                                  <div className="flex-1">
+                                    <span className="text-sm font-medium text-gray-900 block">
+                                      {menu.name}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      ¥{menu.price.toLocaleString()} / {menu.duration}分
+                                    </span>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        選択したメニューのみ、このスタッフが対応可能になります
-                      </p>
+                          <p className="mt-2 text-xs text-gray-500">
+                            選択したメニューのみ、このスタッフが対応可能になります（{selectedMenuIds.length}件選択中）
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
 
-                  <div className="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+                  <div className="mt-6 pt-4 border-t border-gray-200 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
                     <button
                       type="submit"
                       className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-pink-600 text-base font-medium text-white hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 sm:col-start-2 sm:text-sm"
