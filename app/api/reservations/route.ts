@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, getTenantIdFromRequest } from '@/lib/db';
+import { query, getTenantIdFromRequest, getPool } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,10 +21,25 @@ export async function POST(request: NextRequest) {
       phone_number,
       customer_name,
       menu_id,
+      menu_ids,
       staff_id,
       reservation_date,
       status = 'confirmed'
     } = body;
+
+    // menu_idsが配列の場合はそれを使用、そうでなければmenu_idを配列に変換
+    const menuIds = menu_ids && Array.isArray(menu_ids) && menu_ids.length > 0
+      ? menu_ids
+      : menu_id
+        ? [menu_id]
+        : [];
+
+    if (menuIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'メニューが選択されていません' },
+        { status: 400 }
+      );
+    }
 
     // 顧客IDが指定されていない場合は、emailまたはphone_numberで顧客を検索
     let actualCustomerId = customer_id;
@@ -61,27 +76,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // メニューの価格を取得
+    // メニュー情報を取得（複数メニュー対応）
     const menuResult = await query(
-      'SELECT price FROM menus WHERE menu_id = $1 AND tenant_id = $2',
-      [menu_id, tenantId]
+      `SELECT menu_id, price, duration FROM menus 
+       WHERE menu_id = ANY($1::int[]) AND tenant_id = $2`,
+      [menuIds, tenantId]
     );
 
-    if (menuResult.rows.length === 0) {
+    if (menuResult.rows.length !== menuIds.length) {
       return NextResponse.json(
-        { success: false, error: 'メニューが見つかりません' },
+        { success: false, error: '一部のメニューが見つかりません' },
         { status: 404 }
       );
     }
 
-    const price = menuResult.rows[0].price;
-
-    // メニューの所要時間を取得
-    const menuDurationResult = await query(
-      'SELECT duration FROM menus WHERE menu_id = $1 AND tenant_id = $2',
-      [menu_id, tenantId]
-    );
-    const duration = menuDurationResult.rows[0]?.duration || 60;
+    // 合計金額と合計時間を計算
+    const totalPrice = menuResult.rows.reduce((sum, row) => sum + row.price, 0);
+    const totalDuration = menuResult.rows.reduce((sum, row) => sum + row.duration, 0);
 
     // 最大同時予約数を取得
     const tenantResult = await query(
@@ -92,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     // 予約日時を計算
     const reservationDateTime = new Date(reservation_date);
-    const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
+    const reservationEndTime = new Date(reservationDateTime.getTime() + totalDuration * 60000);
 
     // 同じ時間帯の既存予約数をカウント（スタッフ未指定の予約も含む）
     const concurrentCheck = await query(
@@ -127,27 +138,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 予約を作成
-    const insertQuery = `
-      INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-      RETURNING reservation_id
-    `;
-    const result = await query(insertQuery, [
-      tenantId,
-      actualCustomerId,
-      staff_id || null,
-      menu_id,
-      reservation_date,
-      status,
-      price
-    ]);
+    // トランザクション開始
+    const pool = getPool();
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
 
-    return NextResponse.json({
-      success: true,
-      data: result.rows[0],
-      message: '予約が完了しました'
-    });
+      // 予約を作成（menu_idは最初のメニューを設定、後でreservation_menusに全メニューを保存）
+      const insertQuery = `
+        INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        RETURNING reservation_id
+      `;
+      const result = await client.query(insertQuery, [
+        tenantId,
+        actualCustomerId,
+        staff_id || null,
+        menuIds[0], // 最初のメニューIDを設定（後方互換性のため）
+        reservation_date,
+        status,
+        totalPrice
+      ]);
+
+      const reservationId = result.rows[0].reservation_id;
+
+      // reservation_menusテーブルに全メニューを保存
+      try {
+        for (const menuRow of menuResult.rows) {
+          await client.query(
+            `INSERT INTO reservation_menus (reservation_id, menu_id, tenant_id, price)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (reservation_id, menu_id) DO NOTHING`,
+            [reservationId, menuRow.menu_id, tenantId, menuRow.price]
+          );
+        }
+      } catch (menuError: any) {
+        // reservation_menusテーブルが存在しない場合はスキップ（後方互換性）
+        if (menuError.message && menuError.message.includes('reservation_menus')) {
+          console.log('reservation_menusテーブルが存在しないため、メニュー関連の処理をスキップします');
+        } else {
+          throw menuError;
+        }
+      }
+
+      await client.query('COMMIT');
+
+      return NextResponse.json({
+        success: true,
+        data: { reservation_id: reservationId },
+        message: '予約が完了しました'
+      });
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('予約作成エラー:', error);
     return NextResponse.json(

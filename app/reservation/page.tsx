@@ -24,7 +24,7 @@ function ReservationPageContent() {
   const [step, setStep] = useState<'menu' | 'staff' | 'date' | 'time' | 'confirm' | 'complete'>('menu');
   const [menus, setMenus] = useState<Menu[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [selectedMenu, setSelectedMenu] = useState<Menu | null>(null);
+  const [selectedMenus, setSelectedMenus] = useState<Menu[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -44,10 +44,10 @@ function ReservationPageContent() {
   }, []);
 
   useEffect(() => {
-    if (selectedMenu) {
+    if (selectedMenus.length > 0) {
       loadStaff();
     }
-  }, [selectedMenu]);
+  }, [selectedMenus]);
 
   const checkAuth = async () => {
     try {
@@ -78,10 +78,10 @@ function ReservationPageContent() {
   };
 
   useEffect(() => {
-    if (selectedMenu && selectedDate) {
+    if (selectedMenus.length > 0 && selectedDate) {
       loadAvailableSlots();
     }
-  }, [selectedMenu, selectedDate]);
+  }, [selectedMenus, selectedDate]);
 
   const loadMenus = async () => {
     try {
@@ -95,8 +95,9 @@ function ReservationPageContent() {
 
   const loadStaff = async () => {
     try {
-      const url = selectedMenu
-        ? `/api/staff?tenant=${tenantCode}&menu_id=${selectedMenu.menu_id}`
+      // 複数メニューに対応可能なスタッフを取得（最初のメニューIDを使用）
+      const url = selectedMenus.length > 0
+        ? `/api/staff?tenant=${tenantCode}&menu_id=${selectedMenus[0].menu_id}`
         : `/api/staff?tenant=${tenantCode}`;
       const response = await fetch(url);
       const data = await response.json();
@@ -107,11 +108,15 @@ function ReservationPageContent() {
   };
 
   const loadAvailableSlots = async () => {
-    if (!selectedMenu || !selectedDate) return;
+    if (selectedMenus.length === 0 || !selectedDate) return;
     
     try {
+      // 最長のメニュー時間を使用して空き時間を取得
+      const maxDuration = Math.max(...selectedMenus.map(m => m.duration));
+      const longestMenu = selectedMenus.find(m => m.duration === maxDuration);
+      
       const response = await fetch(
-        `/api/reservations/available-slots?tenant=${tenantCode}&date=${selectedDate}&menu_id=${selectedMenu.menu_id}`
+        `/api/reservations/available-slots?tenant=${tenantCode}&date=${selectedDate}&menu_id=${longestMenu?.menu_id}&duration=${maxDuration}`
       );
       const data = await response.json();
       setAvailableSlots(data);
@@ -120,8 +125,22 @@ function ReservationPageContent() {
     }
   };
 
-  const handleMenuSelect = (menu: Menu) => {
-    setSelectedMenu(menu);
+  const handleMenuToggle = (menu: Menu) => {
+    setSelectedMenus(prev => {
+      const exists = prev.find(m => m.menu_id === menu.menu_id);
+      if (exists) {
+        return prev.filter(m => m.menu_id !== menu.menu_id);
+      } else {
+        return [...prev, menu];
+      }
+    });
+  };
+
+  const handleMenuSelect = () => {
+    if (selectedMenus.length === 0) {
+      alert('少なくとも1つのメニューを選択してください');
+      return;
+    }
     setStep('staff');
   };
 
@@ -141,7 +160,7 @@ function ReservationPageContent() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedMenu || !selectedDate || !selectedTime) return;
+    if (selectedMenus.length === 0 || !selectedDate || !selectedTime) return;
 
     setLoading(true);
     try {
@@ -159,7 +178,7 @@ function ReservationPageContent() {
           email: customer?.email || customerInfo.email,
           customer_name: customer?.real_name || customerInfo.name,
           phone_number: customer?.phone_number || customerInfo.phone,
-          menu_id: selectedMenu.menu_id,
+          menu_ids: selectedMenus.map(m => m.menu_id),
           staff_id: selectedStaff ? selectedStaff.staff_id : null,
           reservation_date: reservationDate.toISOString()
         })
@@ -206,25 +225,75 @@ function ReservationPageContent() {
           {step === 'menu' && (
             <div>
               <h2 className="text-xl font-semibold mb-6 text-gray-800">メニューを選択</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                複数のメニューを選択できます
+              </p>
               {menus.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-600">メニューが登録されていません</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {menus.map((menu) => (
-                    <button
-                      key={menu.menu_id}
-                      onClick={() => handleMenuSelect(menu)}
-                      className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
-                    >
-                      <h3 className="text-lg font-semibold mb-2 text-gray-900">{menu.name}</h3>
-                      <p className="text-gray-600 text-sm">
-                        ¥{menu.price.toLocaleString()} / {menu.duration}分
-                      </p>
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div className="grid grid-cols-1 gap-3 mb-6">
+                    {menus.map((menu) => {
+                      const isSelected = selectedMenus.some(m => m.menu_id === menu.menu_id);
+                      return (
+                        <label
+                          key={menu.menu_id}
+                          className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-pink-500 bg-pink-50 shadow-md'
+                              : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleMenuToggle(menu)}
+                            className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded mr-4 flex-shrink-0"
+                          />
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900">{menu.name}</h3>
+                            <p className="text-gray-600 text-sm">
+                              ¥{menu.price.toLocaleString()} / {menu.duration}分
+                            </p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedMenus.length > 0 && (
+                    <div className="bg-pink-50 border-2 border-pink-200 rounded-lg p-4 mb-4">
+                      <h3 className="font-semibold text-gray-900 mb-2">選択中のメニュー</h3>
+                      <div className="space-y-1 mb-3">
+                        {selectedMenus.map((menu) => (
+                          <div key={menu.menu_id} className="flex justify-between text-sm">
+                            <span className="text-gray-700">{menu.name}</span>
+                            <span className="text-gray-600">¥{menu.price.toLocaleString()} / {menu.duration}分</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t border-pink-200 pt-2 flex justify-between items-center">
+                        <span className="font-semibold text-gray-900">合計:</span>
+                        <div className="text-right">
+                          <div className="font-bold text-lg text-pink-600">
+                            ¥{selectedMenus.reduce((sum, m) => sum + m.price, 0).toLocaleString()}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {selectedMenus.reduce((sum, m) => sum + m.duration, 0)}分
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleMenuSelect}
+                    disabled={selectedMenus.length === 0}
+                    className="w-full px-6 py-3 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    次へ進む
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -232,16 +301,16 @@ function ReservationPageContent() {
           {step === 'staff' && (
             <div>
               <h2 className="text-xl font-semibold mb-6 text-gray-800">スタッフを選択</h2>
-              {selectedMenu && (
+              {selectedMenus.length > 0 && (
                 <p className="text-sm text-gray-600 mb-4">
-                  {selectedMenu.name}に対応可能なスタッフを表示しています
+                  {selectedMenus.map(m => m.name).join('、')}に対応可能なスタッフを表示しています
                 </p>
               )}
               {staff.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-600">
-                    {selectedMenu 
-                      ? `${selectedMenu.name}に対応可能なスタッフがありません`
+                    {selectedMenus.length > 0
+                      ? `${selectedMenus.map(m => m.name).join('、')}に対応可能なスタッフがありません`
                       : 'スタッフが登録されていません'}
                   </p>
                 </div>
@@ -343,9 +412,16 @@ function ReservationPageContent() {
               <h2 className="text-xl font-semibold mb-6 text-gray-800">予約内容の確認</h2>
               <div className="bg-gray-50 border border-gray-200 p-6 rounded-lg mb-6">
                 <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 font-medium">メニュー:</span>
-                    <span className="text-gray-900">{selectedMenu?.name}</span>
+                  <div>
+                    <span className="text-gray-600 font-medium block mb-2">メニュー:</span>
+                    <div className="space-y-1">
+                      {selectedMenus.map((menu) => (
+                        <div key={menu.menu_id} className="flex justify-between text-gray-900">
+                          <span>{menu.name}</span>
+                          <span>¥{menu.price.toLocaleString()} / {menu.duration}分</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 font-medium">スタッフ:</span>
@@ -355,9 +431,15 @@ function ReservationPageContent() {
                     <span className="text-gray-600 font-medium">日時:</span>
                     <span className="text-gray-900">{selectedDate} {selectedTime}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600 font-medium">合計時間:</span>
+                    <span className="text-gray-900">{selectedMenus.reduce((sum, m) => sum + m.duration, 0)}分</span>
+                  </div>
                   <div className="flex justify-between border-t border-gray-300 pt-3">
-                    <span className="text-gray-600 font-semibold">料金:</span>
-                    <span className="text-gray-900 font-semibold text-lg">¥{selectedMenu?.price.toLocaleString()}</span>
+                    <span className="text-gray-600 font-semibold">合計料金:</span>
+                    <span className="text-gray-900 font-semibold text-lg">
+                      ¥{selectedMenus.reduce((sum, m) => sum + m.price, 0).toLocaleString()}
+                    </span>
                   </div>
                 </div>
               </div>
