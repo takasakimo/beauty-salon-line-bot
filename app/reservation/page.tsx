@@ -117,7 +117,7 @@ function ReservationPageContent() {
     setStep('staff');
   };
 
-  const handleStaffSelect = (staffMember: Staff) => {
+  const handleStaffSelect = (staffMember: Staff | null) => {
     setSelectedStaff(staffMember);
     setStep('date');
   };
@@ -133,7 +133,7 @@ function ReservationPageContent() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedMenu || !selectedStaff || !selectedDate || !selectedTime) return;
+    if (!selectedMenu || !selectedDate || !selectedTime) return;
 
     setLoading(true);
     try {
@@ -152,7 +152,7 @@ function ReservationPageContent() {
           customer_name: customer?.real_name || customerInfo.name,
           phone_number: customer?.phone_number || customerInfo.phone,
           menu_id: selectedMenu.menu_id,
-          staff_id: selectedStaff.staff_id,
+          staff_id: selectedStaff ? selectedStaff.staff_id : null,
           reservation_date: reservationDate.toISOString()
         })
       });
@@ -228,6 +228,13 @@ function ReservationPageContent() {
                     <h3 className="text-lg font-semibold text-gray-900">{staffMember.name}</h3>
                   </button>
                 ))}
+                <button
+                  onClick={() => handleStaffSelect(null)}
+                  className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
+                >
+                  <h3 className="text-lg font-semibold text-gray-900">スタッフ選択なし</h3>
+                  <p className="text-sm text-gray-600 mt-1">スタッフを指定しない場合はこちらを選択してください</p>
+                </button>
               </div>
               <button
                 onClick={() => setStep('menu')}
@@ -313,7 +320,7 @@ function ReservationPageContent() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 font-medium">スタッフ:</span>
-                    <span className="text-gray-900">{selectedStaff?.name}</span>
+                    <span className="text-gray-900">{selectedStaff ? selectedStaff.name : 'スタッフ選択なし'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 font-medium">日時:</span>
