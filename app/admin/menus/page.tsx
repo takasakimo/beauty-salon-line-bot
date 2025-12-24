@@ -216,12 +216,14 @@ export default function MenuManagement() {
                 <Link
                   href="/admin/reservations"
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  prefetch={false}
                 >
                   予約管理
                 </Link>
                 <Link
                   href="/admin/customers"
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  prefetch={false}
                 >
                   顧客管理
                 </Link>
@@ -250,9 +252,19 @@ export default function MenuManagement() {
             </button>
           </div>
 
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
-              {menus.length === 0 ? (
+              {loading ? (
+                <li className="px-6 py-4 text-center text-gray-500">
+                  読み込み中...
+                </li>
+              ) : menus.length === 0 ? (
                 <li className="px-6 py-4 text-center text-gray-500">
                   メニューが登録されていません
                 </li>
