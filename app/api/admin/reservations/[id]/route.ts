@@ -53,10 +53,19 @@ export async function PUT(
     const price = menuResult.rows[0].price;
     const duration = menuResult.rows[0].duration;
 
+    // 最大同時予約数を取得
+    const tenantResult = await query(
+      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
+
+    // 予約日時を計算
+    const reservationDateTime = new Date(reservation_date);
+    const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
+
     // スタッフが指定されている場合、時間の重複チェック（自分自身を除く）
     if (staff_id) {
-      const reservationDateTime = new Date(reservation_date);
-      const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
 
       // 同じスタッフの既存予約をチェック（更新対象の予約を除く）
       const conflictCheck = await query(
