@@ -290,7 +290,7 @@ export async function authenticateCustomer(
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
     
-    // 顧客認証
+    // まず顧客テーブルで認証を試みる
     const customerResult = await query(
       `SELECT customer_id, real_name, email, phone_number 
        FROM customers 
@@ -298,11 +298,46 @@ export async function authenticateCustomer(
       [tenant.tenant_id, email, passwordHash]
     );
 
-    if (customerResult.rows.length === 0) {
-      return { success: false, error: 'ログイン失敗：メールアドレスまたはパスワードが正しくありません' };
+    let customer: any = null;
+    let isAdmin = false;
+
+    if (customerResult.rows.length > 0) {
+      // 顧客として見つかった
+      customer = customerResult.rows[0];
+    } else {
+      // 顧客として見つからない場合、管理者テーブルをチェック
+      // メールアドレスまたはユーザー名で検索
+      const adminResult = await query(
+        `SELECT admin_id, full_name, username, email, password_hash, is_active
+         FROM tenant_admins 
+         WHERE tenant_id = $1 
+         AND (email = $2 OR username = $2)
+         AND password_hash = $3`,
+        [tenant.tenant_id, email, passwordHash]
+      );
+
+      if (adminResult.rows.length > 0) {
+        const admin = adminResult.rows[0];
+        
+        if (!admin.is_active) {
+          return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
+        }
+
+        // 管理者情報を顧客情報として扱う
+        isAdmin = true;
+        customer = {
+          customer_id: null, // 管理者は顧客IDを持たない
+          real_name: admin.full_name || admin.username,
+          email: admin.email || admin.username,
+          phone_number: null,
+          admin_id: admin.admin_id // 管理者IDを保持
+        };
+      }
     }
 
-    const customer = customerResult.rows[0];
+    if (!customer) {
+      return { success: false, error: 'ログイン失敗：メールアドレスまたはパスワードが正しくありません' };
+    }
     
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
@@ -310,8 +345,10 @@ export async function authenticateCustomer(
     // セッション情報を保存（データベース）
     await setSession(sessionToken, {
       customerId: customer.customer_id,
+      adminId: customer.admin_id, // 管理者の場合はadminIdも保存
       tenantId: tenant.tenant_id,
-      email: email,
+      email: customer.email,
+      username: isAdmin ? customer.email : undefined,
       createdAt: Date.now()
     });
 
@@ -320,9 +357,11 @@ export async function authenticateCustomer(
       sessionToken,
       customer: {
         customerId: customer.customer_id,
+        adminId: customer.admin_id, // 管理者の場合はadminIdも返す
         realName: customer.real_name,
         email: customer.email,
-        phoneNumber: customer.phone_number
+        phoneNumber: customer.phone_number,
+        isAdmin: isAdmin
       },
       tenant: {
         tenantId: tenant.tenant_id,

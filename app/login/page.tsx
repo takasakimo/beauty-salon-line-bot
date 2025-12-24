@@ -30,13 +30,7 @@ function CustomerLoginContent() {
 
     // バリデーション
     if (!email || !password) {
-      setError('メールアドレスとパスワードを入力してください');
-      setLoading(false);
-      return;
-    }
-
-    if (!email.includes('@')) {
-      setError('有効なメールアドレスを入力してください');
+      setError('メールアドレスまたはユーザー名とパスワードを入力してください');
       setLoading(false);
       return;
     }
@@ -90,7 +84,7 @@ function CustomerLoginContent() {
             ログイン
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            メールアドレスとパスワードでログイン
+            メールアドレスまたはユーザー名とパスワードでログイン
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
@@ -121,7 +115,7 @@ function CustomerLoginContent() {
           <div className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                メールアドレス
+                メールアドレスまたはユーザー名
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -130,7 +124,7 @@ function CustomerLoginContent() {
                 <input
                   ref={emailInputRef}
                   id="email"
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => {
@@ -139,8 +133,8 @@ function CustomerLoginContent() {
                   }}
                   disabled={loading}
                   className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
-                  placeholder="example@email.com"
-                  autoComplete="email"
+                  placeholder="example@email.com または username"
+                  autoComplete="username"
                 />
               </div>
             </div>
