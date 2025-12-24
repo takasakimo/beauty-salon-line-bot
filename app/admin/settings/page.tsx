@@ -148,9 +148,18 @@ export default function SettingsPage() {
         credentials: 'include',
       });
 
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
-        setMenus(data.filter((m: Menu) => m.is_active));
+        const activeMenus = data.filter((m: Menu) => m.is_active);
+        setMenus(activeMenus);
+        console.log('メニュー読み込み完了:', activeMenus.length, '件');
+      } else {
+        console.error('メニュー取得エラー:', response.status);
       }
     } catch (error) {
       console.error('メニュー取得エラー:', error);
@@ -469,8 +478,8 @@ export default function SettingsPage() {
           <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseStaffModal}></div>
 
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full max-h-[90vh] flex flex-col">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 overflow-y-auto flex-1">
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[85vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">
                     {editingStaff ? '従業員を編集' : '従業員を追加'}
@@ -545,35 +554,42 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        対応可能なメニュー <span className="text-gray-500 font-normal">({menus.length}件)</span>
+                    <div className="border-t border-gray-200 pt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        対応可能なメニュー
+                        <span className="ml-2 text-gray-500 font-normal text-xs">
+                          ({menus.length}件のメニューから選択)
+                        </span>
                       </label>
-                      {menus.length === 0 ? (
+                      {loadingStaff ? (
                         <div className="border border-gray-300 rounded-md p-4 text-center">
-                          <p className="text-sm text-gray-500">メニューが登録されていません</p>
-                          <p className="text-xs text-gray-400 mt-1">まずメニュー管理からメニューを追加してください</p>
+                          <p className="text-sm text-gray-500">メニューを読み込み中...</p>
+                        </div>
+                      ) : menus.length === 0 ? (
+                        <div className="border border-gray-300 rounded-md p-4 text-center bg-yellow-50">
+                          <p className="text-sm text-gray-700 font-medium">メニューが登録されていません</p>
+                          <p className="text-xs text-gray-500 mt-1">まず「メニュー管理」からメニューを追加してください</p>
                         </div>
                       ) : (
                         <>
-                          <div className="max-h-64 overflow-y-auto border border-gray-300 rounded-md p-3 bg-gray-50">
-                            <div className="space-y-2">
+                          <div className="max-h-64 overflow-y-auto border-2 border-gray-300 rounded-md p-4 bg-white">
+                            <div className="space-y-3">
                               {menus.map((menu) => (
                                 <label 
                                   key={menu.menu_id} 
-                                  className="flex items-center space-x-3 cursor-pointer hover:bg-white p-2 rounded transition-colors"
+                                  className="flex items-start space-x-3 cursor-pointer hover:bg-pink-50 p-3 rounded-lg transition-colors border border-transparent hover:border-pink-200"
                                 >
                                   <input
                                     type="checkbox"
                                     checked={selectedMenuIds.includes(menu.menu_id)}
                                     onChange={() => handleMenuToggle(menu.menu_id)}
-                                    className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded flex-shrink-0"
+                                    className="mt-0.5 h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded flex-shrink-0"
                                   />
-                                  <div className="flex-1">
-                                    <span className="text-sm font-medium text-gray-900 block">
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-sm font-semibold text-gray-900 block">
                                       {menu.name}
                                     </span>
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-gray-600 mt-1 block">
                                       ¥{menu.price.toLocaleString()} / {menu.duration}分
                                     </span>
                                   </div>
@@ -581,8 +597,22 @@ export default function SettingsPage() {
                               ))}
                             </div>
                           </div>
-                          <p className="mt-2 text-xs text-gray-500">
-                            選択したメニューのみ、このスタッフが対応可能になります（{selectedMenuIds.length}件選択中）
+                          <div className="mt-3 flex items-center justify-between">
+                            <p className="text-xs text-gray-600">
+                              <span className="font-medium text-pink-600">{selectedMenuIds.length}件</span> 選択中
+                            </p>
+                            {selectedMenuIds.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMenuIds([])}
+                                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                              >
+                                すべて解除
+                              </button>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs text-gray-600 bg-blue-50 p-2 rounded border border-blue-100">
+                            選択したメニューのみ、このスタッフが対応可能になります。未選択のメニューは予約時にこのスタッフを選択できません。
                           </p>
                         </>
                       )}
