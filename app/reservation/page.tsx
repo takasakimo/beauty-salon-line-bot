@@ -376,12 +376,20 @@ function ReservationPageContent() {
               <p className="text-gray-600 mb-8">
                 ご予約ありがとうございます。当日お待ちしております。
               </p>
-              <button
-                onClick={() => router.push(`/?tenant=${tenantCode}`)}
-                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg"
-              >
-                ホームに戻る
-              </button>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => router.push(`/mypage?tenant=${tenantCode}`)}
+                  className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg"
+                >
+                  マイページへ
+                </button>
+                <button
+                  onClick={() => router.push(`/?tenant=${tenantCode}`)}
+                  className="px-6 py-3 bg-white border-2 border-pink-600 text-pink-600 rounded-lg hover:bg-pink-50 transition-colors"
+                >
+                  ホームに戻る
+                </button>
+              </div>
             </div>
           )}
         </div>
