@@ -6,10 +6,24 @@ import { useSearchParams, useRouter } from 'next/navigation';
 interface Reservation {
   reservation_id: number;
   reservation_date: string;
+  menu_id: number;
   menu_name: string;
-  staff_name: string;
+  staff_id: number | null;
+  staff_name: string | null;
   price: number;
   status: string;
+}
+
+interface Menu {
+  menu_id: number;
+  name: string;
+  price: number;
+  duration: number;
+}
+
+interface Staff {
+  staff_id: number;
+  name: string;
 }
 
 interface Customer {
@@ -30,6 +44,19 @@ function MyPageContent() {
   const [currentReservation, setCurrentReservation] = useState<Reservation | null>(null);
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    menu_id: '',
+    staff_id: '',
+    reservation_date: '',
+    reservation_time: ''
+  });
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     checkAuth();
@@ -91,8 +118,163 @@ function MyPageContent() {
       );
       const currentData = await currentResponse.json();
       setCurrentReservation(currentData);
+
+      // メニューとスタッフを取得
+      await Promise.all([loadMenus(), loadStaff()]);
     } catch (error) {
       console.error('データ取得エラー:', error);
+    }
+  };
+
+  const loadMenus = async () => {
+    try {
+      const response = await fetch(`/api/menus?tenant=${tenantCode}`);
+      const data = await response.json();
+      setMenus(data);
+    } catch (error) {
+      console.error('メニュー取得エラー:', error);
+    }
+  };
+
+  const loadStaff = async () => {
+    try {
+      const response = await fetch(`/api/staff?tenant=${tenantCode}`);
+      const data = await response.json();
+      setStaff(data);
+    } catch (error) {
+      console.error('スタッフ取得エラー:', error);
+    }
+  };
+
+  // 予約前日までかどうかをチェック
+  const canModifyReservation = (reservationDate: string): boolean => {
+    const date = new Date(reservationDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const reservationDateOnly = new Date(date);
+    reservationDateOnly.setHours(0, 0, 0, 0);
+    
+    const daysUntilReservation = Math.floor(
+      (reservationDateOnly.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    return daysUntilReservation >= 1 && daysUntilReservation > 0;
+  };
+
+  const handleCancel = async (reservationId: number) => {
+    if (!confirm('この予約をキャンセルしてもよろしいですか？')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/reservations/${reservationId}?tenant=${tenantCode}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('予約をキャンセルしました');
+        if (customerId) {
+          loadCustomerData(customerId);
+        }
+      } else {
+        alert(result.error || 'キャンセルに失敗しました');
+      }
+    } catch (error: any) {
+      console.error('キャンセルエラー:', error);
+      alert('キャンセル処理中にエラーが発生しました');
+    }
+  };
+
+  const handleEdit = (reservation: Reservation) => {
+    if (!canModifyReservation(reservation.reservation_date)) {
+      alert('予約前日までに変更してください');
+      return;
+    }
+
+    const dateTime = new Date(reservation.reservation_date);
+    const date = dateTime.toISOString().split('T')[0];
+    const time = dateTime.toTimeString().slice(0, 5);
+
+    setEditFormData({
+      menu_id: reservation.menu_id.toString(),
+      staff_id: reservation.staff_id ? reservation.staff_id.toString() : '',
+      reservation_date: date,
+      reservation_time: time
+    });
+    setEditingReservation(reservation);
+    setShowEditModal(true);
+    setError('');
+  };
+
+  const loadAvailableTimes = async () => {
+    if (!editFormData.menu_id || !editFormData.staff_id || !editFormData.reservation_date) {
+      setAvailableTimes([]);
+      return;
+    }
+
+    setLoadingTimes(true);
+    try {
+      const response = await fetch(
+        `/api/reservations/available-slots?date=${editFormData.reservation_date}&menu_id=${editFormData.menu_id}&staff_id=${editFormData.staff_id}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableTimes(data);
+      }
+    } catch (error) {
+      console.error('利用可能時間取得エラー:', error);
+      setAvailableTimes([]);
+    } finally {
+      setLoadingTimes(false);
+    }
+  };
+
+  useEffect(() => {
+    if (editFormData.menu_id && editFormData.staff_id && editFormData.reservation_date) {
+      loadAvailableTimes();
+    }
+  }, [editFormData.menu_id, editFormData.staff_id, editFormData.reservation_date]);
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!editingReservation) return;
+
+    try {
+      const reservationDateTime = `${editFormData.reservation_date}T${editFormData.reservation_time}:00`;
+
+      const response = await fetch(`/api/reservations/${editingReservation.reservation_id}?tenant=${tenantCode}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          menu_id: parseInt(editFormData.menu_id),
+          staff_id: editFormData.staff_id ? parseInt(editFormData.staff_id) : null,
+          reservation_date: new Date(reservationDateTime).toISOString()
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('予約を変更しました');
+        setShowEditModal(false);
+        setEditingReservation(null);
+        if (customerId) {
+          loadCustomerData(customerId);
+        }
+      } else {
+        setError(result.error || '変更に失敗しました');
+      }
+    } catch (error: any) {
+      console.error('変更エラー:', error);
+      setError('変更処理中にエラーが発生しました');
     }
   };
 
@@ -149,6 +331,22 @@ function MyPageContent() {
                 <p className="text-gray-700"><span className="font-medium">スタッフ:</span> {currentReservation.staff_name || 'スタッフ選択なし'}</p>
                 <p className="text-gray-700"><span className="font-medium">料金:</span> ¥{currentReservation.price.toLocaleString()}</p>
               </div>
+              {canModifyReservation(currentReservation.reservation_date) && (
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={() => handleEdit(currentReservation)}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    変更
+                  </button>
+                  <button
+                    onClick={() => handleCancel(currentReservation.reservation_id)}
+                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -158,14 +356,33 @@ function MyPageContent() {
               <p className="text-gray-600">予約履歴がありません</p>
             ) : (
               <div className="space-y-4">
-                {reservations.map((reservation) => (
-                  <div key={reservation.reservation_id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all">
-                    <p className="font-semibold text-gray-900 mb-1">{new Date(reservation.reservation_date).toLocaleString('ja-JP')}</p>
-                    <p className="text-gray-700 mb-1">{reservation.menu_name} - {reservation.staff_name || 'スタッフ選択なし'}</p>
-                    <p className="text-gray-900 font-medium mb-1">¥{reservation.price.toLocaleString()}</p>
-                    <p className="text-sm text-gray-500">ステータス: {reservation.status}</p>
-                  </div>
-                ))}
+                {reservations.map((reservation) => {
+                  const canModify = reservation.status === 'confirmed' && canModifyReservation(reservation.reservation_date);
+                  return (
+                    <div key={reservation.reservation_id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all">
+                      <p className="font-semibold text-gray-900 mb-1">{new Date(reservation.reservation_date).toLocaleString('ja-JP')}</p>
+                      <p className="text-gray-700 mb-1">{reservation.menu_name} - {reservation.staff_name || 'スタッフ選択なし'}</p>
+                      <p className="text-gray-900 font-medium mb-1">¥{reservation.price.toLocaleString()}</p>
+                      <p className="text-sm text-gray-500 mb-3">ステータス: {reservation.status === 'confirmed' ? '予約確定' : reservation.status === 'cancelled' ? 'キャンセル' : reservation.status}</p>
+                      {canModify && (
+                        <div className="flex gap-2 mt-3">
+                          <button
+                            onClick={() => handleEdit(reservation)}
+                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                          >
+                            変更
+                          </button>
+                          <button
+                            onClick={() => handleCancel(reservation.reservation_id)}
+                            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -186,6 +403,158 @@ function MyPageContent() {
           </div>
         </div>
       </div>
+
+      {/* 変更モーダル */}
+      {showEditModal && editingReservation && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowEditModal(false)}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">予約を変更</h3>
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {error && (
+                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                    {error}
+                  </div>
+                )}
+
+                <form onSubmit={handleUpdate}>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="edit_menu_id" className="block text-sm font-medium text-gray-700">
+                        メニュー <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="edit_menu_id"
+                        required
+                        value={editFormData.menu_id}
+                        onChange={(e) => {
+                          setEditFormData({ ...editFormData, menu_id: e.target.value, reservation_time: '' });
+                        }}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      >
+                        <option value="">選択してください</option>
+                        {menus.map((menu) => (
+                          <option key={menu.menu_id} value={menu.menu_id}>
+                            {menu.name} (¥{menu.price.toLocaleString()}, {menu.duration}分)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="edit_staff_id" className="block text-sm font-medium text-gray-700">
+                        スタッフ
+                      </label>
+                      <select
+                        id="edit_staff_id"
+                        value={editFormData.staff_id}
+                        onChange={(e) => {
+                          setEditFormData({ ...editFormData, staff_id: e.target.value, reservation_time: '' });
+                        }}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      >
+                        <option value="">スタッフ選択なし</option>
+                        {staff.map((s) => (
+                          <option key={s.staff_id} value={s.staff_id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="edit_reservation_date" className="block text-sm font-medium text-gray-700">
+                          予約日 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          id="edit_reservation_date"
+                          required
+                          value={editFormData.reservation_date}
+                          onChange={(e) => {
+                            setEditFormData({ ...editFormData, reservation_date: e.target.value, reservation_time: '' });
+                          }}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="edit_reservation_time" className="block text-sm font-medium text-gray-700">
+                          予約時間 <span className="text-red-500">*</span>
+                          {editFormData.menu_id && editFormData.staff_id && editFormData.reservation_date && (
+                            <span className="ml-2 text-xs text-gray-500">
+                              {loadingTimes ? '(読み込み中...)' : `(${availableTimes.length}件の空き時間)`}
+                            </span>
+                          )}
+                        </label>
+                        {editFormData.menu_id && editFormData.staff_id && editFormData.reservation_date ? (
+                          <select
+                            id="edit_reservation_time"
+                            required
+                            value={editFormData.reservation_time}
+                            onChange={(e) => setEditFormData({ ...editFormData, reservation_time: e.target.value })}
+                            disabled={loadingTimes || availableTimes.length === 0}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          >
+                            <option value="">
+                              {loadingTimes ? '読み込み中...' : availableTimes.length === 0 ? '利用可能な時間がありません' : '時間を選択'}
+                            </option>
+                            {availableTimes.map((time) => (
+                              <option key={time} value={time}>
+                                {time}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="time"
+                            id="edit_reservation_time"
+                            required
+                            value={editFormData.reservation_time}
+                            onChange={(e) => setEditFormData({ ...editFormData, reservation_time: e.target.value })}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                            disabled={!editFormData.menu_id || !editFormData.staff_id}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowEditModal(false)}
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700"
+                    >
+                      変更する
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
