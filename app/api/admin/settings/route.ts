@@ -109,6 +109,20 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // closed_daysカラムが存在するか事前にチェック
+    let closedDaysColumnExists = false;
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'tenants' AND column_name = 'closed_days'`
+      );
+      closedDaysColumnExists = columnCheck.rows.length > 0;
+    } catch (checkError: any) {
+      console.error('closed_daysカラムチェックエラー:', checkError);
+      // エラーが発生した場合は存在しないとみなす
+    }
+
     // 更新するカラムを動的に構築
     const updates: string[] = [];
     const values: any[] = [];
@@ -126,27 +140,13 @@ export async function PUT(request: NextRequest) {
       paramIndex++;
     }
 
-    // closed_daysカラムが存在するかチェックしてから更新
-    if (closed_days !== undefined) {
-      try {
-        // カラムの存在確認
-        const columnCheck = await query(
-          `SELECT column_name 
-           FROM information_schema.columns 
-           WHERE table_name = 'tenants' AND column_name = 'closed_days'`
-        );
-        
-        if (columnCheck.rows.length > 0) {
-          updates.push(`closed_days = $${paramIndex}`);
-          values.push(JSON.stringify(closed_days));
-          paramIndex++;
-        } else {
-          console.log('closed_daysカラムが存在しないため、スキップします');
-        }
-      } catch (checkError: any) {
-        console.error('closed_daysカラムチェックエラー:', checkError);
-        // エラーが発生しても続行
-      }
+    // closed_daysカラムが存在する場合のみ更新
+    if (closed_days !== undefined && closedDaysColumnExists) {
+      updates.push(`closed_days = $${paramIndex}`);
+      values.push(JSON.stringify(closed_days));
+      paramIndex++;
+    } else if (closed_days !== undefined && !closedDaysColumnExists) {
+      console.log('closed_daysカラムが存在しないため、スキップします');
     }
 
     if (updates.length === 0) {
@@ -157,11 +157,18 @@ export async function PUT(request: NextRequest) {
     }
 
     values.push(tenantId);
+    
+    // 返却するカラムを動的に構築
+    let returnColumns = 'max_concurrent_reservations, business_hours';
+    if (closedDaysColumnExists) {
+      returnColumns += ', closed_days';
+    }
+    
     const queryText = `
       UPDATE tenants 
       SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE tenant_id = $${paramIndex}
-      RETURNING max_concurrent_reservations, business_hours, closed_days
+      RETURNING ${returnColumns}
     `;
 
     const result = await query(queryText, values);
