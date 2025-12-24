@@ -3,13 +3,14 @@
 import { useState, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserIcon, EnvelopeIcon, PhoneIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { UserIcon, EnvelopeIcon, PhoneIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, BuildingStorefrontIcon } from '@heroicons/react/24/outline';
 
 function CustomerRegisterContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tenantCode = searchParams.get('tenant') || 'beauty-salon-001';
+  const defaultTenantCode = searchParams.get('tenant') || '';
   const [formData, setFormData] = useState({
+    tenantCode: defaultTenantCode,
     real_name: '',
     email: '',
     phone_number: '',
@@ -21,6 +22,8 @@ function CustomerRegisterContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [tenantInfo, setTenantInfo] = useState<{ name: string } | null>(null);
+  const [checkingTenant, setCheckingTenant] = useState(false);
 
   // パスワード強度の計算
   const calculatePasswordStrength = (password: string): number => {
@@ -37,11 +40,68 @@ function CustomerRegisterContent() {
     setPasswordStrength(calculatePasswordStrength(formData.password));
   }, [formData.password]);
 
+  // 店舗コードの確認
+  const checkTenantCode = async (code: string) => {
+    if (!code || code.trim() === '') {
+      setTenantInfo(null);
+      return;
+    }
+
+    setCheckingTenant(true);
+    try {
+      const response = await fetch('/api/tenants/check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ tenantCode: code.trim() }),
+      });
+
+      const result = await response.json();
+
+      if (result.exists) {
+        setTenantInfo({ name: result.tenant.salonName });
+        setError('');
+      } else {
+        setTenantInfo(null);
+        if (result.error) {
+          setError(result.error);
+        }
+      }
+    } catch (error) {
+      console.error('店舗コード確認エラー:', error);
+      setTenantInfo(null);
+    } finally {
+      setCheckingTenant(false);
+    }
+  };
+
+  // 店舗コードが変更されたら確認
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.tenantCode) {
+        checkTenantCode(formData.tenantCode);
+      }
+    }, 500); // デバウンス: 500ms待機
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.tenantCode]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     // バリデーション
+    if (!formData.tenantCode || formData.tenantCode.trim() === '') {
+      setError('店舗コードを入力してください');
+      return;
+    }
+
+    if (!tenantInfo) {
+      setError('有効な店舗コードを入力してください');
+      return;
+    }
+
     if (!formData.real_name || !formData.email || !formData.phone_number || !formData.password) {
       setError('すべての項目を入力してください');
       return;
@@ -69,9 +129,9 @@ function CustomerRegisterContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Tenant-Code': tenantCode
         },
         body: JSON.stringify({
+          tenantCode: formData.tenantCode.trim(),
           real_name: formData.real_name,
           email: formData.email,
           phone_number: formData.phone_number,
@@ -83,7 +143,7 @@ function CustomerRegisterContent() {
 
       if (result.success) {
         // 登録成功 - ログインページにリダイレクト
-        router.push(`/login?tenant=${tenantCode}&registered=true`);
+        router.push(`/login?tenant=${formData.tenantCode.trim()}&registered=true`);
       } else {
         setError(result.error || '登録に失敗しました');
       }
@@ -116,6 +176,49 @@ function CustomerRegisterContent() {
             </div>
           )}
           <div className="space-y-4">
+            <div>
+              <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700 mb-1">
+                店舗コード <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <BuildingStorefrontIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="tenantCode"
+                  type="text"
+                  required
+                  value={formData.tenantCode}
+                  onChange={(e) => {
+                    setFormData({ ...formData, tenantCode: e.target.value });
+                    setError('');
+                  }}
+                  disabled={loading}
+                  className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  placeholder="beauty-salon-001"
+                  autoComplete="off"
+                />
+                {checkingTenant && (
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <svg className="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                )}
+              </div>
+              {tenantInfo && (
+                <p className="mt-1 text-sm text-green-600 flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  {tenantInfo.name}
+                </p>
+              )}
+              {formData.tenantCode && !tenantInfo && !checkingTenant && (
+                <p className="mt-1 text-xs text-red-600">店舗コードが見つかりません</p>
+              )}
+            </div>
             <div>
               <label htmlFor="real_name" className="block text-sm font-medium text-gray-700 mb-1">
                 お名前
@@ -315,11 +418,11 @@ function CustomerRegisterContent() {
         <div className="text-center">
           <p className="text-sm text-gray-600">
             既にアカウントをお持ちの方は{' '}
-            <Link href={`/login?tenant=${tenantCode}`} className="text-pink-600 hover:text-pink-700 font-medium">
+            <Link href={`/login${formData.tenantCode ? `?tenant=${formData.tenantCode}` : ''}`} className="text-pink-600 hover:text-pink-700 font-medium">
               ログイン
             </Link>
           </p>
-          <Link href={`/?tenant=${tenantCode}`} className="text-sm text-gray-500 hover:text-gray-700 mt-2 inline-block">
+          <Link href={`/${formData.tenantCode ? `?tenant=${formData.tenantCode}` : ''}`} className="text-sm text-gray-500 hover:text-gray-700 mt-2 inline-block">
             ← ホームに戻る
           </Link>
         </div>

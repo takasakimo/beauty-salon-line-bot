@@ -6,16 +6,17 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const tenantId = await getTenantIdFromRequest(request);
+    const body = await request.json();
+    const { email, real_name, phone_number, password, tenantCode } = body;
+
+    // 店舗コードが指定されている場合はそれを使用、なければリクエストから取得
+    const tenantId = await getTenantIdFromRequest(request, tenantCode);
     if (!tenantId) {
       return NextResponse.json(
-        { success: false, error: 'テナントが見つかりません' },
+        { success: false, error: '店舗コードが見つかりません。正しい店舗コードを入力してください。' },
         { status: 400 }
       );
     }
-
-    const body = await request.json();
-    const { email, real_name, phone_number, password } = body;
 
     // 既存チェック（テナント別、emailまたはphone_numberで）
     const checkQuery = email

@@ -131,9 +131,10 @@ export async function query(text: string, params?: any[]) {
 }
 
 // テナントID取得ヘルパー
-export async function getTenantIdFromRequest(request: NextRequest): Promise<number | null> {
-  // ヘッダー、クエリパラメータ、ボディからテナントコードを取得
-  const tenantCode = request.headers.get('x-tenant-code') || 
+export async function getTenantIdFromRequest(request: NextRequest, tenantCodeFromBody?: string): Promise<number | null> {
+  // ボディ、ヘッダー、クエリパラメータ、デフォルト値の順でテナントコードを取得
+  const tenantCode = tenantCodeFromBody ||
+                    request.headers.get('x-tenant-code') || 
                     request.nextUrl.searchParams.get('tenant') || 
                     'beauty-salon-001';
   
