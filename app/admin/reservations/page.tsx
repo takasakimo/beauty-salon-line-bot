@@ -74,6 +74,7 @@ export default function ReservationManagement() {
   const [error, setError] = useState('');
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [loadingTimes, setLoadingTimes] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
 
   useEffect(() => {
     loadData();
@@ -412,6 +413,39 @@ export default function ReservationManagement() {
     }
   };
 
+  // タイムライン表示用：予約を日付ごとにグループ化
+  const groupReservationsByDate = () => {
+    const grouped: { [key: string]: Reservation[] } = {};
+    
+    reservations
+      .filter(r => r.status !== 'cancelled' || viewMode === 'timeline') // タイムラインではキャンセルも表示
+      .sort((a, b) => new Date(a.reservation_date).getTime() - new Date(b.reservation_date).getTime())
+      .forEach(reservation => {
+        const date = new Date(reservation.reservation_date);
+        const dateKey = date.toLocaleDateString('ja-JP', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        
+        if (!grouped[dateKey]) {
+          grouped[dateKey] = [];
+        }
+        grouped[dateKey].push(reservation);
+      });
+    
+    return grouped;
+  };
+
+  // 時間をフォーマット（HH:MM）
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   if (loading && reservations.length === 0) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -512,7 +546,34 @@ export default function ReservationManagement() {
             </div>
           )}
 
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
+          {/* タブ */}
+          <div className="mb-4 border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  viewMode === 'list'
+                    ? 'border-pink-500 text-pink-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                リスト表示
+              </button>
+              <button
+                onClick={() => setViewMode('timeline')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                  viewMode === 'timeline'
+                    ? 'border-pink-500 text-pink-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                タイムライン表示
+              </button>
+            </nav>
+          </div>
+
+          {viewMode === 'list' ? (
+            <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
               {reservations.length === 0 ? (
                 <li className="px-6 py-4 text-center text-gray-500">
@@ -591,6 +652,130 @@ export default function ReservationManagement() {
               )}
             </ul>
           </div>
+          ) : (
+            <div className="bg-white shadow overflow-hidden sm:rounded-md">
+              {reservations.length === 0 ? (
+                <div className="px-6 py-4 text-center text-gray-500">
+                  予約が登録されていません
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {Object.entries(groupReservationsByDate()).map(([dateKey, dateReservations]) => (
+                    <div key={dateKey} className="p-6">
+                      <div className="flex items-center mb-4 pb-2 border-b border-gray-200">
+                        <CalendarDaysIcon className="h-6 w-6 text-pink-600 mr-2" />
+                        <h3 className="text-xl font-semibold text-gray-900">{dateKey}</h3>
+                        <span className="ml-3 text-sm text-gray-500">
+                          ({dateReservations.length}件)
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {dateReservations.map((reservation) => {
+                          const reservationTime = new Date(reservation.reservation_date);
+                          const endTime = new Date(reservationTime.getTime() + (reservation.menu_duration || 60) * 60000);
+                          
+                          return (
+                            <div
+                              key={reservation.reservation_id}
+                              className={`relative pl-8 pb-4 border-l-2 ${
+                                reservation.status === 'cancelled'
+                                  ? 'border-gray-300'
+                                  : reservation.status === 'completed'
+                                  ? 'border-green-400'
+                                  : 'border-pink-400'
+                              }`}
+                            >
+                              {/* タイムラインのドット */}
+                              <div
+                                className={`absolute left-0 top-2 w-4 h-4 rounded-full border-2 border-white -ml-[9px] ${
+                                  reservation.status === 'cancelled'
+                                    ? 'bg-gray-300'
+                                    : reservation.status === 'completed'
+                                    ? 'bg-green-400'
+                                    : 'bg-pink-400'
+                                }`}
+                              ></div>
+                              
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center mb-2">
+                                    <span className="text-lg font-semibold text-gray-900 mr-3">
+                                      {formatTime(reservation.reservation_date)} - {formatTime(endTime.toISOString())}
+                                    </span>
+                                    <span className={`px-2 py-1 text-xs rounded ${getStatusColor(reservation.status)}`}>
+                                      {getStatusLabel(reservation.status)}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                                    <div className="flex items-center">
+                                      <span className="text-sm font-medium text-gray-700 w-20">顧客:</span>
+                                      <span className="text-sm text-gray-900">{reservation.customer_name}</span>
+                                      {reservation.customer_phone && (
+                                        <span className="text-sm text-gray-500 ml-2">({reservation.customer_phone})</span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center">
+                                      <span className="text-sm font-medium text-gray-700 w-20">メニュー:</span>
+                                      <span className="text-sm text-gray-900">
+                                        {reservation.menu_name} (¥{reservation.menu_price.toLocaleString()}, {reservation.menu_duration}分)
+                                      </span>
+                                    </div>
+                                    {reservation.staff_name && (
+                                      <div className="flex items-center">
+                                        <span className="text-sm font-medium text-gray-700 w-20">スタッフ:</span>
+                                        <span className="text-sm text-gray-900">{reservation.staff_name}</span>
+                                      </div>
+                                    )}
+                                    {reservation.notes && (
+                                      <div className="flex items-start pt-2 border-t border-gray-200">
+                                        <span className="text-sm font-medium text-gray-700 w-20">備考:</span>
+                                        <span className="text-sm text-gray-600">{reservation.notes}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                
+                                <div className="flex items-center space-x-2 ml-4">
+                                  {reservation.status !== 'cancelled' && (
+                                    <>
+                                      <select
+                                        value={reservation.status}
+                                        onChange={(e) => handleStatusChange(reservation.reservation_id, e.target.value)}
+                                        className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                      >
+                                        <option value="confirmed">予約確定</option>
+                                        <option value="completed">完了</option>
+                                        <option value="cancelled">キャンセル</option>
+                                      </select>
+                                      <button
+                                        onClick={() => handleOpenModal(reservation)}
+                                        className="p-2 text-gray-400 hover:text-gray-600"
+                                        title="編集"
+                                      >
+                                        <PencilIcon className="h-5 w-5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleCancel(reservation.reservation_id)}
+                                        className="p-2 text-gray-400 hover:text-red-600"
+                                        title="キャンセル"
+                                      >
+                                        <XMarkIcon className="h-5 w-5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
