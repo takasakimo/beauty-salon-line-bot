@@ -10,11 +10,19 @@ import {
   CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 
+interface MenuItem {
+  menu_id: number;
+  menu_name: string;
+  price: number;
+  duration: number;
+}
+
 interface Reservation {
   reservation_id: number;
   reservation_date: string;
   status: string;
   price: number;
+  total_price?: number;
   notes: string | null;
   created_date: string;
   customer_id: number;
@@ -25,6 +33,8 @@ interface Reservation {
   menu_name: string;
   menu_price: number;
   menu_duration: number;
+  menus?: MenuItem[];
+  total_duration?: number;
   staff_id: number;
   staff_name: string;
 }
@@ -635,10 +645,27 @@ export default function ReservationManagement() {
                             {reservation.customer_phone && ` (${reservation.customer_phone})`}
                           </div>
                           <div>
-                            <strong>メニュー:</strong> {reservation.menu_name} (¥{reservation.menu_price.toLocaleString()}, {reservation.menu_duration}分)
+                            <strong>メニュー:</strong> 
+                            {reservation.menus && reservation.menus.length > 1 ? (
+                              <div className="mt-1">
+                                {reservation.menus.map((menu, idx) => (
+                                  <div key={menu.menu_id} className="text-xs">
+                                    {idx > 0 && ' + '}
+                                    {menu.menu_name} (¥{menu.price.toLocaleString()}, {menu.duration}分)
+                                  </div>
+                                ))}
+                                <div className="mt-1 font-semibold text-gray-700">
+                                  合計: ¥{(reservation.total_price || reservation.price || 0).toLocaleString()} / {reservation.total_duration || reservation.menu_duration || 0}分
+                                </div>
+                              </div>
+                            ) : (
+                              <span>
+                                {reservation.menu_name} (¥{(reservation.total_price || reservation.menu_price || 0).toLocaleString()}, {reservation.total_duration || reservation.menu_duration || 0}分)
+                              </span>
+                            )}
                           </div>
                           <div>
-                            <strong>スタッフ:</strong> {reservation.staff_name}
+                            <strong>スタッフ:</strong> {reservation.staff_name || 'スタッフ選択なし'}
                           </div>
                           {reservation.notes && (
                             <div className="col-span-full text-gray-400">

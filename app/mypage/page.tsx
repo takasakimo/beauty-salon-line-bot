@@ -3,11 +3,21 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
+interface MenuItem {
+  menu_id: number;
+  menu_name: string;
+  price: number;
+  duration: number;
+}
+
 interface Reservation {
   reservation_id: number;
   reservation_date: string;
   menu_id: number;
   menu_name: string;
+  menus?: MenuItem[];
+  total_price?: number;
+  total_duration?: number;
   staff_id: number | null;
   staff_name: string | null;
   price: number;
@@ -327,9 +337,26 @@ function MyPageContent() {
               <h2 className="text-lg font-semibold mb-4 text-gray-900">現在の予約</h2>
               <div className="space-y-2 text-sm">
                 <p className="text-gray-700"><span className="font-medium">日時:</span> {new Date(currentReservation.reservation_date).toLocaleString('ja-JP')}</p>
-                <p className="text-gray-700"><span className="font-medium">メニュー:</span> {currentReservation.menu_name}</p>
+                <p className="text-gray-700">
+                  <span className="font-medium">メニュー:</span>
+                  {currentReservation.menus && currentReservation.menus.length > 1 ? (
+                    <div className="mt-1 ml-4">
+                      {currentReservation.menus.map((menu, idx) => (
+                        <div key={menu.menu_id}>
+                          {idx > 0 && ' + '}
+                          {menu.menu_name} (¥{menu.price.toLocaleString()}, {menu.duration}分)
+                        </div>
+                      ))}
+                      <div className="mt-1 font-semibold text-gray-900">
+                        合計: ¥{(currentReservation.total_price || currentReservation.price || 0).toLocaleString()} / {currentReservation.total_duration || 0}分
+                      </div>
+                    </div>
+                  ) : (
+                    <span> {currentReservation.menu_name}</span>
+                  )}
+                </p>
                 <p className="text-gray-700"><span className="font-medium">スタッフ:</span> {currentReservation.staff_name || 'スタッフ選択なし'}</p>
-                <p className="text-gray-700"><span className="font-medium">料金:</span> ¥{(currentReservation.price || 0).toLocaleString()}</p>
+                <p className="text-gray-700"><span className="font-medium">料金:</span> ¥{(currentReservation.total_price || currentReservation.price || 0).toLocaleString()}</p>
               </div>
               {canModifyReservation(currentReservation.reservation_date) && (
                 <div className="flex gap-2 mt-4">
@@ -361,8 +388,23 @@ function MyPageContent() {
                   return (
                     <div key={reservation.reservation_id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all">
                       <p className="font-semibold text-gray-900 mb-1">{new Date(reservation.reservation_date).toLocaleString('ja-JP')}</p>
-                      <p className="text-gray-700 mb-1">{reservation.menu_name} - {reservation.staff_name || 'スタッフ選択なし'}</p>
-                      <p className="text-gray-900 font-medium mb-1">¥{(reservation.price || 0).toLocaleString()}</p>
+                      <p className="text-gray-700 mb-1">
+                        {reservation.menus && reservation.menus.length > 1 ? (
+                          <div>
+                            {reservation.menus.map((menu, idx) => (
+                              <span key={menu.menu_id}>
+                                {idx > 0 && ' + '}
+                                {menu.menu_name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          reservation.menu_name
+                        )}
+                        {' - '}
+                        {reservation.staff_name || 'スタッフ選択なし'}
+                      </p>
+                      <p className="text-gray-900 font-medium mb-1">¥{(reservation.total_price || reservation.price || 0).toLocaleString()}</p>
                       <p className="text-sm text-gray-500 mb-3">ステータス: {reservation.status === 'confirmed' ? '予約確定' : reservation.status === 'cancelled' ? 'キャンセル' : reservation.status}</p>
                       {canModify && (
                         <div className="flex gap-2 mt-3">

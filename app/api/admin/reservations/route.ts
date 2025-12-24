@@ -37,11 +37,31 @@ export async function GET(request: NextRequest) {
         m.price as menu_price,
         m.duration as menu_duration,
         s.staff_id,
-        s.name as staff_name
+        s.name as staff_name,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'menu_id', rm_menu.menu_id,
+              'menu_name', rm_menu.name,
+              'price', rm.price,
+              'duration', rm_menu.duration
+            )
+          ) FILTER (WHERE rm.reservation_menu_id IS NOT NULL),
+          json_build_array(
+            json_build_object(
+              'menu_id', m.menu_id,
+              'menu_name', m.name,
+              'price', COALESCE(r.price, m.price),
+              'duration', m.duration
+            )
+          )
+        ) as menus
       FROM reservations r
       LEFT JOIN customers c ON r.customer_id = c.customer_id
       LEFT JOIN menus m ON r.menu_id = m.menu_id
       LEFT JOIN staff s ON r.staff_id = s.staff_id
+      LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
+      LEFT JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id
       WHERE r.tenant_id = $1
     `;
     const params: any[] = [tenantId];
@@ -58,11 +78,19 @@ export async function GET(request: NextRequest) {
       params.push(status);
     }
 
-    queryText += ' ORDER BY r.reservation_date ASC';
+    queryText += ' GROUP BY r.reservation_id, c.customer_id, c.real_name, c.email, c.phone_number, m.menu_id, m.name, m.price, m.duration, s.staff_id, s.name ORDER BY r.reservation_date ASC';
 
     const result = await query(queryText, params);
 
-    return NextResponse.json(result.rows);
+    // メニュー配列をパース
+    const reservations = result.rows.map((row: any) => ({
+      ...row,
+      menus: typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus,
+      total_price: Array.isArray(row.menus) ? row.menus.reduce((sum: number, m: any) => sum + (m.price || 0), 0) : (row.price || 0),
+      total_duration: Array.isArray(row.menus) ? row.menus.reduce((sum: number, m: any) => sum + (m.duration || 0), 0) : (row.menu_duration || 0)
+    }));
+
+    return NextResponse.json(reservations);
   } catch (error: any) {
     console.error('Error fetching reservations:', error);
     return NextResponse.json(

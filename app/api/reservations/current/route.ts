@@ -28,24 +28,90 @@ export async function GET(request: NextRequest) {
         COALESCE(r.price, m.price) as price,
         m.price as menu_price, 
         m.duration, 
-        s.name as staff_name
+        s.name as staff_name,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'menu_id', rm_menu.menu_id,
+              'menu_name', rm_menu.name,
+              'price', rm.price,
+              'duration', rm_menu.duration
+            )
+          ) FILTER (WHERE rm.reservation_menu_id IS NOT NULL),
+          json_build_array(
+            json_build_object(
+              'menu_id', m.menu_id,
+              'menu_name', m.name,
+              'price', COALESCE(r.price, m.price),
+              'duration', m.duration
+            )
+          )
+        ) as menus
       FROM reservations r
       JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
       LEFT JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
+      LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
+      LEFT JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id
       WHERE r.customer_id = $2 
       AND r.tenant_id = $1
       AND r.reservation_date > NOW()
       AND r.status = 'confirmed'
+      GROUP BY r.reservation_id, m.menu_id, m.name, m.price, m.duration, s.staff_id, s.name
       ORDER BY r.reservation_date ASC
       LIMIT 1
     `;
-    const result = await query(queryText, [tenantId, customerId]);
+    
+    let result;
+    try {
+      result = await query(queryText, [tenantId, customerId]);
+    } catch (error: any) {
+      // reservation_menusテーブルが存在しない場合はフォールバック
+      if (error.message && error.message.includes('reservation_menus')) {
+        const fallbackQuery = `
+          SELECT 
+            r.*, 
+            m.name as menu_name, 
+            COALESCE(r.price, m.price) as price,
+            m.price as menu_price, 
+            m.duration, 
+            s.name as staff_name,
+            json_build_array(
+              json_build_object(
+                'menu_id', m.menu_id,
+                'menu_name', m.name,
+                'price', COALESCE(r.price, m.price),
+                'duration', m.duration
+              )
+            ) as menus
+          FROM reservations r
+          JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
+          LEFT JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
+          WHERE r.customer_id = $2 
+          AND r.tenant_id = $1
+          AND r.reservation_date > NOW()
+          AND r.status = 'confirmed'
+          ORDER BY r.reservation_date ASC
+          LIMIT 1
+        `;
+        result = await query(fallbackQuery, [tenantId, customerId]);
+      } else {
+        throw error;
+      }
+    }
 
     if (result.rows.length === 0) {
       return NextResponse.json(null);
     }
 
-    return NextResponse.json(result.rows[0]);
+    const reservation = result.rows[0];
+    const menus = typeof reservation.menus === 'string' ? JSON.parse(reservation.menus) : reservation.menus;
+    
+    return NextResponse.json({
+      ...reservation,
+      menus,
+      total_price: Array.isArray(menus) ? menus.reduce((sum: number, m: any) => sum + (m.price || 0), 0) : (reservation.price || 0),
+      total_duration: Array.isArray(menus) ? menus.reduce((sum: number, m: any) => sum + (m.duration || 0), 0) : (reservation.duration || 0)
+    });
   } catch (error: any) {
     console.error('Error fetching current reservation:', error);
     return NextResponse.json(
