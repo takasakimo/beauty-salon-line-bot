@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       SELECT r.*, m.name as menu_name, m.price, m.duration, s.name as staff_name
       FROM reservations r
       JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
-      JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
+      LEFT JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
       WHERE r.customer_id = $2 AND r.tenant_id = $1
       ORDER BY r.reservation_date DESC
     `;

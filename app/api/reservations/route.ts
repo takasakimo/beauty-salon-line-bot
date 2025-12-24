@@ -61,19 +61,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // メニューの価格を取得
+    const menuResult = await query(
+      'SELECT price FROM menus WHERE menu_id = $1 AND tenant_id = $2',
+      [menu_id, tenantId]
+    );
+
+    if (menuResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'メニューが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    const price = menuResult.rows[0].price;
+
     // 予約を作成
     const insertQuery = `
-      INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, created_date)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
       RETURNING reservation_id
     `;
     const result = await query(insertQuery, [
       tenantId,
       actualCustomerId,
-      staff_id,
+      staff_id || null,
       menu_id,
       reservation_date,
-      status
+      status,
+      price
     ]);
 
     return NextResponse.json({
