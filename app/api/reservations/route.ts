@@ -76,6 +76,57 @@ export async function POST(request: NextRequest) {
 
     const price = menuResult.rows[0].price;
 
+    // メニューの所要時間を取得
+    const menuDurationResult = await query(
+      'SELECT duration FROM menus WHERE menu_id = $1 AND tenant_id = $2',
+      [menu_id, tenantId]
+    );
+    const duration = menuDurationResult.rows[0]?.duration || 60;
+
+    // 最大同時予約数を取得
+    const tenantResult = await query(
+      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
+
+    // 予約日時を計算
+    const reservationDateTime = new Date(reservation_date);
+    const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
+
+    // 同じ時間帯の既存予約数をカウント（スタッフ未指定の予約も含む）
+    const concurrentCheck = await query(
+      `SELECT 
+         r.reservation_date,
+         COALESCE(m.duration, 60) as duration
+       FROM reservations r
+       LEFT JOIN menus m ON r.menu_id = m.menu_id
+       WHERE r.tenant_id = $1
+       AND r.status = 'confirmed'
+       AND DATE(r.reservation_date) = DATE($2)`,
+      [tenantId, reservation_date]
+    );
+
+    // JavaScriptで時間帯の重複をチェック
+    let concurrentCount = 0;
+    concurrentCheck.rows.forEach((row: any) => {
+      const existingStart = new Date(row.reservation_date);
+      const existingDuration = row.duration || 60;
+      const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+      
+      // 時間帯が重複しているかチェック
+      if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+        concurrentCount++;
+      }
+    });
+
+    if (concurrentCount >= maxConcurrent) {
+      return NextResponse.json(
+        { success: false, error: `この時間帯は既に${maxConcurrent}件の予約が入っています。別の時間を選択してください。` },
+        { status: 400 }
+      );
+    }
+
     // 予約を作成
     const insertQuery = `
       INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)

@@ -84,6 +84,40 @@ export async function PUT(
           );
         }
       }
+    } else {
+      // スタッフ未指定の場合：最大同時予約数をチェック（更新対象の予約を除く）
+      const concurrentCheck = await query(
+        `SELECT 
+           r.reservation_date,
+           COALESCE(m.duration, 60) as duration
+         FROM reservations r
+         LEFT JOIN menus m ON r.menu_id = m.menu_id
+         WHERE r.tenant_id = $1
+         AND r.status = 'confirmed'
+         AND DATE(r.reservation_date) = DATE($2)
+         AND r.reservation_id != $3`,
+        [tenantId, reservation_date, reservationId]
+      );
+
+      // JavaScriptで時間帯の重複をチェック
+      let concurrentCount = 0;
+      concurrentCheck.rows.forEach((row: any) => {
+        const existingStart = new Date(row.reservation_date);
+        const existingDuration = row.duration || 60;
+        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+        
+        // 時間帯が重複しているかチェック
+        if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+          concurrentCount++;
+        }
+      });
+
+      if (concurrentCount >= maxConcurrent) {
+        return NextResponse.json(
+          { error: `この時間帯は既に${maxConcurrent}件の予約が入っています。別の時間を選択してください。` },
+          { status: 400 }
+        );
+      }
     }
 
     const result = await query(

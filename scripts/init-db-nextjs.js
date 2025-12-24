@@ -40,6 +40,7 @@ async function initDatabase() {
         postal_code VARCHAR(10),
         business_hours TEXT,
         subscription_plan VARCHAR(50) DEFAULT 'basic',
+        max_concurrent_reservations INTEGER DEFAULT 3,
         is_active BOOLEAN DEFAULT true,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

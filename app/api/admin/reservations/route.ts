@@ -121,6 +121,17 @@ export async function POST(request: NextRequest) {
     const price = menuResult.rows[0].price;
     const duration = menuResult.rows[0].duration;
 
+    // 最大同時予約数を取得
+    const tenantResult = await query(
+      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
+
+    // 予約日時を計算
+    const reservationDateTime = new Date(reservation_date);
+    const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
+
     // スタッフが指定されている場合、時間の重複チェック
     if (staff_id) {
       const reservationDateTime = new Date(reservation_date);
@@ -150,6 +161,39 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+      }
+    } else {
+      // スタッフ未指定の場合：最大同時予約数をチェック
+      const concurrentCheck = await query(
+        `SELECT 
+           r.reservation_date,
+           COALESCE(m.duration, 60) as duration
+         FROM reservations r
+         LEFT JOIN menus m ON r.menu_id = m.menu_id
+         WHERE r.tenant_id = $1
+         AND r.status = 'confirmed'
+         AND DATE(r.reservation_date) = DATE($2)`,
+        [tenantId, reservation_date]
+      );
+
+      // JavaScriptで時間帯の重複をチェック
+      let concurrentCount = 0;
+      concurrentCheck.rows.forEach((row: any) => {
+        const existingStart = new Date(row.reservation_date);
+        const existingDuration = row.duration || 60;
+        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+        
+        // 時間帯が重複しているかチェック
+        if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+          concurrentCount++;
+        }
+      });
+
+      if (concurrentCount >= maxConcurrent) {
+        return NextResponse.json(
+          { error: `この時間帯は既に${maxConcurrent}件の予約が入っています。別の時間を選択してください。` },
+          { status: 400 }
+        );
       }
     }
 

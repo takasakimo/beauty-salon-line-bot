@@ -36,6 +36,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 最大同時予約数を取得
+    const tenantResult = await query(
+      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
+
     // 営業時間のスロットを生成（10:00-19:00、30分間隔）
     const slots: string[] = [];
     for (let hour = 10; hour < 19; hour++) {
@@ -63,14 +70,16 @@ export async function GET(request: NextRequest) {
       `;
       queryParams = [date, tenantId, staffId];
     } else {
-      // スタッフ未指定の場合：全予約をチェック（従来の動作）
+      // スタッフ未指定の場合：全予約をチェック（メニューの所要時間も取得）
       queryText = `
         SELECT 
-          TO_CHAR(reservation_date, 'HH24:MI') as time
-        FROM reservations
-        WHERE DATE(reservation_date) = $1
-        AND status = 'confirmed'
-        AND tenant_id = $2
+          r.reservation_date,
+          m.duration
+        FROM reservations r
+        LEFT JOIN menus m ON r.menu_id = m.menu_id
+        WHERE DATE(r.reservation_date) = $1
+        AND r.status = 'confirmed'
+        AND r.tenant_id = $2
       `;
       queryParams = [date, tenantId];
     }
@@ -130,9 +139,30 @@ export async function GET(request: NextRequest) {
       
       unavailableSlots = newUnavailableSlots;
     } else {
-      // スタッフ未指定の場合：従来の動作（予約開始時間のみをチェック）
-      result.rows.forEach((row: any) => {
-        unavailableSlots.add(row.time);
+      // スタッフ未指定の場合：最大同時予約数を考慮
+      // 各スロットで、その時間帯の予約数をチェック
+      slots.forEach(slot => {
+        const [hour, minute] = slot.split(':').map(Number);
+        const slotDateTime = new Date(`${date}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`);
+        const slotEndTime = new Date(slotDateTime.getTime() + duration * 60000);
+        
+        // このスロットと時間帯が重複する予約をカウント
+        let count = 0;
+        result.rows.forEach((row: any) => {
+          const reservationDate = new Date(row.reservation_date);
+          const reservationDuration = row.duration || 60;
+          const reservationEnd = new Date(reservationDate.getTime() + reservationDuration * 60000);
+          
+          // 時間帯が重複しているかチェック
+          if (slotDateTime < reservationEnd && slotEndTime > reservationDate) {
+            count++;
+          }
+        });
+        
+        // 最大同時予約数を超えている場合は利用不可
+        if (count >= maxConcurrent) {
+          unavailableSlots.add(slot);
+        }
       });
     }
 

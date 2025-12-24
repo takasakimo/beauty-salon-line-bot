@@ -19,7 +19,8 @@
     "tenant:update": "node scripts/update-tenant-name.js",
     "menus:seed": "node scripts/seed-menus.js",
     "menus:migrate": "node scripts/migrate-menus-is-active.js",
-    "sessions:migrate": "node scripts/migrate-sessions-table.js"
+    "sessions:migrate": "node scripts/migrate-sessions-table.js",
+    "max-concurrent:migrate": "node scripts/migrate-max-concurrent-reservations.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
