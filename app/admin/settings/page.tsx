@@ -426,6 +426,18 @@ export default function SettingsPage() {
                               <span>勤務時間: {staffMember.working_hours}</span>
                             )}
                           </div>
+                          {staffMember.available_menus && staffMember.available_menus.length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-xs text-gray-500 mb-1">対応可能メニュー:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {staffMember.available_menus.map((menu: { menu_id: number; name: string }) => (
+                                  <span key={menu.menu_id} className="inline-block px-2 py-1 text-xs bg-pink-100 text-pink-800 rounded">
+                                    {menu.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center space-x-2">
                           <button

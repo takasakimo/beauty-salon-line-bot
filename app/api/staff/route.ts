@@ -13,8 +13,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const queryText = 'SELECT * FROM staff WHERE tenant_id = $1 ORDER BY staff_id';
-    const result = await query(queryText, [tenantId]);
+    const searchParams = request.nextUrl.searchParams;
+    const menuId = searchParams.get('menu_id');
+
+    let queryText = 'SELECT * FROM staff WHERE tenant_id = $1';
+    const params: any[] = [tenantId];
+
+    // メニューIDが指定されている場合、対応可能なスタッフのみを取得
+    if (menuId) {
+      queryText += ` AND EXISTS (
+        SELECT 1 FROM staff_menus sm 
+        WHERE sm.staff_id = staff.staff_id AND sm.menu_id = $2
+      )`;
+      params.push(parseInt(menuId));
+    }
+
+    queryText += ' ORDER BY staff_id';
+    
+    const result = await query(queryText, params);
     
     return NextResponse.json(result.rows);
   } catch (error: any) {
