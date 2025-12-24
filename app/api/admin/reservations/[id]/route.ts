@@ -30,16 +30,16 @@ export async function PUT(
     } = body;
 
     // バリデーション
-    if (!menu_id || !staff_id || !reservation_date) {
+    if (!menu_id || !reservation_date) {
       return NextResponse.json(
-        { error: 'メニュー、スタッフ、予約日時は必須です' },
+        { error: 'メニュー、予約日時は必須です' },
         { status: 400 }
       );
     }
 
-    // メニューの価格を取得
+    // メニュー情報を取得（価格と所要時間）
     const menuResult = await query(
-      'SELECT price FROM menus WHERE menu_id = $1 AND tenant_id = $2',
+      'SELECT price, duration FROM menus WHERE menu_id = $1 AND tenant_id = $2',
       [menu_id, tenantId]
     );
 
@@ -51,6 +51,40 @@ export async function PUT(
     }
 
     const price = menuResult.rows[0].price;
+    const duration = menuResult.rows[0].duration;
+
+    // スタッフが指定されている場合、時間の重複チェック（自分自身を除く）
+    if (staff_id) {
+      const reservationDateTime = new Date(reservation_date);
+      const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
+
+      // 同じスタッフの既存予約をチェック（更新対象の予約を除く）
+      const conflictCheck = await query(
+        `SELECT reservation_id, reservation_date, m.duration
+         FROM reservations r
+         LEFT JOIN menus m ON r.menu_id = m.menu_id
+         WHERE r.tenant_id = $1
+         AND r.staff_id = $2
+         AND r.status = 'confirmed'
+         AND DATE(r.reservation_date) = DATE($3)
+         AND r.reservation_id != $4`,
+        [tenantId, staff_id, reservation_date, reservationId]
+      );
+
+      for (const existingReservation of conflictCheck.rows) {
+        const existingStart = new Date(existingReservation.reservation_date);
+        const existingDuration = existingReservation.duration || 60;
+        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+
+        // 時間帯が重複しているかチェック
+        if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+          return NextResponse.json(
+            { error: `この時間帯は既に予約が入っています。既存予約: ${existingStart.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     const result = await query(
       `UPDATE reservations 

@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
 
     const date = request.nextUrl.searchParams.get('date');
     const menuId = request.nextUrl.searchParams.get('menu_id');
+    const staffId = request.nextUrl.searchParams.get('staff_id');
 
     if (!date) {
       return NextResponse.json(
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 営業時間のスロットを生成（10:00-19:00）
+    // 営業時間のスロットを生成（10:00-19:00、30分間隔）
     const slots: string[] = [];
     for (let hour = 10; hour < 19; hour++) {
       slots.push(`${hour.toString().padStart(2, '0')}:00`);
@@ -43,18 +44,100 @@ export async function GET(request: NextRequest) {
     }
 
     // 予約済みスロットを取得
-    const queryText = `
-      SELECT TO_CHAR(reservation_date, 'HH24:MI') as time
-      FROM reservations
-      WHERE DATE(reservation_date) = $1
-      AND status = 'confirmed'
-      AND tenant_id = $2
-    `;
-    const result = await query(queryText, [date, tenantId]);
-    const bookedSlots = result.rows.map((row: any) => row.time);
+    // スタッフが指定されている場合は、そのスタッフの予約のみをチェック
+    let queryText = '';
+    let queryParams: any[] = [];
+    
+    if (staffId) {
+      // スタッフ指定の場合：そのスタッフの予約と、メニューの所要時間を考慮
+      queryText = `
+        SELECT 
+          r.reservation_date,
+          m.duration
+        FROM reservations r
+        LEFT JOIN menus m ON r.menu_id = m.menu_id
+        WHERE DATE(r.reservation_date) = $1
+        AND r.status = 'confirmed'
+        AND r.tenant_id = $2
+        AND r.staff_id = $3
+      `;
+      queryParams = [date, tenantId, staffId];
+    } else {
+      // スタッフ未指定の場合：全予約をチェック（従来の動作）
+      queryText = `
+        SELECT 
+          TO_CHAR(reservation_date, 'HH24:MI') as time
+        FROM reservations
+        WHERE DATE(reservation_date) = $1
+        AND status = 'confirmed'
+        AND tenant_id = $2
+      `;
+      queryParams = [date, tenantId];
+    }
+
+    const result = await query(queryText, queryParams);
+    
+    let unavailableSlots: Set<string> = new Set();
+
+    if (staffId) {
+      // スタッフ指定の場合：各予約の開始時間から所要時間分を確保できない時間を計算
+      result.rows.forEach((row: any) => {
+        const reservationDate = new Date(row.reservation_date);
+        const reservationDuration = row.duration || 60; // デフォルト60分
+        
+        // 予約開始時間
+        const startHour = reservationDate.getHours();
+        const startMinute = reservationDate.getMinutes();
+        const startTime = startHour * 60 + startMinute; // 分単位
+        
+        // 予約終了時間（開始時間 + 所要時間）
+        const endTime = startTime + reservationDuration;
+        
+        // 予約時間帯に含まれるすべてのスロットを計算
+        for (let time = startTime; time < endTime; time += 30) {
+          const hour = Math.floor(time / 60);
+          const minute = time % 60;
+          const slot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+          unavailableSlots.add(slot);
+        }
+      });
+      
+      // 新しい予約の所要時間を考慮して、確保できない時間帯を計算
+      const newUnavailableSlots: Set<string> = new Set();
+      slots.forEach(slot => {
+        const [hour, minute] = slot.split(':').map(Number);
+        const slotTime = hour * 60 + minute;
+        const slotEndTime = slotTime + duration;
+        
+        // このスロットから開始した場合、既存予約と重複するかチェック
+        let hasConflict = false;
+        result.rows.forEach((row: any) => {
+          const reservationDate = new Date(row.reservation_date);
+          const reservationDuration = row.duration || 60;
+          const reservationStartTime = reservationDate.getHours() * 60 + reservationDate.getMinutes();
+          const reservationEndTime = reservationStartTime + reservationDuration;
+          
+          // 時間帯が重複しているかチェック
+          if (slotTime < reservationEndTime && slotEndTime > reservationStartTime) {
+            hasConflict = true;
+          }
+        });
+        
+        if (hasConflict) {
+          newUnavailableSlots.add(slot);
+        }
+      });
+      
+      unavailableSlots = newUnavailableSlots;
+    } else {
+      // スタッフ未指定の場合：従来の動作（予約開始時間のみをチェック）
+      result.rows.forEach((row: any) => {
+        unavailableSlots.add(row.time);
+      });
+    }
 
     // 空きスロットを返す
-    const availableSlots = slots.filter(slot => !bookedSlots.includes(slot));
+    const availableSlots = slots.filter(slot => !unavailableSlots.has(slot));
     
     return NextResponse.json(availableSlots);
   } catch (error: any) {

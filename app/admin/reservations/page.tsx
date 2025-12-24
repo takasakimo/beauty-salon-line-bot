@@ -72,6 +72,8 @@ export default function ReservationManagement() {
     notes: ''
   });
   const [error, setError] = useState('');
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [loadingTimes, setLoadingTimes] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -80,6 +82,15 @@ export default function ReservationManagement() {
   useEffect(() => {
     loadReservations();
   }, [filterDate, filterStatus]);
+
+  // スタッフ、メニュー、日付が選択されたら利用可能な時間を取得
+  useEffect(() => {
+    if (formData.staff_id && formData.menu_id && formData.reservation_date) {
+      loadAvailableTimes();
+    } else {
+      setAvailableTimes([]);
+    }
+  }, [formData.staff_id, formData.menu_id, formData.reservation_date]);
 
   const loadData = async () => {
     await Promise.all([
@@ -179,6 +190,36 @@ export default function ReservationManagement() {
       }
     } catch (error) {
       console.error('スタッフ取得エラー:', error);
+    }
+  };
+
+  const loadAvailableTimes = async () => {
+    if (!formData.staff_id || !formData.menu_id || !formData.reservation_date) {
+      setAvailableTimes([]);
+      return;
+    }
+
+    setLoadingTimes(true);
+    try {
+      const response = await fetch(
+        `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${formData.menu_id}&staff_id=${formData.staff_id}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableTimes(data);
+        // 利用可能な時間がない場合、選択されている時間をクリア
+        if (data.length === 0) {
+          setFormData({ ...formData, reservation_time: '' });
+        } else if (formData.reservation_time && !data.includes(formData.reservation_time)) {
+          // 選択されている時間が利用不可になった場合、最初の利用可能な時間を設定
+          setFormData({ ...formData, reservation_time: data[0] });
+        }
+      }
+    } catch (error) {
+      console.error('利用可能時間取得エラー:', error);
+      setAvailableTimes([]);
+    } finally {
+      setLoadingTimes(false);
     }
   };
 
@@ -655,7 +696,9 @@ export default function ReservationManagement() {
                           id="menu_id"
                           required
                           value={formData.menu_id}
-                          onChange={(e) => setFormData({ ...formData, menu_id: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, menu_id: e.target.value, reservation_time: '' });
+                          }}
                           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                         >
                           <option value="">選択してください</option>
@@ -673,12 +716,13 @@ export default function ReservationManagement() {
                         </label>
                         <select
                           id="staff_id"
-                          required
                           value={formData.staff_id}
-                          onChange={(e) => setFormData({ ...formData, staff_id: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, staff_id: e.target.value, reservation_time: '' });
+                          }}
                           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                         >
-                          <option value="">選択してください</option>
+                          <option value="">スタッフ選択なし</option>
                           {staff.map((s) => (
                             <option key={s.staff_id} value={s.staff_id}>
                               {s.name}
@@ -698,7 +742,9 @@ export default function ReservationManagement() {
                           id="reservation_date"
                           required
                           value={formData.reservation_date}
-                          onChange={(e) => setFormData({ ...formData, reservation_date: e.target.value })}
+                          onChange={(e) => {
+                            setFormData({ ...formData, reservation_date: e.target.value, reservation_time: '' });
+                          }}
                           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                         />
                       </div>
@@ -706,15 +752,47 @@ export default function ReservationManagement() {
                       <div>
                         <label htmlFor="reservation_time" className="block text-sm font-medium text-gray-700">
                           予約時間 <span className="text-red-500">*</span>
+                          {formData.staff_id && formData.menu_id && formData.reservation_date && (
+                            <span className="ml-2 text-xs text-gray-500">
+                              {loadingTimes ? '(読み込み中...)' : `(${availableTimes.length}件の空き時間)`}
+                            </span>
+                          )}
                         </label>
-                        <input
-                          type="time"
-                          id="reservation_time"
-                          required
-                          value={formData.reservation_time}
-                          onChange={(e) => setFormData({ ...formData, reservation_time: e.target.value })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                        />
+                        {formData.staff_id && formData.menu_id && formData.reservation_date ? (
+                          <select
+                            id="reservation_time"
+                            required
+                            value={formData.reservation_time}
+                            onChange={(e) => setFormData({ ...formData, reservation_time: e.target.value })}
+                            disabled={loadingTimes || availableTimes.length === 0}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                          >
+                            <option value="">
+                              {loadingTimes ? '読み込み中...' : availableTimes.length === 0 ? '利用可能な時間がありません' : '時間を選択'}
+                            </option>
+                            {availableTimes.map((time) => (
+                              <option key={time} value={time}>
+                                {time}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="time"
+                            id="reservation_time"
+                            required
+                            value={formData.reservation_time}
+                            onChange={(e) => setFormData({ ...formData, reservation_time: e.target.value })}
+                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                            placeholder="スタッフとメニューを選択してください"
+                            disabled={!formData.staff_id || !formData.menu_id}
+                          />
+                        )}
+                        {formData.staff_id && formData.menu_id && formData.reservation_date && availableTimes.length === 0 && !loadingTimes && (
+                          <p className="mt-1 text-sm text-red-600">
+                            この日は利用可能な時間がありません。別の日付を選択してください。
+                          </p>
+                        )}
                       </div>
                     </div>
 
