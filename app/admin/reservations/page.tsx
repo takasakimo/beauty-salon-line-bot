@@ -58,6 +58,231 @@ interface Staff {
   name: string;
 }
 
+// タイムスケジュール表示コンポーネント
+function TimelineScheduleView({ 
+  reservations, 
+  onEdit, 
+  onStatusChange, 
+  onCancel 
+}: { 
+  reservations: Reservation[];
+  onEdit: (reservation: Reservation) => void;
+  onStatusChange: (id: number, status: string) => void;
+  onCancel: (id: number) => void;
+}) {
+  // 時間をフォーマット（HH:MM）
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  // 1週間分の日付を生成（今日から7日後まで）
+  const getWeekDates = () => {
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      dates.push(date);
+    }
+    return dates;
+  };
+
+  const weekDates = getWeekDates();
+  
+  // 時間スロット（9:00-20:00、30分間隔）
+  const timeSlots: string[] = [];
+  for (let hour = 9; hour < 20; hour++) {
+    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
+    timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
+  }
+
+  // 日付をキーとして予約をグループ化
+  const reservationsByDate = weekDates.reduce((acc, date) => {
+    const dateKey = date.toISOString().split('T')[0];
+    acc[dateKey] = reservations.filter(r => {
+      const reservationDate = new Date(r.reservation_date).toISOString().split('T')[0];
+      return reservationDate === dateKey;
+    });
+    return acc;
+  }, {} as Record<string, Reservation[]>);
+
+  // 時間を分に変換
+  const timeToMinutes = (time: string) => {
+    const [hour, minute] = time.split(':').map(Number);
+    return hour * 60 + minute;
+  };
+
+  // 予約の開始時間と終了時間を取得
+  const getReservationTimeRange = (reservation: Reservation) => {
+    const start = new Date(reservation.reservation_date);
+    const startMinutes = start.getHours() * 60 + start.getMinutes();
+    const duration = reservation.total_duration || reservation.menu_duration || 60;
+    const endMinutes = startMinutes + duration;
+    return { startMinutes, endMinutes, start, duration };
+  };
+
+  // 予約の位置と高さを計算
+  const getReservationStyle = (reservation: Reservation) => {
+    const { startMinutes, duration } = getReservationTimeRange(reservation);
+    const slotHeight = 40; // 各時間スロットの高さ（px）
+    const minutesPerSlot = 30;
+    
+    const top = ((startMinutes - timeToMinutes('09:00')) / minutesPerSlot) * slotHeight;
+    const height = Math.max((duration / minutesPerSlot) * slotHeight, 60);
+    
+    return {
+      top: `${top}px`,
+      height: `${height}px`,
+      minHeight: '60px'
+    };
+  };
+
+  const formatDate = (date: Date) => {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const dayName = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+    return `${month}/${day}(${dayName})`;
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="inline-block min-w-full">
+        <div className="flex border-b border-gray-200">
+          {/* 時間列 */}
+          <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+            <div className="h-12 border-b border-gray-200"></div>
+            {timeSlots.map((time) => (
+              <div
+                key={time}
+                className="h-10 border-b border-gray-100 text-xs text-gray-600 px-2 flex items-center"
+                style={{ height: '40px' }}
+              >
+                {time}
+              </div>
+            ))}
+          </div>
+          
+          {/* 日付列 */}
+          {weekDates.map((date) => {
+            const dateKey = date.toISOString().split('T')[0];
+            const dayReservations = reservationsByDate[dateKey] || [];
+            
+            return (
+              <div
+                key={dateKey}
+                className="flex-1 min-w-[200px] border-r border-gray-200 relative"
+              >
+                {/* 日付ヘッダー */}
+                <div className="h-12 border-b border-gray-200 bg-gray-50 px-3 py-2 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CalendarDaysIcon className="h-4 w-4 text-pink-600 mr-1" />
+                    <span className="text-sm font-semibold text-gray-900">
+                      {formatDate(date)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    ({dayReservations.length}件)
+                  </span>
+                </div>
+                
+                {/* 時間スロット */}
+                <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
+                  {timeSlots.map((time) => (
+                    <div
+                      key={time}
+                      className="border-b border-gray-100"
+                      style={{ height: '40px' }}
+                    ></div>
+                  ))}
+                  
+                  {/* 予約ブロック */}
+                  {dayReservations.map((reservation) => {
+                    const style = getReservationStyle(reservation);
+                    const { start } = getReservationTimeRange(reservation);
+                    const isCancelled = reservation.status === 'cancelled';
+                    
+                    return (
+                      <div
+                        key={reservation.reservation_id}
+                        className={`absolute left-1 right-1 rounded p-2 shadow-sm border-l-4 ${
+                          isCancelled
+                            ? 'bg-gray-100 border-gray-300 opacity-60'
+                            : reservation.status === 'completed'
+                            ? 'bg-green-50 border-green-400'
+                            : 'bg-pink-50 border-pink-400'
+                        }`}
+                        style={style}
+                      >
+                        <div className="text-xs font-semibold text-gray-900 mb-1">
+                          {formatTime(reservation.reservation_date)}
+                        </div>
+                        <div className="text-xs text-gray-700 font-medium mb-1">
+                          {reservation.customer_name}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {reservation.menus && reservation.menus.length > 1 ? (
+                            <div>
+                              {reservation.menus.map((menu, idx) => (
+                                <div key={menu.menu_id}>
+                                  {idx > 0 && ' + '}
+                                  {menu.menu_name}
+                                </div>
+                              ))}
+                              <div className="mt-1 font-semibold">
+                                ¥{(reservation.total_price || reservation.price || 0).toLocaleString()}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              {reservation.menu_name}
+                              <div className="mt-1">
+                                ¥{(reservation.total_price || reservation.menu_price || reservation.price || 0).toLocaleString()}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {reservation.staff_name && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {reservation.staff_name}
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-1 mt-2">
+                          {!isCancelled && (
+                            <>
+                              <button
+                                onClick={() => onEdit(reservation)}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title="編集"
+                              >
+                                <PencilIcon className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => onCancel(reservation.reservation_id)}
+                                className="p-1 text-gray-400 hover:text-red-600"
+                                title="キャンセル"
+                              >
+                                <XMarkIcon className="h-3 w-3" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReservationManagement() {
   const router = useRouter();
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -716,120 +941,7 @@ export default function ReservationManagement() {
                   予約が登録されていません
                 </div>
               ) : (
-                <div className="divide-y divide-gray-200">
-                  {Object.entries(groupReservationsByDate()).map(([dateKey, dateReservations]) => (
-                    <div key={dateKey} className="p-6">
-                      <div className="flex items-center mb-4 pb-2 border-b border-gray-200">
-                        <CalendarDaysIcon className="h-6 w-6 text-pink-600 mr-2" />
-                        <h3 className="text-xl font-semibold text-gray-900">{dateKey}</h3>
-                        <span className="ml-3 text-sm text-gray-500">
-                          ({dateReservations.length}件)
-                        </span>
-                      </div>
-                      <div className="space-y-3">
-                        {dateReservations.map((reservation) => {
-                          const reservationTime = new Date(reservation.reservation_date);
-                          const endTime = new Date(reservationTime.getTime() + (reservation.menu_duration || 60) * 60000);
-                          
-                          return (
-                            <div
-                              key={reservation.reservation_id}
-                              className={`relative pl-8 pb-4 border-l-2 ${
-                                reservation.status === 'cancelled'
-                                  ? 'border-gray-300'
-                                  : reservation.status === 'completed'
-                                  ? 'border-green-400'
-                                  : 'border-pink-400'
-                              }`}
-                            >
-                              {/* タイムラインのドット */}
-                              <div
-                                className={`absolute left-0 top-2 w-4 h-4 rounded-full border-2 border-white -ml-[9px] ${
-                                  reservation.status === 'cancelled'
-                                    ? 'bg-gray-300'
-                                    : reservation.status === 'completed'
-                                    ? 'bg-green-400'
-                                    : 'bg-pink-400'
-                                }`}
-                              ></div>
-                              
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center mb-2">
-                                    <span className="text-lg font-semibold text-gray-900 mr-3">
-                                      {formatTime(reservation.reservation_date)} - {formatTime(endTime.toISOString())}
-                                    </span>
-                                    <span className={`px-2 py-1 text-xs rounded ${getStatusColor(reservation.status)}`}>
-                                      {getStatusLabel(reservation.status)}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                                    <div className="flex items-center">
-                                      <span className="text-sm font-medium text-gray-700 w-20">顧客:</span>
-                                      <span className="text-sm text-gray-900">{reservation.customer_name}</span>
-                                      {reservation.customer_phone && (
-                                        <span className="text-sm text-gray-500 ml-2">({reservation.customer_phone})</span>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center">
-                                      <span className="text-sm font-medium text-gray-700 w-20">メニュー:</span>
-                                      <span className="text-sm text-gray-900">
-                                        {reservation.menu_name} (¥{reservation.menu_price.toLocaleString()}, {reservation.menu_duration}分)
-                                      </span>
-                                    </div>
-                                    {reservation.staff_name && (
-                                      <div className="flex items-center">
-                                        <span className="text-sm font-medium text-gray-700 w-20">スタッフ:</span>
-                                        <span className="text-sm text-gray-900">{reservation.staff_name}</span>
-                                      </div>
-                                    )}
-                                    {reservation.notes && (
-                                      <div className="flex items-start pt-2 border-t border-gray-200">
-                                        <span className="text-sm font-medium text-gray-700 w-20">備考:</span>
-                                        <span className="text-sm text-gray-600">{reservation.notes}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                                
-                                <div className="flex items-center space-x-2 ml-4">
-                                  {reservation.status !== 'cancelled' && (
-                                    <>
-                                      <select
-                                        value={reservation.status}
-                                        onChange={(e) => handleStatusChange(reservation.reservation_id, e.target.value)}
-                                        className="text-xs px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                                      >
-                                        <option value="confirmed">予約確定</option>
-                                        <option value="completed">完了</option>
-                                        <option value="cancelled">キャンセル</option>
-                                      </select>
-                                      <button
-                                        onClick={() => handleOpenModal(reservation)}
-                                        className="p-2 text-gray-400 hover:text-gray-600"
-                                        title="編集"
-                                      >
-                                        <PencilIcon className="h-5 w-5" />
-                                      </button>
-                                      <button
-                                        onClick={() => handleCancel(reservation.reservation_id)}
-                                        className="p-2 text-gray-400 hover:text-red-600"
-                                        title="キャンセル"
-                                      >
-                                        <XMarkIcon className="h-5 w-5" />
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TimelineScheduleView reservations={getFilteredReservations()} onEdit={handleOpenModal} onStatusChange={handleStatusChange} onCancel={handleCancel} />
               )}
             </div>
           )}
