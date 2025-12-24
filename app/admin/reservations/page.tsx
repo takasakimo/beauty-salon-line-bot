@@ -132,10 +132,15 @@ export default function ReservationManagement() {
     try {
       const response = await fetch('/api/admin/customers', {
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       if (response.ok) {
         const data = await response.json();
         setCustomers(data);
+      } else if (response.status === 401) {
+        router.push('/admin/login');
       }
     } catch (error) {
       console.error('顧客取得エラー:', error);
@@ -144,12 +149,18 @@ export default function ReservationManagement() {
 
   const loadMenus = async () => {
     try {
-      const response = await fetch('/api/menus?tenant=beauty-salon-001', {
+      // 管理画面用のメニューAPIを使用
+      const response = await fetch('/api/admin/menus', {
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       if (response.ok) {
         const data = await response.json();
         setMenus(data);
+      } else if (response.status === 401) {
+        router.push('/admin/login');
       }
     } catch (error) {
       console.error('メニュー取得エラー:', error);
@@ -158,6 +169,7 @@ export default function ReservationManagement() {
 
   const loadStaff = async () => {
     try {
+      // 顧客向けAPIを使用（認証不要）
       const response = await fetch('/api/staff?tenant=beauty-salon-001', {
         credentials: 'include',
       });
