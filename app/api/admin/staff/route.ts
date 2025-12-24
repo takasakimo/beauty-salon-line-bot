@@ -17,28 +17,47 @@ export async function GET(request: NextRequest) {
 
     const tenantId = session.tenantId;
 
-    const result = await query(
-      `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date,
-              COALESCE(
-                json_agg(
-                  json_build_object('menu_id', m.menu_id, 'name', m.name)
-                ) FILTER (WHERE m.menu_id IS NOT NULL),
-                '[]'::json
-              ) as available_menus
-       FROM staff s
-       LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
-       LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
-       WHERE s.tenant_id = $1 
-       GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date
-       ORDER BY s.staff_id`,
-      [tenantId]
-    );
+    // staff_menusテーブルが存在するかチェック
+    let result;
+    try {
+      result = await query(
+        `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date,
+                COALESCE(
+                  json_agg(
+                    json_build_object('menu_id', m.menu_id, 'name', m.name)
+                  ) FILTER (WHERE m.menu_id IS NOT NULL),
+                  '[]'::json
+                ) as available_menus
+         FROM staff s
+         LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
+         LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
+         WHERE s.tenant_id = $1 
+         GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date
+         ORDER BY s.staff_id`,
+        [tenantId]
+      );
+    } catch (joinError: any) {
+      // staff_menusテーブルが存在しない場合は、シンプルなクエリを使用
+      if (joinError.message && joinError.message.includes('staff_menus')) {
+        console.log('staff_menusテーブルが存在しないため、シンプルなクエリを使用します');
+        result = await query(
+          `SELECT staff_id, name, email, phone_number, working_hours, created_date,
+                  '[]'::json as available_menus
+           FROM staff
+           WHERE tenant_id = $1 
+           ORDER BY staff_id`,
+          [tenantId]
+        );
+      } else {
+        throw joinError;
+      }
+    }
 
     return NextResponse.json(result.rows);
   } catch (error: any) {
     console.error('Error fetching staff:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: error.message },
       { status: 500 }
     );
   }
