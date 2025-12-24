@@ -329,7 +329,7 @@ function MyPageContent() {
                 <p className="text-gray-700"><span className="font-medium">日時:</span> {new Date(currentReservation.reservation_date).toLocaleString('ja-JP')}</p>
                 <p className="text-gray-700"><span className="font-medium">メニュー:</span> {currentReservation.menu_name}</p>
                 <p className="text-gray-700"><span className="font-medium">スタッフ:</span> {currentReservation.staff_name || 'スタッフ選択なし'}</p>
-                <p className="text-gray-700"><span className="font-medium">料金:</span> ¥{currentReservation.price.toLocaleString()}</p>
+                <p className="text-gray-700"><span className="font-medium">料金:</span> ¥{(currentReservation.price || 0).toLocaleString()}</p>
               </div>
               {canModifyReservation(currentReservation.reservation_date) && (
                 <div className="flex gap-2 mt-4">
@@ -362,7 +362,7 @@ function MyPageContent() {
                     <div key={reservation.reservation_id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all">
                       <p className="font-semibold text-gray-900 mb-1">{new Date(reservation.reservation_date).toLocaleString('ja-JP')}</p>
                       <p className="text-gray-700 mb-1">{reservation.menu_name} - {reservation.staff_name || 'スタッフ選択なし'}</p>
-                      <p className="text-gray-900 font-medium mb-1">¥{reservation.price.toLocaleString()}</p>
+                      <p className="text-gray-900 font-medium mb-1">¥{(reservation.price || 0).toLocaleString()}</p>
                       <p className="text-sm text-gray-500 mb-3">ステータス: {reservation.status === 'confirmed' ? '予約確定' : reservation.status === 'cancelled' ? 'キャンセル' : reservation.status}</p>
                       {canModify && (
                         <div className="flex gap-2 mt-3">
