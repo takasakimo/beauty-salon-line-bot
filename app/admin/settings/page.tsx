@@ -72,6 +72,18 @@ export default function SettingsPage() {
   const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
 
   useEffect(() => {
+    // スーパー管理者の場合、tenantIdがURLに含まれているか確認
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenantId = urlParams.get('tenantId');
+      
+      if (!tenantId) {
+        // tenantIdがない場合、スーパー管理者の可能性があるので警告を表示
+        console.warn('警告: URLにtenantIdが含まれていません。スーパー管理者の場合は、店舗詳細ページから「店舗管理画面を開く」ボタンをクリックしてアクセスしてください。');
+        setError('店舗IDが指定されていません。スーパー管理者の場合は、店舗詳細ページから「店舗管理画面を開く」ボタンをクリックしてアクセスしてください。');
+      }
+    }
+    
     loadSettings();
     loadStaff();
     loadMenus();
