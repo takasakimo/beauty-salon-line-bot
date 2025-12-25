@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +18,13 @@ export async function PUT(
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const menuId = parseInt(params.id);
     const body = await request.json();
     const { name, price, duration, description, is_active } = body;
@@ -78,7 +84,13 @@ export async function DELETE(
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const menuId = parseInt(params.id);
 
     // 予約に使用されているメニューは削除できない（is_activeをfalseにする）
