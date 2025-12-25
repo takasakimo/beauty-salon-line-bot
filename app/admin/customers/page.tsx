@@ -4,12 +4,15 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
+import { QRCodeSVG } from 'qrcode.react';
 import { 
   PlusIcon,
   PencilIcon,
   TrashIcon,
   XMarkIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  QrCodeIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 
 interface Customer {
@@ -41,10 +44,82 @@ export default function CustomerManagement() {
     preferences: ''
   });
   const [error, setError] = useState('');
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [tenantCode, setTenantCode] = useState<string | null>(null);
+  const [salonName, setSalonName] = useState<string | null>(null);
+  const [loadingTenantInfo, setLoadingTenantInfo] = useState(false);
 
   useEffect(() => {
     loadCustomers();
   }, []);
+
+  // 店舗情報を取得
+  const loadTenantInfo = async () => {
+    if (tenantCode) {
+      return; // 既に取得済み
+    }
+    
+    setLoadingTenantInfo(true);
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/tenant-info');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTenantCode(data.tenantCode);
+        setSalonName(data.salonName);
+      } else {
+        console.error('店舗情報取得エラー:', response.status);
+      }
+    } catch (error) {
+      console.error('店舗情報取得エラー:', error);
+    } finally {
+      setLoadingTenantInfo(false);
+    }
+  };
+
+  // QRコードモーダルを開く
+  const handleOpenQrModal = async () => {
+    await loadTenantInfo();
+    setShowQrModal(true);
+  };
+
+  // QRコードをダウンロード
+  const handleDownloadQr = () => {
+    if (!tenantCode) return;
+
+    const qrUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/register?tenant=${tenantCode}`;
+    
+    // SVGをCanvasに変換してダウンロード
+    const svgElement = document.querySelector('#qr-code-svg') as SVGSVGElement;
+    if (!svgElement) return;
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    canvas.width = 512;
+    canvas.height = 512;
+
+    img.onload = () => {
+      if (ctx) {
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        const url = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `qr-code-${tenantCode}.png`;
+        link.href = url;
+        link.click();
+      }
+    };
+
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  };
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -288,13 +363,22 @@ export default function CustomerManagement() {
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">顧客一覧</h2>
-            <button
-              onClick={() => handleOpenModal()}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
-            >
-              <PlusIcon className="h-5 w-5 mr-2" />
-              顧客を追加
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleOpenQrModal}
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+              >
+                <QrCodeIcon className="h-5 w-5 mr-2" />
+                QRコードを表示
+              </button>
+              <button
+                onClick={() => handleOpenModal()}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                顧客を追加
+              </button>
+            </div>
           </div>
 
           {/* 検索バー */}
@@ -523,6 +607,81 @@ export default function CustomerManagement() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QRコードモーダル */}
+      {showQrModal && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowQrModal(false)}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    顧客登録用QRコード
+                  </h3>
+                  <button
+                    onClick={() => setShowQrModal(false)}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                {loadingTenantInfo ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
+                  </div>
+                ) : tenantCode ? (
+                  <div className="space-y-4">
+                    {salonName && (
+                      <p className="text-sm text-gray-600 text-center">
+                        {salonName}
+                      </p>
+                    )}
+                    <div className="flex justify-center">
+                      <div className="p-4 bg-white rounded-lg border-2 border-gray-200">
+                        <QRCodeSVG
+                          id="qr-code-svg"
+                          value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register?tenant=${tenantCode}`}
+                          size={256}
+                          level="H"
+                          includeMargin={true}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-2">
+                      <p className="text-sm font-medium text-gray-700">
+                        店舗コード: <span className="font-mono">{tenantCode}</span>
+                      </p>
+                      <p className="text-xs text-gray-500 break-all">
+                        {typeof window !== 'undefined' ? window.location.origin : ''}/register?tenant={tenantCode}
+                      </p>
+                    </div>
+                    <div className="flex justify-center pt-2">
+                      <button
+                        onClick={handleDownloadQr}
+                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                      >
+                        <ArrowDownTrayIcon className="h-5 w-5 mr-2" />
+                        QRコードをダウンロード
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-500 text-center pt-2">
+                      <p>このQRコードをスキャンすると、顧客登録ページに自動遷移します。</p>
+                      <p className="mt-1">店舗コードが自動入力されます。</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-red-600">店舗情報の取得に失敗しました</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
