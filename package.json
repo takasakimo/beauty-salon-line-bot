@@ -25,7 +25,8 @@
     "reservation-menus:migrate": "node scripts/migrate-reservation-menus.js",
     "business-hours:migrate": "node scripts/migrate-business-hours.js",
     "super-admins:migrate": "node scripts/migrate-super-admins.js",
-    "super-admin:create": "node scripts/create-super-admin.js"
+    "super-admin:create": "node scripts/create-super-admin.js",
+    "sessions-tenant-nullable:migrate": "node scripts/migrate-sessions-tenant-id-nullable.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

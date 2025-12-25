@@ -49,7 +49,7 @@ export async function setSession(token: string, data: SessionData): Promise<void
         token,
         data.adminId || null,
         data.customerId || null,
-        data.tenantId,
+        data.tenantId || null, // スーパー管理者の場合はnull
         data.username || null,
         data.email || null,
         data.role || null,

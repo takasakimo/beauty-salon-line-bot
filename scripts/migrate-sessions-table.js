@@ -72,7 +72,7 @@ async function migrateSessionsTable() {
         session_token VARCHAR(255) PRIMARY KEY,
         admin_id INTEGER,
         customer_id INTEGER,
-        tenant_id INTEGER NOT NULL,
+        tenant_id INTEGER, -- NULL許可（スーパー管理者の場合）
         username VARCHAR(100),
         email VARCHAR(255),
         role VARCHAR(50),
