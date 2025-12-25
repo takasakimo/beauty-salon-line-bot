@@ -247,7 +247,10 @@ export default function CustomerManagement() {
     if (purchase) {
       setEditingPurchase(purchase);
       const purchaseDate = new Date(purchase.purchase_date);
+      // 既存の購入履歴から商品を検索（商品名で一致するものを探す）
+      const selectedProduct = productsList.find((p: any) => p.product_name === purchase.product_name);
       setPurchaseFormData({
+        product_id: selectedProduct?.product_id?.toString() || '',
         product_name: purchase.product_name || '',
         product_category: purchase.product_category || '',
         quantity: purchase.quantity.toString(),
