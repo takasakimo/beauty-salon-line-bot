@@ -129,35 +129,26 @@ export async function GET(
       [tenantId]
     );
 
-    // スタッフ数（is_activeカラムが存在するかチェック）
+    // スタッフ数（is_activeカラムが存在しない可能性があるため、直接試行してエラー時はフォールバック）
     let staffResult;
     try {
-      const staffColumnCheck = await query(
-        `SELECT column_name 
-         FROM information_schema.columns 
-         WHERE table_name = 'staff' AND column_name = 'is_active'`
+      // まずis_activeありで試行
+      staffResult = await query(
+        'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1 AND is_active = true',
+        [tenantId]
       );
-      
-      if (staffColumnCheck.rows.length > 0) {
-        // is_activeカラムが存在する場合
-        staffResult = await query(
-          'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1 AND is_active = true',
-          [tenantId]
-        );
-      } else {
-        // is_activeカラムが存在しない場合
+    } catch (staffError: any) {
+      // is_activeカラムが存在しない場合は、is_activeなしで取得
+      if (staffError.message && staffError.message.includes('is_active')) {
+        console.log('staff.is_activeカラムが存在しないため、is_active条件なしで取得します');
         staffResult = await query(
           'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1',
           [tenantId]
         );
+      } else {
+        // その他のエラーの場合は再スロー
+        throw staffError;
       }
-    } catch (checkError: any) {
-      // エラーが発生した場合は、is_activeなしで取得
-      console.error('staff is_activeカラムチェックエラー:', checkError);
-      staffResult = await query(
-        'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1',
-        [tenantId]
-      );
     }
 
     // business_hoursとclosed_daysをパース（カラムが存在する場合のみ）
