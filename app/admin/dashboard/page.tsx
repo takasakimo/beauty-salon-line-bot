@@ -154,7 +154,10 @@ export default function AdminDashboard() {
           <h2 className="text-2xl font-bold text-gray-900 mb-6">ダッシュボード</h2>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/customers')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -174,9 +177,12 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/reservations')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -196,9 +202,12 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/reservations')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -218,9 +227,12 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/reservations')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <div className="flex items-center">
                   <div className="flex-shrink-0">
@@ -240,11 +252,14 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/customers')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <h3 className="text-sm font-medium text-gray-500 mb-2">
                   今月の新規顧客
@@ -253,9 +268,12 @@ export default function AdminDashboard() {
                   {stats.newCustomersMonth}人
                 </p>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/customers')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <h3 className="text-sm font-medium text-gray-500 mb-2">
                   常連顧客
@@ -264,9 +282,12 @@ export default function AdminDashboard() {
                   {stats.regularCustomers}人
                 </p>
               </div>
-            </div>
+            </Link>
 
-            <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow">
+            <Link
+              href={getAdminLinkUrl('/admin/reservations')}
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
               <div className="p-5">
                 <h3 className="text-sm font-medium text-gray-500 mb-2">
                   平均客単価
@@ -275,7 +296,7 @@ export default function AdminDashboard() {
                   ¥{stats.averageSpending.toLocaleString()}
                 </p>
               </div>
-            </div>
+            </Link>
           </div>
         </div>
       </main>
