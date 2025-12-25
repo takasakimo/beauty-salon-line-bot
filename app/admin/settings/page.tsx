@@ -79,7 +79,12 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
+      console.log('loadSettings開始:', {
+        currentUrl: typeof window !== 'undefined' ? window.location.href : 'N/A',
+        search: typeof window !== 'undefined' ? window.location.search : 'N/A'
+      });
       const url = getApiUrlWithTenantId('/api/admin/settings');
+      console.log('loadSettings URL:', url);
       const response = await fetch(url, {
         credentials: 'include',
       });
