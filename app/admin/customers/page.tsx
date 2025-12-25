@@ -14,7 +14,8 @@ import {
   QrCodeIcon,
   ArrowDownTrayIcon,
   UserCircleIcon,
-  ClockIcon
+  ClockIcon,
+  ShoppingBagIcon
 } from '@heroicons/react/24/outline';
 
 interface Customer {
@@ -52,9 +53,11 @@ export default function CustomerManagement() {
   const [loadingTenantInfo, setLoadingTenantInfo] = useState(false);
   const [showChartModal, setShowChartModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'history' | 'purchases'>('info');
   const [customerHistory, setCustomerHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [customerPurchases, setCustomerPurchases] = useState<any[]>([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
   const [reservationNotes, setReservationNotes] = useState({ note1: '', note2: '', note3: '' });
@@ -103,6 +106,7 @@ export default function CustomerManagement() {
     setActiveTab('info');
     setShowChartModal(true);
     await loadCustomerHistory(customer.customer_id);
+    await loadCustomerPurchases(customer.customer_id);
   };
 
   // カルテモーダルを閉じる
@@ -133,6 +137,30 @@ export default function CustomerManagement() {
       setCustomerHistory([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  // 顧客の商品購入履歴を取得
+  const loadCustomerPurchases = async (customerId: number) => {
+    setLoadingPurchases(true);
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/customers/${customerId}/purchases`);
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCustomerPurchases(data);
+      } else {
+        console.error('商品購入履歴取得エラー:', response.status);
+        setCustomerPurchases([]);
+      }
+    } catch (error) {
+      console.error('商品購入履歴取得エラー:', error);
+      setCustomerPurchases([]);
+    } finally {
+      setLoadingPurchases(false);
     }
   };
 
@@ -873,6 +901,17 @@ export default function CustomerManagement() {
                       <ClockIcon className="h-5 w-5 mr-2" />
                       来店履歴
                     </button>
+                    <button
+                      onClick={() => setActiveTab('purchases')}
+                      className={`${
+                        activeTab === 'purchases'
+                          ? 'border-pink-500 text-pink-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
+                    >
+                      <ShoppingBagIcon className="h-5 w-5 mr-2" />
+                      商品の購入履歴
+                    </button>
                   </nav>
                 </div>
 
@@ -1011,6 +1050,84 @@ export default function CustomerManagement() {
                                     <p className="text-sm text-gray-700">
                                       <span className="font-medium">対応詳細:</span>
                                       <span className="ml-2">{history.notes}</span>
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'purchases' && (
+                    <div className="space-y-4">
+                      {loadingPurchases ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
+                        </div>
+                      ) : customerPurchases.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          商品の購入履歴がありません
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {customerPurchases.map((purchase) => (
+                            <div
+                              key={purchase.purchase_id}
+                              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {purchase.product_name}
+                                  </p>
+                                  {purchase.product_category && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      {purchase.product_category}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    ¥{purchase.total_price.toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-2 space-y-1 text-sm text-gray-600">
+                                <div className="flex items-center">
+                                  <span className="font-medium mr-2">購入日時:</span>
+                                  <span>
+                                    {new Date(purchase.purchase_date).toLocaleString('ja-JP', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center">
+                                  <span className="font-medium mr-2">数量:</span>
+                                  <span>{purchase.quantity}個</span>
+                                  {purchase.quantity > 1 && (
+                                    <span className="ml-2 text-gray-500">
+                                      (単価: ¥{purchase.unit_price.toLocaleString()})
+                                    </span>
+                                  )}
+                                </div>
+                                {purchase.staff_name && (
+                                  <div className="flex items-center">
+                                    <span className="font-medium mr-2">担当スタッフ:</span>
+                                    <span>{purchase.staff_name}</span>
+                                  </div>
+                                )}
+                                {purchase.notes && (
+                                  <div className="mt-2 pt-2 border-t border-gray-100">
+                                    <p className="text-sm text-gray-700">
+                                      <span className="font-medium">備考:</span>
+                                      <span className="ml-2">{purchase.notes}</span>
                                     </p>
                                   </div>
                                 )}
