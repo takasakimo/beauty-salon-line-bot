@@ -8,7 +8,9 @@ import {
   PlusIcon,
   PencilIcon,
   TrashIcon,
-  XMarkIcon
+  XMarkIcon,
+  ChevronDownIcon,
+  ChevronUpIcon
 } from '@heroicons/react/24/outline';
 
 interface Product {
@@ -58,6 +60,8 @@ export default function ProductManagement() {
     description: ''
   });
   const [categoryError, setCategoryError] = useState('');
+  const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(true);
+  const [isProductsExpanded, setIsProductsExpanded] = useState(true);
 
   useEffect(() => {
     loadProducts();
@@ -453,106 +457,129 @@ export default function ProductManagement() {
           {/* カテゴリ一覧 */}
           {categories.length > 0 && (
             <div className="mb-6 bg-white shadow overflow-hidden sm:rounded-md">
-              <div className="px-6 py-4 border-b border-gray-200">
+              <div 
+                className="px-6 py-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 flex items-center justify-between"
+                onClick={() => setIsCategoriesExpanded(!isCategoriesExpanded)}
+              >
                 <h3 className="text-lg font-medium text-gray-900">カテゴリ一覧</h3>
+                {isCategoriesExpanded ? (
+                  <ChevronUpIcon className="h-5 w-5 text-gray-500" />
+                ) : (
+                  <ChevronDownIcon className="h-5 w-5 text-gray-500" />
+                )}
               </div>
-              <ul className="divide-y divide-gray-200">
-                {categories.map((category) => (
-                  <li key={category.category_id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          <h4 className="text-md font-medium text-gray-900">
-                            {category.category_name}
-                          </h4>
-                          {!category.is_active && (
-                            <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
-                              無効
-                            </span>
+              {isCategoriesExpanded && (
+                <ul className="divide-y divide-gray-200">
+                  {categories.map((category) => (
+                    <li key={category.category_id} className="px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center">
+                            <h4 className="text-md font-medium text-gray-900">
+                              {category.category_name}
+                            </h4>
+                            {!category.is_active && (
+                              <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                                無効
+                              </span>
+                            )}
+                          </div>
+                          {category.description && (
+                            <p className="mt-1 text-sm text-gray-500">{category.description}</p>
                           )}
                         </div>
-                        {category.description && (
-                          <p className="mt-1 text-sm text-gray-500">{category.description}</p>
-                        )}
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleOpenCategoryModal(category)}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(category.category_id)}
+                            className="p-2 text-gray-400 hover:text-red-600"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleOpenCategoryModal(category)}
-                          className="p-2 text-gray-400 hover:text-gray-600"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.category_id)}
-                          className="p-2 text-gray-400 hover:text-red-600"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200">
-              {products.length === 0 ? (
-                <li className="px-6 py-4 text-center text-gray-500">
-                  商品が登録されていません
-                </li>
+            <div 
+              className="px-6 py-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 flex items-center justify-between"
+              onClick={() => setIsProductsExpanded(!isProductsExpanded)}
+            >
+              <h3 className="text-lg font-medium text-gray-900">商品一覧</h3>
+              {isProductsExpanded ? (
+                <ChevronUpIcon className="h-5 w-5 text-gray-500" />
               ) : (
-                products.map((product) => (
-                  <li key={product.product_id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {product.product_name}
-                          </h3>
-                          {!product.is_active && (
-                            <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
-                              無効
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
-                          {product.product_category && (
-                            <div>カテゴリ: {product.product_category}</div>
-                          )}
-                          {product.manufacturer && (
-                            <div>メーカー: {product.manufacturer}</div>
-                          )}
-                          {product.jan_code && (
-                            <div>JANコード: {product.jan_code}</div>
-                          )}
-                          <div>単価: ¥{product.unit_price.toLocaleString()}</div>
-                          <div>在庫数: {product.stock_quantity || 0}個</div>
-                          {product.description && (
-                            <div className="md:col-span-2">説明: {product.description}</div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleOpenModal(product)}
-                          className="p-2 text-gray-400 hover:text-gray-600"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.product_id)}
-                          className="p-2 text-gray-400 hover:text-red-600"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))
+                <ChevronDownIcon className="h-5 w-5 text-gray-500" />
               )}
-            </ul>
+            </div>
+            {isProductsExpanded && (
+              <ul className="divide-y divide-gray-200">
+                {products.length === 0 ? (
+                  <li className="px-6 py-4 text-center text-gray-500">
+                    商品が登録されていません
+                  </li>
+                ) : (
+                  products.map((product) => (
+                    <li key={product.product_id} className="px-6 py-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center">
+                            <h3 className="text-lg font-medium text-gray-900">
+                              {product.product_name}
+                            </h3>
+                            {!product.is_active && (
+                              <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                                無効
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
+                            {product.product_category && (
+                              <div>カテゴリ: {product.product_category}</div>
+                            )}
+                            {product.manufacturer && (
+                              <div>メーカー: {product.manufacturer}</div>
+                            )}
+                            {product.jan_code && (
+                              <div>JANコード: {product.jan_code}</div>
+                            )}
+                            <div>単価: ¥{product.unit_price.toLocaleString()}</div>
+                            <div>在庫数: {product.stock_quantity || 0}個</div>
+                            {product.description && (
+                              <div className="md:col-span-2">説明: {product.description}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleOpenModal(product)}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                          >
+                            <PencilIcon className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(product.product_id)}
+                            className="p-2 text-gray-400 hover:text-red-600"
+                          >
+                            <TrashIcon className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
           </div>
         </div>
       </div>
