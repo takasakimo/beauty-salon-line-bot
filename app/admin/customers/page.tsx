@@ -62,6 +62,29 @@ export default function CustomerManagement() {
   const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
   const [reservationNotes, setReservationNotes] = useState({ note1: '', note2: '', note3: '' });
   const [savingNotes, setSavingNotes] = useState(false);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [editingPurchase, setEditingPurchase] = useState<any | null>(null);
+  const [purchaseFormData, setPurchaseFormData] = useState({
+    product_name: '',
+    product_category: '',
+    quantity: '1',
+    unit_price: '',
+    purchase_date: '',
+    purchase_time: '',
+    staff_id: '',
+    notes: ''
+  });
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyFormData, setHistoryFormData] = useState({
+    menu_id: '',
+    staff_id: '',
+    reservation_date: '',
+    reservation_time: '',
+    price: '',
+    notes: ''
+  });
+  const [menusList, setMenusList] = useState<any[]>([]);
 
   useEffect(() => {
     loadCustomers();
@@ -105,8 +128,12 @@ export default function CustomerManagement() {
     setSelectedCustomer(customer);
     setActiveTab('info');
     setShowChartModal(true);
-    await loadCustomerHistory(customer.customer_id);
-    await loadCustomerPurchases(customer.customer_id);
+    await Promise.all([
+      loadCustomerHistory(customer.customer_id),
+      loadCustomerPurchases(customer.customer_id),
+      loadStaffList(),
+      loadMenusList()
+    ]);
   };
 
   // カルテモーダルを閉じる
@@ -161,6 +188,226 @@ export default function CustomerManagement() {
       setCustomerPurchases([]);
     } finally {
       setLoadingPurchases(false);
+    }
+  };
+
+  // スタッフ一覧を取得
+  const loadStaffList = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/staff');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStaffList(data);
+      }
+    } catch (error) {
+      console.error('スタッフ取得エラー:', error);
+    }
+  };
+
+  // メニュー一覧を取得
+  const loadMenusList = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/menus');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMenusList(data.filter((m: any) => m.is_active));
+      }
+    } catch (error) {
+      console.error('メニュー取得エラー:', error);
+    }
+  };
+
+  // 商品購入履歴モーダルを開く
+  const handleOpenPurchaseModal = (purchase?: any) => {
+    if (purchase) {
+      setEditingPurchase(purchase);
+      const purchaseDate = new Date(purchase.purchase_date);
+      setPurchaseFormData({
+        product_name: purchase.product_name || '',
+        product_category: purchase.product_category || '',
+        quantity: purchase.quantity.toString(),
+        unit_price: purchase.unit_price.toString(),
+        purchase_date: purchaseDate.toISOString().split('T')[0],
+        purchase_time: purchaseDate.toTimeString().slice(0, 5),
+        staff_id: purchase.staff_id?.toString() || '',
+        notes: purchase.notes || ''
+      });
+    } else {
+      setEditingPurchase(null);
+      const now = new Date();
+      setPurchaseFormData({
+        product_name: '',
+        product_category: '',
+        quantity: '1',
+        unit_price: '',
+        purchase_date: now.toISOString().split('T')[0],
+        purchase_time: now.toTimeString().slice(0, 5),
+        staff_id: '',
+        notes: ''
+      });
+    }
+    setShowPurchaseModal(true);
+  };
+
+  // 商品購入履歴モーダルを閉じる
+  const handleClosePurchaseModal = () => {
+    setShowPurchaseModal(false);
+    setEditingPurchase(null);
+  };
+
+  // 商品購入履歴を保存
+  const handleSavePurchase = async () => {
+    if (!selectedCustomer) return;
+
+    if (!purchaseFormData.product_name || !purchaseFormData.quantity || !purchaseFormData.unit_price) {
+      alert('商品名、数量、単価は必須です');
+      return;
+    }
+
+    try {
+      const purchaseDateTime = new Date(`${purchaseFormData.purchase_date}T${purchaseFormData.purchase_time}`);
+      const url = editingPurchase
+        ? getApiUrlWithTenantId(`/api/admin/product-purchases/${editingPurchase.purchase_id}`)
+        : getApiUrlWithTenantId('/api/admin/product-purchases');
+
+      const method = editingPurchase ? 'PUT' : 'POST';
+      const body = editingPurchase
+        ? {
+            product_name: purchaseFormData.product_name,
+            product_category: purchaseFormData.product_category || null,
+            quantity: parseInt(purchaseFormData.quantity),
+            unit_price: parseInt(purchaseFormData.unit_price),
+            purchase_date: purchaseDateTime.toISOString(),
+            staff_id: purchaseFormData.staff_id ? parseInt(purchaseFormData.staff_id) : null,
+            notes: purchaseFormData.notes || null
+          }
+        : {
+            customer_id: selectedCustomer.customer_id,
+            product_name: purchaseFormData.product_name,
+            product_category: purchaseFormData.product_category || null,
+            quantity: parseInt(purchaseFormData.quantity),
+            unit_price: parseInt(purchaseFormData.unit_price),
+            purchase_date: purchaseDateTime.toISOString(),
+            staff_id: purchaseFormData.staff_id ? parseInt(purchaseFormData.staff_id) : null,
+            notes: purchaseFormData.notes || null
+          };
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+
+      if (response.ok) {
+        alert(editingPurchase ? '商品購入履歴を更新しました' : '商品購入履歴を追加しました');
+        handleClosePurchaseModal();
+        await loadCustomerPurchases(selectedCustomer.customer_id);
+      } else {
+        const error = await response.json();
+        alert(`エラー: ${error.error || '不明なエラー'}`);
+      }
+    } catch (error) {
+      console.error('商品購入履歴保存エラー:', error);
+      alert('商品購入履歴の保存に失敗しました');
+    }
+  };
+
+  // 商品購入履歴を削除
+  const handleDeletePurchase = async (purchaseId: number) => {
+    if (!confirm('この商品購入履歴を削除しますか？')) return;
+
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/product-purchases/${purchaseId}`);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        alert('商品購入履歴を削除しました');
+        if (selectedCustomer) {
+          await loadCustomerPurchases(selectedCustomer.customer_id);
+        }
+      } else {
+        const error = await response.json();
+        alert(`エラー: ${error.error || '不明なエラー'}`);
+      }
+    } catch (error) {
+      console.error('商品購入履歴削除エラー:', error);
+      alert('商品購入履歴の削除に失敗しました');
+    }
+  };
+
+  // 来店履歴モーダルを開く
+  const handleOpenHistoryModal = () => {
+    if (!selectedCustomer) return;
+    const now = new Date();
+    setHistoryFormData({
+      menu_id: '',
+      staff_id: '',
+      reservation_date: now.toISOString().split('T')[0],
+      reservation_time: now.toTimeString().slice(0, 5),
+      price: '',
+      notes: ''
+    });
+    setShowHistoryModal(true);
+  };
+
+  // 来店履歴モーダルを閉じる
+  const handleCloseHistoryModal = () => {
+    setShowHistoryModal(false);
+  };
+
+  // 来店履歴を保存（status='completed'で予約を作成）
+  const handleSaveHistory = async () => {
+    if (!selectedCustomer) return;
+
+    if (!historyFormData.menu_id || !historyFormData.reservation_date || !historyFormData.reservation_time) {
+      alert('メニュー、来店日、来店時間は必須です');
+      return;
+    }
+
+    try {
+      const reservationDateTime = new Date(`${historyFormData.reservation_date}T${historyFormData.reservation_time}`);
+      const url = getApiUrlWithTenantId('/api/admin/reservations');
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          customer_id: selectedCustomer.customer_id,
+          menu_id: parseInt(historyFormData.menu_id),
+          staff_id: historyFormData.staff_id ? parseInt(historyFormData.staff_id) : null,
+          reservation_date: reservationDateTime.toISOString(),
+          status: 'completed',
+          price: historyFormData.price ? parseInt(historyFormData.price) : null,
+          notes: historyFormData.notes || null
+        }),
+      });
+
+      if (response.ok) {
+        alert('来店履歴を追加しました');
+        handleCloseHistoryModal();
+        await loadCustomerHistory(selectedCustomer.customer_id);
+      } else {
+        const error = await response.json();
+        alert(`エラー: ${error.error || '不明なエラー'}`);
+      }
+    } catch (error) {
+      console.error('来店履歴保存エラー:', error);
+      alert('来店履歴の保存に失敗しました');
     }
   };
 
@@ -1063,6 +1310,15 @@ export default function CustomerManagement() {
 
                   {activeTab === 'purchases' && (
                     <div className="space-y-4">
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => handleOpenPurchaseModal()}
+                          className="px-4 py-2 bg-pink-600 text-white rounded-md hover:bg-pink-700 text-sm font-medium"
+                        >
+                          <PlusIcon className="h-4 w-4 inline mr-1" />
+                          商品購入履歴を追加
+                        </button>
+                      </div>
                       {loadingPurchases ? (
                         <div className="flex items-center justify-center py-8">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
@@ -1078,6 +1334,20 @@ export default function CustomerManagement() {
                               key={purchase.purchase_id}
                               className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                             >
+                              <div className="flex justify-end space-x-2 mb-2">
+                                <button
+                                  onClick={() => handleOpenPurchaseModal(purchase)}
+                                  className="text-gray-400 hover:text-gray-600"
+                                >
+                                  <PencilIcon className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePurchase(purchase.purchase_id)}
+                                  className="text-gray-400 hover:text-red-600"
+                                >
+                                  <TrashIcon className="h-4 w-4" />
+                                </button>
+                              </div>
                               <div className="flex justify-between items-start mb-2">
                                 <div>
                                   <p className="text-sm font-medium text-gray-900">
@@ -1270,6 +1540,312 @@ export default function CustomerManagement() {
                     className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50"
                   >
                     {savingNotes ? '保存中...' : '保存'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 商品購入履歴モーダル */}
+      {showPurchaseModal && selectedCustomer && (
+        <div className="fixed z-30 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleClosePurchaseModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {editingPurchase ? '商品購入履歴を編集' : '商品購入履歴を追加'}
+                  </h3>
+                  <button
+                    onClick={handleClosePurchaseModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="product_name" className="block text-sm font-medium text-gray-700 mb-1">
+                      商品名 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="product_name"
+                      value={purchaseFormData.product_name}
+                      onChange={(e) => setPurchaseFormData({ ...purchaseFormData, product_name: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="product_category" className="block text-sm font-medium text-gray-700 mb-1">
+                      カテゴリ
+                    </label>
+                    <input
+                      type="text"
+                      id="product_category"
+                      value={purchaseFormData.product_category}
+                      onChange={(e) => setPurchaseFormData({ ...purchaseFormData, product_category: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-1">
+                        数量 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="quantity"
+                        min="1"
+                        value={purchaseFormData.quantity}
+                        onChange={(e) => setPurchaseFormData({ ...purchaseFormData, quantity: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700 mb-1">
+                        単価 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="unit_price"
+                        min="0"
+                        value={purchaseFormData.unit_price}
+                        onChange={(e) => setPurchaseFormData({ ...purchaseFormData, unit_price: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="purchase_date" className="block text-sm font-medium text-gray-700 mb-1">
+                        購入日 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        id="purchase_date"
+                        value={purchaseFormData.purchase_date}
+                        onChange={(e) => setPurchaseFormData({ ...purchaseFormData, purchase_date: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="purchase_time" className="block text-sm font-medium text-gray-700 mb-1">
+                        購入時間 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        id="purchase_time"
+                        value={purchaseFormData.purchase_time}
+                        onChange={(e) => setPurchaseFormData({ ...purchaseFormData, purchase_time: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="purchase_staff_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      担当スタッフ
+                    </label>
+                    <select
+                      id="purchase_staff_id"
+                      value={purchaseFormData.staff_id}
+                      onChange={(e) => setPurchaseFormData({ ...purchaseFormData, staff_id: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    >
+                      <option value="">選択なし</option>
+                      {staffList.map((staff) => (
+                        <option key={staff.staff_id} value={staff.staff_id}>
+                          {staff.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="purchase_notes" className="block text-sm font-medium text-gray-700 mb-1">
+                      備考
+                    </label>
+                    <textarea
+                      id="purchase_notes"
+                      rows={3}
+                      value={purchaseFormData.notes}
+                      onChange={(e) => setPurchaseFormData({ ...purchaseFormData, notes: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleClosePurchaseModal}
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePurchase}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  >
+                    {editingPurchase ? '更新' : '追加'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 来店履歴追加モーダル */}
+      {showHistoryModal && selectedCustomer && (
+        <div className="fixed z-30 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseHistoryModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    来店履歴を追加
+                  </h3>
+                  <button
+                    onClick={handleCloseHistoryModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="history_menu_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      メニュー <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="history_menu_id"
+                      value={historyFormData.menu_id}
+                      onChange={(e) => setHistoryFormData({ ...historyFormData, menu_id: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      required
+                    >
+                      <option value="">選択してください</option>
+                      {menusList.map((menu) => (
+                        <option key={menu.menu_id} value={menu.menu_id}>
+                          {menu.name} (¥{menu.price.toLocaleString()})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="history_staff_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      担当スタッフ
+                    </label>
+                    <select
+                      id="history_staff_id"
+                      value={historyFormData.staff_id}
+                      onChange={(e) => setHistoryFormData({ ...historyFormData, staff_id: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    >
+                      <option value="">選択なし</option>
+                      {staffList.map((staff) => (
+                        <option key={staff.staff_id} value={staff.staff_id}>
+                          {staff.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="history_reservation_date" className="block text-sm font-medium text-gray-700 mb-1">
+                        来店日 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        id="history_reservation_date"
+                        value={historyFormData.reservation_date}
+                        onChange={(e) => setHistoryFormData({ ...historyFormData, reservation_date: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="history_reservation_time" className="block text-sm font-medium text-gray-700 mb-1">
+                        来店時間 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        id="history_reservation_time"
+                        value={historyFormData.reservation_time}
+                        onChange={(e) => setHistoryFormData({ ...historyFormData, reservation_time: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="history_price" className="block text-sm font-medium text-gray-700 mb-1">
+                      金額（メニュー価格と異なる場合）
+                    </label>
+                    <input
+                      type="number"
+                      id="history_price"
+                      min="0"
+                      value={historyFormData.price}
+                      onChange={(e) => setHistoryFormData({ ...historyFormData, price: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      placeholder="空欄の場合はメニュー価格を使用"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="history_notes" className="block text-sm font-medium text-gray-700 mb-1">
+                      備考
+                    </label>
+                    <textarea
+                      id="history_notes"
+                      rows={3}
+                      value={historyFormData.notes}
+                      onChange={(e) => setHistoryFormData({ ...historyFormData, notes: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseHistoryModal}
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveHistory}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  >
+                    追加
                   </button>
                 </div>
               </div>
