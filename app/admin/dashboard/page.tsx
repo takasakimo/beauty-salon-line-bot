@@ -28,6 +28,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // ページロード時にURLを確認
+    if (typeof window !== 'undefined') {
+      console.log('AdminDashboard ページロード:', {
+        href: window.location.href,
+        search: window.location.search,
+        pathname: window.location.pathname
+      });
+    }
     loadStatistics();
   }, []);
 
