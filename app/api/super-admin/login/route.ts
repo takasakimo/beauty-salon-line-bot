@@ -6,7 +6,11 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { username, password } = body;
+    let { username, password } = body;
+
+    // 入力値のトリム処理
+    username = username?.trim() || '';
+    password = password?.trim() || '';
 
     // バリデーション
     if (!username || !password) {

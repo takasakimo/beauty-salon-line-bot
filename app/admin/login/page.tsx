@@ -16,6 +16,17 @@ export default function AdminLogin() {
     setLoading(true);
     setError('');
 
+    // 入力値のトリム処理
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+    const trimmedTenantCode = tenantCode.trim();
+
+    if (!trimmedUsername || !trimmedPassword || !trimmedTenantCode) {
+      setError('すべての項目を入力してください');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/admin/login', {
         method: 'POST',
@@ -24,9 +35,9 @@ export default function AdminLogin() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          username,
-          password,
-          tenantCode,
+          username: trimmedUsername,
+          password: trimmedPassword,
+          tenantCode: trimmedTenantCode,
         }),
       });
 
@@ -126,10 +137,17 @@ export default function AdminLogin() {
             </button>
           </div>
         </form>
-        <div className="text-center">
-          <a href="/" className="text-sm text-pink-600 hover:text-pink-700">
-            ← ホームに戻る
-          </a>
+        <div className="text-center space-y-2">
+          <div>
+            <a href="/super-admin/login" className="text-sm text-indigo-600 hover:text-indigo-700">
+              スーパー管理者ログイン →
+            </a>
+          </div>
+          <div>
+            <a href="/" className="text-sm text-pink-600 hover:text-pink-700">
+              ← ホームに戻る
+            </a>
+          </div>
         </div>
       </div>
     </div>

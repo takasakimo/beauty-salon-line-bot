@@ -6,12 +6,24 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { username, password, tenantCode } = body;
+    let { username, password, tenantCode } = body;
+
+    // 入力値のトリム処理
+    username = username?.trim() || '';
+    password = password?.trim() || '';
+    tenantCode = tenantCode?.trim() || '';
 
     // バリデーション
     if (!username || !password) {
       return NextResponse.json(
         { success: false, error: 'ユーザー名とパスワードを入力してください' },
+        { status: 400 }
+      );
+    }
+
+    if (!tenantCode) {
+      return NextResponse.json(
+        { success: false, error: '店舗コードを入力してください' },
         { status: 400 }
       );
     }

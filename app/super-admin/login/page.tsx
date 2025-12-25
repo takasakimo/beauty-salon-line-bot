@@ -16,6 +16,16 @@ export default function SuperAdminLoginPage() {
     setError('');
     setLoading(true);
 
+    // 入力値のトリム処理
+    const trimmedUsername = username.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedUsername || !trimmedPassword) {
+      setError('ユーザー名とパスワードを入力してください');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/super-admin/login', {
         method: 'POST',
@@ -23,7 +33,10 @@ export default function SuperAdminLoginPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ 
+          username: trimmedUsername, 
+          password: trimmedPassword 
+        }),
       });
 
       const data = await response.json();
@@ -117,6 +130,11 @@ export default function SuperAdminLoginPage() {
             </button>
           </div>
         </form>
+        <div className="text-center">
+          <a href="/admin/login" className="text-sm text-indigo-600 hover:text-indigo-700">
+            ← 店舗管理者ログイン
+          </a>
+        </div>
       </div>
     </div>
   );
