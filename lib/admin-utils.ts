@@ -20,3 +20,21 @@ export function getApiUrlWithTenantId(baseUrl: string): string {
   return baseUrl;
 }
 
+/**
+ * 管理画面ページのリンクURLにtenantIdクエリパラメータを追加
+ * スーパー管理者がページ間を移動する際にクエリパラメータを保持するため
+ */
+export function getAdminLinkUrl(path: string): string {
+  if (typeof window === 'undefined') {
+    return path;
+  }
+  
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenantId = urlParams.get('tenantId');
+  
+  if (tenantId) {
+    return `${path}?tenantId=${tenantId}`;
+  }
+  
+  return path;
+}

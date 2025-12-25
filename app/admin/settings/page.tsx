@@ -330,31 +330,31 @@ export default function SettingsPage() {
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link
-                  href="/admin/dashboard"
+                  href={getAdminLinkUrl('/admin/dashboard')}
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   ダッシュボード
                 </Link>
                 <Link
-                  href="/admin/reservations"
+                  href={getAdminLinkUrl('/admin/reservations')}
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   予約管理
                 </Link>
                 <Link
-                  href="/admin/customers"
+                  href={getAdminLinkUrl('/admin/customers')}
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   顧客管理
                 </Link>
                 <Link
-                  href="/admin/menus"
+                  href={getAdminLinkUrl('/admin/menus')}
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   メニュー管理
                 </Link>
                 <Link
-                  href="/admin/settings"
+                  href={getAdminLinkUrl('/admin/settings')}
                   className="border-pink-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   設定
