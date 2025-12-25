@@ -8,7 +8,6 @@ export default function AdminLogin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [tenantCode, setTenantCode] = useState('');
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,12 +27,8 @@ export default function AdminLogin() {
       return;
     }
 
-    // スーパー管理者でない場合、店舗コードが必要
-    if (!isSuperAdmin && !trimmedTenantCode) {
-      setError('店舗コードを入力してください');
-      setLoading(false);
-      return;
-    }
+    // 店舗コードが空の場合はスーパー管理者としてログインを試みる
+    // 店舗コードが入力されている場合は店舗管理者としてログインを試みる
 
     try {
       const response = await fetch('/api/admin/login', {
@@ -45,8 +40,7 @@ export default function AdminLogin() {
         body: JSON.stringify({
           username: trimmedUsername,
           password: trimmedPassword,
-          tenantCode: isSuperAdmin ? '' : trimmedTenantCode,
-          isSuperAdmin: isSuperAdmin,
+          tenantCode: trimmedTenantCode,
         }),
       });
 
@@ -94,44 +88,23 @@ export default function AdminLogin() {
             </div>
           )}
           <div className="space-y-4">
-            <div className="flex items-center">
+            <div>
+              <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700">
+                店舗コード <span className="text-gray-400 font-normal">(スーパー管理者の場合は空欄)</span>
+              </label>
               <input
-                id="isSuperAdmin"
-                type="checkbox"
-                checked={isSuperAdmin}
-                onChange={(e) => {
-                  setIsSuperAdmin(e.target.checked);
-                  if (e.target.checked) {
-                    setTenantCode('');
-                  }
-                }}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                id="tenantCode"
+                type="text"
+                value={tenantCode}
+                onChange={(e) => setTenantCode(e.target.value)}
+                placeholder="例: beauty-salon-001"
+                className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                 disabled={loading}
               />
-              <label htmlFor="isSuperAdmin" className="ml-2 block text-sm text-gray-900">
-                スーパー管理者としてログイン
-              </label>
+              <p className="mt-1 text-xs text-gray-500">
+                店舗管理者の場合は店舗コードを入力してください。スーパー管理者の場合は空欄のままログインしてください。
+              </p>
             </div>
-            {!isSuperAdmin && (
-              <div>
-                <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700">
-                  店舗コード
-                </label>
-                <input
-                  id="tenantCode"
-                  type="text"
-                  required={!isSuperAdmin}
-                  value={tenantCode}
-                  onChange={(e) => setTenantCode(e.target.value)}
-                  placeholder="例: beauty-salon-001"
-                  className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-                  disabled={loading || isSuperAdmin}
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  店舗コードを入力してください
-                </p>
-              </div>
-            )}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700">
                 ユーザー名

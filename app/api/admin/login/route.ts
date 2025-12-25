@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    let { username, password, tenantCode, isSuperAdmin } = body;
+    let { username, password, tenantCode } = body;
 
     // 入力値のトリム処理
     username = username?.trim() || '';
@@ -21,8 +21,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // スーパー管理者としてログインする場合
-    if (isSuperAdmin || !tenantCode) {
+    // 店舗コードが空の場合はスーパー管理者としてログインを試みる
+    if (!tenantCode) {
       const result = await authenticateSuperAdmin(username, password);
       
       if (!result.success) {
@@ -57,12 +57,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 店舗管理者としてログインする場合
-    if (!tenantCode) {
-      return NextResponse.json(
-        { success: false, error: '店舗コードを入力してください' },
-        { status: 400 }
-      );
-    }
 
     const result = await authenticateAdmin(username, password, tenantCode);
 
