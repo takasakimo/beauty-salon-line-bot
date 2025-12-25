@@ -247,6 +247,101 @@ export default function ProductManagement() {
     }
   };
 
+  const handleOpenCategoryModal = (category?: Category) => {
+    if (category) {
+      setEditingCategory(category);
+      setCategoryFormData({
+        category_name: category.category_name,
+        description: category.description || ''
+      });
+    } else {
+      setEditingCategory(null);
+      setCategoryFormData({
+        category_name: '',
+        description: ''
+      });
+    }
+    setCategoryError('');
+    setShowCategoryModal(true);
+  };
+
+  const handleCloseCategoryModal = () => {
+    setShowCategoryModal(false);
+    setEditingCategory(null);
+    setCategoryFormData({
+      category_name: '',
+      description: ''
+    });
+    setCategoryError('');
+  };
+
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCategoryError('');
+
+    if (!categoryFormData.category_name) {
+      setCategoryError('カテゴリ名は必須です');
+      return;
+    }
+
+    try {
+      const url = editingCategory
+        ? getApiUrlWithTenantId(`/api/admin/product-categories/${editingCategory.category_id}`)
+        : getApiUrlWithTenantId('/api/admin/product-categories');
+
+      const method = editingCategory ? 'PUT' : 'POST';
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          category_name: categoryFormData.category_name,
+          description: categoryFormData.description || null,
+          is_active: editingCategory ? editingCategory.is_active : true
+        }),
+      });
+
+      if (response.ok) {
+        handleCloseCategoryModal();
+        loadCategories();
+        // 商品フォームのカテゴリ選択も更新
+        if (!editingCategory) {
+          setFormData({ ...formData, product_category: categoryFormData.category_name });
+        }
+      } else {
+        const errorData = await response.json();
+        setCategoryError(errorData.error || '保存に失敗しました');
+      }
+    } catch (error) {
+      console.error('カテゴリ保存エラー:', error);
+      setCategoryError('保存に失敗しました');
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: number) => {
+    if (!confirm('このカテゴリを削除しますか？')) return;
+
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/product-categories/${categoryId}`);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        loadCategories();
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || '削除に失敗しました');
+      }
+    } catch (error) {
+      console.error('カテゴリ削除エラー:', error);
+      alert('削除に失敗しました');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
