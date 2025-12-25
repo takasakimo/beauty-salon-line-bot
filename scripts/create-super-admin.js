@@ -29,6 +29,13 @@ async function createSuperAdmin() {
     cleanUrl = cleanUrl.replace('postgres://', 'postgresql://');
   }
 
+  // 接続URLのSSL設定を確認・修正
+  // 接続文字列からsslmodeパラメータを削除し、pgライブラリのSSL設定を使用
+  const urlObj = new URL(cleanUrl);
+  urlObj.searchParams.delete('sslmode');
+  urlObj.searchParams.delete('supa'); // Supabase固有のパラメータも削除
+  cleanUrl = urlObj.toString();
+
   const client = new Client({
     connectionString: cleanUrl,
     ssl: {
