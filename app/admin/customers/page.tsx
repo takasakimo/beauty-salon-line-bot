@@ -322,10 +322,12 @@ export default function CustomerManagement() {
         : getApiUrlWithTenantId('/api/admin/product-purchases');
 
       const method = editingPurchase ? 'PUT' : 'POST';
+      // 選択された商品から情報を取得
+      const selectedProduct = productsList.find((p: any) => p.product_id.toString() === purchaseFormData.product_id);
       const body = editingPurchase
         ? {
-            product_name: purchaseFormData.product_name,
-            product_category: purchaseFormData.product_category || null,
+            product_name: selectedProduct?.product_name || purchaseFormData.product_name,
+            product_category: selectedProduct?.product_category || purchaseFormData.product_category || null,
             quantity: parseInt(purchaseFormData.quantity),
             unit_price: parseInt(purchaseFormData.unit_price),
             purchase_date: purchaseDateTime.toISOString(),
@@ -334,8 +336,8 @@ export default function CustomerManagement() {
           }
         : {
             customer_id: selectedCustomer.customer_id,
-            product_name: purchaseFormData.product_name,
-            product_category: purchaseFormData.product_category || null,
+            product_name: selectedProduct?.product_name || purchaseFormData.product_name,
+            product_category: selectedProduct?.product_category || purchaseFormData.product_category || null,
             quantity: parseInt(purchaseFormData.quantity),
             unit_price: parseInt(purchaseFormData.unit_price),
             purchase_date: purchaseDateTime.toISOString(),
