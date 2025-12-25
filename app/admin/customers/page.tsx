@@ -946,7 +946,8 @@ export default function CustomerManagement() {
                           {customerHistory.map((history) => (
                             <div
                               key={history.reservation_id}
-                              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                              onClick={() => handleOpenDetailModal(history)}
+                              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
                             >
                               <div className="flex justify-between items-start mb-2">
                                 <div>
