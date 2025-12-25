@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getApiUrlWithTenantId } from '@/lib/admin-utils';
 import Link from 'next/link';
+import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import { 
   Cog6ToothIcon,
   PlusIcon,
