@@ -8,8 +8,10 @@ import {
   PencilIcon,
   TrashIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
+import Link from 'next/link';
 
 interface Tenant {
   tenantId: number;
@@ -200,11 +202,14 @@ export default function SuperAdminDashboard() {
               </li>
             ) : (
               tenants.map((tenant) => (
-                <li key={tenant.tenantId} className="px-6 py-4">
+                <li key={tenant.tenantId} className="px-6 py-4 hover:bg-gray-50">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center">
+                    <Link 
+                      href={`/super-admin/tenants/${tenant.tenantId}`}
+                      className="flex items-center flex-1 cursor-pointer"
+                    >
                       <BuildingStorefrontIcon className="h-8 w-8 text-gray-400 mr-4" />
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center">
                           <h3 className="text-lg font-medium text-gray-900">
                             {tenant.salonName}
@@ -222,16 +227,23 @@ export default function SuperAdminDashboard() {
                           最大同時予約数: {tenant.maxConcurrentReservations}
                         </p>
                       </div>
-                    </div>
-                    <div className="flex gap-2">
+                      <ArrowRightIcon className="h-5 w-5 text-gray-400 ml-4" />
+                    </Link>
+                    <div className="flex gap-2 ml-4">
                       <button
-                        onClick={() => handleEdit(tenant)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(tenant);
+                        }}
                         className="p-2 text-indigo-600 hover:text-indigo-900"
                       >
                         <PencilIcon className="h-5 w-5" />
                       </button>
                       <button
-                        onClick={() => handleDelete(tenant.tenantId)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(tenant.tenantId);
+                        }}
                         className="p-2 text-red-600 hover:text-red-900"
                       >
                         <TrashIcon className="h-5 w-5" />
