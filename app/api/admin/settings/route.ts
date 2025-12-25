@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +15,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
 
     // closed_daysカラムが存在するかチェック
     let selectColumns = 'max_concurrent_reservations, business_hours';
@@ -95,7 +101,13 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const body = await request.json();
     const { max_concurrent_reservations, business_hours, closed_days } = body;
 

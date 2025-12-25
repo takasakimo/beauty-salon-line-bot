@@ -74,7 +74,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const body = await request.json();
     const { name, email, phone_number, working_hours, menu_ids } = body;
 

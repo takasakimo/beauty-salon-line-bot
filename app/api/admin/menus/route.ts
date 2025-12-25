@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +15,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
 
     const result = await query(
       `SELECT menu_id, name, price, duration, description, is_active
@@ -46,7 +52,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
     const body = await request.json();
     const { name, price, duration, description } = body;
 

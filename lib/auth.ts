@@ -358,6 +358,23 @@ export async function getSuperAdminAuthFromRequest(request: NextRequest): Promis
   return null;
 }
 
+// スーパー管理者が店舗管理画面にアクセスする際のtenantIdを取得
+export function getTenantIdFromRequest(request: NextRequest, session: SessionData | null): number | null {
+  // スーパー管理者の場合、クエリパラメータのtenantIdを優先
+  if (session && session.role === 'super_admin') {
+    const tenantIdParam = request.nextUrl.searchParams.get('tenantId');
+    if (tenantIdParam) {
+      const tenantId = parseInt(tenantIdParam);
+      if (!isNaN(tenantId)) {
+        return tenantId;
+      }
+    }
+  }
+  
+  // 通常の管理者の場合はセッションのtenantIdを使用
+  return session?.tenantId || null;
+}
+
 // 顧客認証
 export async function authenticateCustomer(
   email: string,

@@ -11,7 +11,9 @@ import {
   CalendarDaysIcon,
   CurrencyYenIcon,
   ListBulletIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  Cog6ToothIcon,
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
 
 interface TenantDetail {
@@ -169,13 +171,23 @@ export default function TenantDetailPage() {
                 <p className="text-sm text-gray-500">店舗コード: {tenant.tenantCode}</p>
               </div>
             </div>
-            <button
-              onClick={handleEdit}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              <PencilIcon className="h-5 w-5 mr-2" />
-              編集
-            </button>
+            <div className="flex gap-2">
+              <a
+                href={`/admin/dashboard?tenantId=${tenantId}`}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+              >
+                <Cog6ToothIcon className="h-5 w-5 mr-2" />
+                店舗管理画面を開く
+                <ArrowRightIcon className="h-5 w-5 ml-2" />
+              </a>
+              <button
+                onClick={handleEdit}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                <PencilIcon className="h-5 w-5 mr-2" />
+                編集
+              </button>
+            </div>
           </div>
         </div>
       </div>

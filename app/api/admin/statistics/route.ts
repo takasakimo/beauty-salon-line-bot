@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getAuthFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tenantId = session.tenantId;
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
 
     // 総顧客数
     const totalCustomersResult = await query(

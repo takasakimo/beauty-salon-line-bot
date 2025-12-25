@@ -32,7 +32,12 @@ export default function AdminDashboard() {
 
   const loadStatistics = async () => {
     try {
-      const response = await fetch('/api/admin/statistics', {
+      // クエリパラメータからtenantIdを取得（スーパー管理者の場合）
+      const urlParams = new URLSearchParams(window.location.search);
+      const tenantId = urlParams.get('tenantId');
+      const url = tenantId ? `/api/admin/statistics?tenantId=${tenantId}` : '/api/admin/statistics';
+      
+      const response = await fetch(url, {
         credentials: 'include',
       });
 
