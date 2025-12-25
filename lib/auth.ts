@@ -4,8 +4,9 @@ import crypto from 'crypto';
 
 export interface SessionData {
   adminId?: number;
+  superAdminId?: number;
   customerId?: number;
-  tenantId: number;
+  tenantId?: number;
   username?: string;
   email?: string;
   role?: string;
@@ -77,6 +78,8 @@ export async function getSession(token: string): Promise<SessionData | undefined
        WHERE session_token = $1 AND expires_at > CURRENT_TIMESTAMP`,
       [token]
     );
+    
+    // スーパー管理者の場合はroleで判定（super_adminというroleを持つセッション）
 
     if (result.rows.length === 0) {
       return undefined;
@@ -85,8 +88,9 @@ export async function getSession(token: string): Promise<SessionData | undefined
     const row = result.rows[0];
     return {
       adminId: row.admin_id || undefined,
+      superAdminId: row.super_admin_id || undefined,
       customerId: row.customer_id || undefined,
-      tenantId: row.tenant_id,
+      tenantId: row.tenant_id || undefined,
       username: row.username || undefined,
       email: row.email || undefined,
       role: row.role || undefined,
@@ -230,6 +234,78 @@ export async function authenticateAdmin(
   }
 }
 
+// スーパー管理者認証
+export async function authenticateSuperAdmin(
+  username: string,
+  password: string
+): Promise<{ success: boolean; sessionToken?: string; superAdmin?: any; error?: string }> {
+  try {
+    console.log('スーパー管理者認証開始:', { username });
+    
+    // パスワードハッシュの生成
+    const passwordHash = hashPassword(password);
+    
+    // スーパー管理者認証
+    const adminResult = await query(
+      `SELECT super_admin_id, full_name, email, password_hash, is_active
+       FROM super_admins 
+       WHERE username = $1`,
+      [username]
+    );
+
+    if (adminResult.rows.length === 0) {
+      console.error('スーパー管理者が見つかりません:', username);
+      return { success: false, error: 'ログイン失敗：ユーザー名またはパスワードが正しくありません' };
+    }
+
+    const admin = adminResult.rows[0];
+    
+    if (!admin.is_active) {
+      return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
+    }
+
+    // パスワードの検証
+    const storedHash = admin.password_hash || '';
+    const passwordMatch = storedHash === passwordHash;
+
+    if (!passwordMatch) {
+      return { success: false, error: 'ログイン失敗：パスワードが正しくありません' };
+    }
+
+    // セッショントークンの生成
+    const sessionToken = generateSessionToken();
+    
+    // セッション情報を保存（データベース）
+    // スーパー管理者の場合はtenantIdをnullにし、roleを'super_admin'に設定
+    await setSession(sessionToken, {
+      superAdminId: admin.super_admin_id,
+      username: username,
+      role: 'super_admin',
+      createdAt: Date.now()
+    } as SessionData);
+
+    // 最終ログイン時刻を更新
+    await query(
+      'UPDATE super_admins SET last_login = CURRENT_TIMESTAMP WHERE super_admin_id = $1',
+      [admin.super_admin_id]
+    );
+
+    return {
+      success: true,
+      sessionToken,
+      superAdmin: {
+        superAdminId: admin.super_admin_id,
+        fullName: admin.full_name,
+        email: admin.email
+      }
+    };
+  } catch (error: any) {
+    console.error('スーパー管理者認証エラー:', error);
+    const errorMessage = error?.message || String(error);
+    return { success: false, error: `サーバーエラー: ${errorMessage}` };
+  }
+}
+
 // 認証ミドルウェア（管理者用）
 export async function getAuthFromRequest(request: NextRequest): Promise<SessionData | null> {
   const sessionToken = request.cookies.get('session_token')?.value || 
@@ -250,15 +326,35 @@ export async function getAuthFromRequest(request: NextRequest): Promise<SessionD
   console.log('セッション取得結果:', {
     found: !!session,
     hasAdminId: !!session?.adminId,
-    adminId: session?.adminId
+    adminId: session?.adminId,
+    role: session?.role
   });
   
-  // 管理者セッションかどうか確認（adminIdが存在する）
-  if (session && session.adminId) {
+  // 管理者セッションかどうか確認（adminIdが存在する、またはroleが'super_admin'）
+  if (session && (session.adminId || session.role === 'super_admin')) {
     return session;
   }
   
   console.log('管理者セッションが見つかりません');
+  return null;
+}
+
+// 認証ミドルウェア（スーパー管理者用）
+export async function getSuperAdminAuthFromRequest(request: NextRequest): Promise<SessionData | null> {
+  const sessionToken = request.cookies.get('session_token')?.value || 
+                      request.headers.get('x-session-token');
+  
+  if (!sessionToken) {
+    return null;
+  }
+
+  const session = await getSession(sessionToken);
+  
+  // スーパー管理者セッションかどうか確認（roleが'super_admin'）
+  if (session && session.role === 'super_admin') {
+    return session;
+  }
+  
   return null;
 }
 
