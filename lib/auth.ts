@@ -363,16 +363,27 @@ export function getTenantIdFromRequest(request: NextRequest, session: SessionDat
   // スーパー管理者の場合、クエリパラメータのtenantIdを優先
   if (session && session.role === 'super_admin') {
     const tenantIdParam = request.nextUrl.searchParams.get('tenantId');
+    console.log('スーパー管理者のtenantId取得:', {
+      hasSession: !!session,
+      role: session.role,
+      tenantIdParam,
+      allParams: Object.fromEntries(request.nextUrl.searchParams.entries())
+    });
+    
     if (tenantIdParam) {
       const tenantId = parseInt(tenantIdParam);
       if (!isNaN(tenantId)) {
+        console.log('クエリパラメータからtenantIdを取得:', tenantId);
         return tenantId;
       }
     }
+    console.log('クエリパラメータにtenantIdがありません');
   }
   
   // 通常の管理者の場合はセッションのtenantIdを使用
-  return session?.tenantId || null;
+  const sessionTenantId = session?.tenantId || null;
+  console.log('セッションからtenantIdを取得:', sessionTenantId);
+  return sessionTenantId;
 }
 
 // 顧客認証
