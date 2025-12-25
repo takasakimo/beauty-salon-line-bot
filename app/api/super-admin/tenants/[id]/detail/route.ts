@@ -26,18 +26,32 @@ export async function GET(
       );
     }
 
-    // 店舗基本情報
+    // 店舗基本情報（business_hoursとclosed_daysカラムが存在するかチェック）
+    let selectColumns = 'tenant_id, tenant_code, salon_name, is_active, max_concurrent_reservations, created_at, updated_at';
+    
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'tenants' AND column_name IN ('business_hours', 'closed_days')`
+      );
+      
+      const hasBusinessHours = columnCheck.rows.some((row: any) => row.column_name === 'business_hours');
+      const hasClosedDays = columnCheck.rows.some((row: any) => row.column_name === 'closed_days');
+      
+      if (hasBusinessHours) {
+        selectColumns += ', business_hours';
+      }
+      if (hasClosedDays) {
+        selectColumns += ', closed_days';
+      }
+    } catch (checkError: any) {
+      console.error('カラムチェックエラー:', checkError);
+      // エラーが発生しても続行
+    }
+
     const tenantResult = await query(
-      `SELECT 
-        tenant_id,
-        tenant_code,
-        salon_name,
-        is_active,
-        max_concurrent_reservations,
-        business_hours,
-        closed_days,
-        created_at,
-        updated_at
+      `SELECT ${selectColumns}
        FROM tenants
        WHERE tenant_id = $1`,
       [tenantId]
@@ -80,16 +94,34 @@ export async function GET(
       [tenantId]
     );
 
-    // 今月の売上（reservation_menusから計算）
-    const monthlySalesResult = await query(
-      `SELECT COALESCE(SUM(rm.price), 0) as total
-       FROM reservations r
-       LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
-       WHERE r.tenant_id = $1
-       AND r.status = 'completed'
-       AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
-      [tenantId]
-    );
+    // 今月の売上（reservation_menusから計算、テーブルが存在しない場合はフォールバック）
+    let monthlySalesResult;
+    try {
+      monthlySalesResult = await query(
+        `SELECT COALESCE(SUM(rm.price), 0) as total
+         FROM reservations r
+         LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
+         WHERE r.tenant_id = $1
+         AND r.status = 'completed'
+         AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
+        [tenantId]
+      );
+    } catch (joinError: any) {
+      // reservation_menusテーブルが存在しない場合は、reservations.priceから計算
+      if (joinError.message && joinError.message.includes('reservation_menus')) {
+        console.log('reservation_menusテーブルが存在しないため、reservations.priceから計算します');
+        monthlySalesResult = await query(
+          `SELECT COALESCE(SUM(COALESCE(r.price, 0)), 0) as total
+           FROM reservations r
+           WHERE r.tenant_id = $1
+           AND r.status = 'completed'
+           AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
+          [tenantId]
+        );
+      } else {
+        throw joinError;
+      }
+    }
 
     // メニュー数
     const menusResult = await query(
@@ -103,28 +135,32 @@ export async function GET(
       [tenantId]
     );
 
-    // business_hoursとclosed_daysをパース
+    // business_hoursとclosed_daysをパース（カラムが存在する場合のみ）
     let businessHours = {};
     let closedDays: number[] = [];
     
-    try {
-      if (tenant.business_hours) {
-        businessHours = typeof tenant.business_hours === 'string' 
-          ? JSON.parse(tenant.business_hours) 
-          : tenant.business_hours;
+    if (tenant.business_hours !== undefined) {
+      try {
+        if (tenant.business_hours) {
+          businessHours = typeof tenant.business_hours === 'string' 
+            ? JSON.parse(tenant.business_hours) 
+            : tenant.business_hours;
+        }
+      } catch (e) {
+        console.error('business_hoursのパースエラー:', e);
       }
-    } catch (e) {
-      console.error('business_hoursのパースエラー:', e);
     }
     
-    try {
-      if (tenant.closed_days) {
-        closedDays = typeof tenant.closed_days === 'string' 
-          ? JSON.parse(tenant.closed_days) 
-          : tenant.closed_days;
+    if (tenant.closed_days !== undefined) {
+      try {
+        if (tenant.closed_days) {
+          closedDays = typeof tenant.closed_days === 'string' 
+            ? JSON.parse(tenant.closed_days) 
+            : tenant.closed_days;
+        }
+      } catch (e) {
+        console.error('closed_daysのパースエラー:', e);
       }
-    } catch (e) {
-      console.error('closed_daysのパースエラー:', e);
     }
 
     return NextResponse.json({
