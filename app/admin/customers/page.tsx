@@ -55,6 +55,10 @@ export default function CustomerManagement() {
   const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
   const [customerHistory, setCustomerHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState<any | null>(null);
+  const [reservationNotes, setReservationNotes] = useState({ note1: '', note2: '', note3: '' });
+  const [savingNotes, setSavingNotes] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -129,6 +133,75 @@ export default function CustomerManagement() {
       setCustomerHistory([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  // 詳細カルテモーダルを開く
+  const handleOpenDetailModal = async (reservation: any) => {
+    setSelectedReservation(reservation);
+    setShowDetailModal(true);
+    await loadReservationNotes(reservation.reservation_id);
+  };
+
+  // 詳細カルテモーダルを閉じる
+  const handleCloseDetailModal = () => {
+    setShowDetailModal(false);
+    setSelectedReservation(null);
+    setReservationNotes({ note1: '', note2: '', note3: '' });
+  };
+
+  // 予約のコメントを取得
+  const loadReservationNotes = async (reservationId: number) => {
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}/notes`);
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setReservationNotes({
+          note1: data.note1 || '',
+          note2: data.note2 || '',
+          note3: data.note3 || ''
+        });
+      } else {
+        // コメントが存在しない場合は空の状態を維持
+        setReservationNotes({ note1: '', note2: '', note3: '' });
+      }
+    } catch (error) {
+      console.error('コメント取得エラー:', error);
+      setReservationNotes({ note1: '', note2: '', note3: '' });
+    }
+  };
+
+  // 予約のコメントを保存
+  const handleSaveNotes = async () => {
+    if (!selectedReservation) return;
+
+    setSavingNotes(true);
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${selectedReservation.reservation_id}/notes`);
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(reservationNotes),
+      });
+
+      if (response.ok) {
+        alert('コメントを保存しました');
+      } else {
+        const error = await response.json();
+        alert(`保存エラー: ${error.error || '不明なエラー'}`);
+      }
+    } catch (error) {
+      console.error('コメント保存エラー:', error);
+      alert('コメントの保存に失敗しました');
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -929,6 +1002,139 @@ export default function CustomerManagement() {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 詳細カルテモーダル */}
+      {showDetailModal && selectedReservation && (
+        <div className="fixed z-30 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseDetailModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    来店詳細カルテ
+                  </h3>
+                  <button
+                    onClick={handleCloseDetailModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                {/* 予約基本情報 */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">来店日時:</span>
+                      <p className="text-gray-900 mt-1">
+                        {new Date(selectedReservation.reservation_date).toLocaleString('ja-JP', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">合計金額:</span>
+                      <p className="text-gray-900 mt-1">¥{selectedReservation.total_price.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">メニュー:</span>
+                      <p className="text-gray-900 mt-1">
+                        {Array.isArray(selectedReservation.menus) && selectedReservation.menus.length > 0
+                          ? selectedReservation.menus.map((m: any) => m.menu_name).join('、')
+                          : selectedReservation.menu_name || 'メニュー情報なし'}
+                      </p>
+                    </div>
+                    {selectedReservation.staff_name && (
+                      <div>
+                        <span className="font-medium text-gray-700">担当スタッフ:</span>
+                        <p className="text-gray-900 mt-1">{selectedReservation.staff_name}</p>
+                      </div>
+                    )}
+                    {Array.isArray(selectedReservation.menus) && selectedReservation.menus.length > 0 && (
+                      <div>
+                        <span className="font-medium text-gray-700">所要時間:</span>
+                        <p className="text-gray-900 mt-1">{selectedReservation.total_duration}分</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* コメント欄 */}
+                <div className="space-y-4">
+                  <h4 className="text-md font-medium text-gray-900 mb-3">対応メモ</h4>
+                  
+                  <div>
+                    <label htmlFor="note1" className="block text-sm font-medium text-gray-700 mb-1">
+                      メモ1
+                    </label>
+                    <textarea
+                      id="note1"
+                      rows={4}
+                      value={reservationNotes.note1}
+                      onChange={(e) => setReservationNotes({ ...reservationNotes, note1: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      placeholder="当日行った内容や話した内容を記録してください"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="note2" className="block text-sm font-medium text-gray-700 mb-1">
+                      メモ2
+                    </label>
+                    <textarea
+                      id="note2"
+                      rows={4}
+                      value={reservationNotes.note2}
+                      onChange={(e) => setReservationNotes({ ...reservationNotes, note2: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      placeholder="追加のメモを記録してください"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="note3" className="block text-sm font-medium text-gray-700 mb-1">
+                      メモ3
+                    </label>
+                    <textarea
+                      id="note3"
+                      rows={4}
+                      value={reservationNotes.note3}
+                      onChange={(e) => setReservationNotes({ ...reservationNotes, note3: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      placeholder="追加のメモを記録してください"
+                    />
+                  </div>
+                </div>
+
+                {/* 保存ボタン */}
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseDetailModal}
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  >
+                    閉じる
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50"
+                  >
+                    {savingNotes ? '保存中...' : '保存'}
+                  </button>
                 </div>
               </div>
             </div>
