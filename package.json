@@ -29,7 +29,8 @@
     "sessions-tenant-nullable:migrate": "node scripts/migrate-sessions-tenant-id-nullable.js",
     "reservation-notes:migrate": "node scripts/migrate-reservation-notes.js",
     "product-purchases:migrate": "node scripts/migrate-product-purchases.js",
-    "products:migrate": "node scripts/migrate-products.js"
+    "products:migrate": "node scripts/migrate-products.js",
+    "products-inventory:migrate": "node scripts/migrate-products-inventory.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

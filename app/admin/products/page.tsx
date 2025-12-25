@@ -15,7 +15,10 @@ interface Product {
   product_id: number;
   product_name: string;
   product_category: string | null;
+  manufacturer: string | null;
+  jan_code: string | null;
   unit_price: number;
+  stock_quantity: number;
   description: string | null;
   is_active: boolean;
   created_at: string;
@@ -29,9 +32,12 @@ export default function ProductManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
-    product_name: '',
     product_category: '',
+    manufacturer: '',
+    product_name: '',
+    jan_code: '',
     unit_price: '',
+    stock_quantity: '0',
     description: ''
   });
   const [error, setError] = useState('');
@@ -77,17 +83,23 @@ export default function ProductManagement() {
     if (product) {
       setEditingProduct(product);
       setFormData({
-        product_name: product.product_name,
         product_category: product.product_category || '',
+        manufacturer: product.manufacturer || '',
+        product_name: product.product_name,
+        jan_code: product.jan_code || '',
         unit_price: product.unit_price.toString(),
+        stock_quantity: (product.stock_quantity || 0).toString(),
         description: product.description || ''
       });
     } else {
       setEditingProduct(null);
       setFormData({
-        product_name: '',
         product_category: '',
+        manufacturer: '',
+        product_name: '',
+        jan_code: '',
         unit_price: '',
+        stock_quantity: '0',
         description: ''
       });
     }
@@ -95,13 +107,39 @@ export default function ProductManagement() {
     setShowModal(true);
   };
 
+  // 商品名入力時に既存商品から情報を自動入力
+  const handleProductNameChange = (productName: string) => {
+    setFormData({ ...formData, product_name: productName });
+    
+    // 既存の商品から同じ商品名を検索
+    const existingProduct = products.find(
+      (p) => p.product_name.toLowerCase() === productName.toLowerCase()
+    );
+    
+    if (existingProduct && !editingProduct) {
+      // 編集時でない場合のみ自動入力
+      setFormData({
+        ...formData,
+        product_name: productName,
+        product_category: existingProduct.product_category || '',
+        manufacturer: existingProduct.manufacturer || '',
+        jan_code: existingProduct.jan_code || '',
+        unit_price: existingProduct.unit_price.toString(),
+        stock_quantity: (existingProduct.stock_quantity || 0).toString()
+      });
+    }
+  };
+
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingProduct(null);
     setFormData({
-      product_name: '',
       product_category: '',
+      manufacturer: '',
+      product_name: '',
+      jan_code: '',
       unit_price: '',
+      stock_quantity: '0',
       description: ''
     });
     setError('');
@@ -131,7 +169,10 @@ export default function ProductManagement() {
         body: JSON.stringify({
           product_name: formData.product_name,
           product_category: formData.product_category || null,
+          manufacturer: formData.manufacturer || null,
+          jan_code: formData.jan_code || null,
           unit_price: parseInt(formData.unit_price),
+          stock_quantity: parseInt(formData.stock_quantity) || 0,
           description: formData.description || null,
           is_active: editingProduct ? editingProduct.is_active : true
         }),
@@ -296,7 +337,14 @@ export default function ProductManagement() {
                           {product.product_category && (
                             <div>カテゴリ: {product.product_category}</div>
                           )}
+                          {product.manufacturer && (
+                            <div>メーカー: {product.manufacturer}</div>
+                          )}
+                          {product.jan_code && (
+                            <div>JANコード: {product.jan_code}</div>
+                          )}
                           <div>単価: ¥{product.unit_price.toLocaleString()}</div>
+                          <div>在庫数: {product.stock_quantity || 0}個</div>
                           {product.description && (
                             <div className="md:col-span-2">説明: {product.description}</div>
                           )}
@@ -348,20 +396,6 @@ export default function ProductManagement() {
                 <form onSubmit={handleSubmit}>
                   <div className="space-y-4">
                     <div>
-                      <label htmlFor="product_name" className="block text-sm font-medium text-gray-700">
-                        商品名 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="product_name"
-                        required
-                        value={formData.product_name}
-                        onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      />
-                    </div>
-
-                    <div>
                       <label htmlFor="product_category" className="block text-sm font-medium text-gray-700">
                         カテゴリ
                       </label>
@@ -370,6 +404,46 @@ export default function ProductManagement() {
                         id="product_category"
                         value={formData.product_category}
                         onChange={(e) => setFormData({ ...formData, product_category: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="manufacturer" className="block text-sm font-medium text-gray-700">
+                        メーカー
+                      </label>
+                      <input
+                        type="text"
+                        id="manufacturer"
+                        value={formData.manufacturer}
+                        onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="product_name" className="block text-sm font-medium text-gray-700">
+                        商品名 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="product_name"
+                        required
+                        value={formData.product_name}
+                        onChange={(e) => handleProductNameChange(e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="jan_code" className="block text-sm font-medium text-gray-700">
+                        JANコード
+                      </label>
+                      <input
+                        type="text"
+                        id="jan_code"
+                        value={formData.jan_code}
+                        onChange={(e) => setFormData({ ...formData, jan_code: e.target.value })}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                       />
                     </div>
@@ -385,6 +459,20 @@ export default function ProductManagement() {
                         min="0"
                         value={formData.unit_price}
                         onChange={(e) => setFormData({ ...formData, unit_price: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="stock_quantity" className="block text-sm font-medium text-gray-700">
+                        在庫数
+                      </label>
+                      <input
+                        type="number"
+                        id="stock_quantity"
+                        min="0"
+                        value={formData.stock_quantity}
+                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                       />
                     </div>

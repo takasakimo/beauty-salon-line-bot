@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
         product_id,
         product_name,
         product_category,
+        manufacturer,
+        jan_code,
         unit_price,
+        stock_quantity,
         description,
         is_active,
         created_at,
@@ -82,7 +85,10 @@ export async function POST(request: NextRequest) {
     const {
       product_name,
       product_category,
+      manufacturer,
+      jan_code,
       unit_price,
+      stock_quantity,
       description,
       is_active = true
     } = body;
@@ -99,14 +105,17 @@ export async function POST(request: NextRequest) {
     try {
       const result = await query(
         `INSERT INTO products 
-         (tenant_id, product_name, product_category, unit_price, description, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6)
+         (tenant_id, product_name, product_category, manufacturer, jan_code, unit_price, stock_quantity, description, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
           tenantId,
           product_name,
           product_category || null,
+          manufacturer || null,
+          jan_code || null,
           parseInt(unit_price),
+          parseInt(stock_quantity) || 0,
           description || null,
           is_active
         ]

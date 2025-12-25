@@ -38,7 +38,10 @@ export async function PUT(
     const {
       product_name,
       product_category,
+      manufacturer,
+      jan_code,
       unit_price,
+      stock_quantity,
       description,
       is_active
     } = body;
@@ -70,16 +73,22 @@ export async function PUT(
         `UPDATE products 
          SET product_name = $1, 
              product_category = $2, 
-             unit_price = $3, 
-             description = $4, 
-             is_active = $5,
+             manufacturer = $3,
+             jan_code = $4,
+             unit_price = $5, 
+             stock_quantity = $6,
+             description = $7, 
+             is_active = $8,
              updated_at = CURRENT_TIMESTAMP
-         WHERE product_id = $6 AND tenant_id = $7
+         WHERE product_id = $9 AND tenant_id = $10
          RETURNING *`,
         [
           product_name,
           product_category || null,
+          manufacturer || null,
+          jan_code || null,
           parseInt(unit_price),
+          parseInt(stock_quantity) || 0,
           description || null,
           is_active !== undefined ? is_active : true,
           productId,
