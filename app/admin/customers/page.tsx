@@ -65,6 +65,7 @@ export default function CustomerManagement() {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState<any | null>(null);
   const [purchaseFormData, setPurchaseFormData] = useState({
+    product_id: '',
     product_name: '',
     product_category: '',
     quantity: '1',
@@ -85,6 +86,7 @@ export default function CustomerManagement() {
     notes: ''
   });
   const [menusList, setMenusList] = useState<any[]>([]);
+  const [productsList, setProductsList] = useState<any[]>([]);
 
   useEffect(() => {
     loadCustomers();
@@ -132,7 +134,8 @@ export default function CustomerManagement() {
       loadCustomerHistory(customer.customer_id),
       loadCustomerPurchases(customer.customer_id),
       loadStaffList(),
-      loadMenusList()
+      loadMenusList(),
+      loadProductsList()
     ]);
   };
 
@@ -223,6 +226,22 @@ export default function CustomerManagement() {
     }
   };
 
+  // 商品一覧を取得
+  const loadProductsList = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/products');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setProductsList(data.filter((p: any) => p.is_active));
+      }
+    } catch (error) {
+      console.error('商品取得エラー:', error);
+    }
+  };
+
   // 商品購入履歴モーダルを開く
   const handleOpenPurchaseModal = (purchase?: any) => {
     if (purchase) {
@@ -261,12 +280,34 @@ export default function CustomerManagement() {
     setEditingPurchase(null);
   };
 
+  // 商品選択時の処理
+  const handleProductChange = (productId: string) => {
+    const selectedProduct = productsList.find((p: any) => p.product_id.toString() === productId);
+    if (selectedProduct) {
+      setPurchaseFormData({
+        ...purchaseFormData,
+        product_id: productId,
+        product_name: selectedProduct.product_name,
+        product_category: selectedProduct.product_category || '',
+        unit_price: selectedProduct.unit_price.toString()
+      });
+    } else {
+      setPurchaseFormData({
+        ...purchaseFormData,
+        product_id: '',
+        product_name: '',
+        product_category: '',
+        unit_price: ''
+      });
+    }
+  };
+
   // 商品購入履歴を保存
   const handleSavePurchase = async () => {
     if (!selectedCustomer) return;
 
-    if (!purchaseFormData.product_name || !purchaseFormData.quantity || !purchaseFormData.unit_price) {
-      alert('商品名、数量、単価は必須です');
+    if (!purchaseFormData.product_id || !purchaseFormData.quantity || !purchaseFormData.unit_price) {
+      alert('商品、数量、単価は必須です');
       return;
     }
 

@@ -11,36 +11,38 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 
-interface Menu {
-  menu_id: number;
-  name: string;
-  price: number;
-  duration: number;
+interface Product {
+  product_id: number;
+  product_name: string;
+  product_category: string | null;
+  unit_price: number;
   description: string | null;
   is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
-export default function MenuManagement() {
+export default function ProductManagement() {
   const router = useRouter();
-  const [menus, setMenus] = useState<Menu[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingMenu, setEditingMenu] = useState<Menu | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
-    name: '',
-    price: '',
-    duration: '',
+    product_name: '',
+    product_category: '',
+    unit_price: '',
     description: ''
   });
   const [error, setError] = useState('');
 
   useEffect(() => {
-    loadMenus();
+    loadProducts();
   }, []);
 
-  const loadMenus = async () => {
+  const loadProducts = async () => {
     try {
-      const url = getApiUrlWithTenantId('/api/admin/menus');
+      const url = getApiUrlWithTenantId('/api/admin/products');
       const response = await fetch(url, {
         credentials: 'include',
         headers: {
@@ -56,36 +58,36 @@ export default function MenuManagement() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('メニュー取得エラー:', response.status, errorData);
-        setError('メニューの取得に失敗しました');
+        console.error('商品取得エラー:', response.status, errorData);
+        setError('商品の取得に失敗しました');
         return;
       }
 
       const data = await response.json();
-      setMenus(data);
+      setProducts(data);
     } catch (error) {
-      console.error('メニュー取得エラー:', error);
-      setError('メニューの取得に失敗しました');
+      console.error('商品取得エラー:', error);
+      setError('商品の取得に失敗しました');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenModal = (menu?: Menu) => {
-    if (menu) {
-      setEditingMenu(menu);
+  const handleOpenModal = (product?: Product) => {
+    if (product) {
+      setEditingProduct(product);
       setFormData({
-        name: menu.name,
-        price: menu.price.toString(),
-        duration: menu.duration.toString(),
-        description: menu.description || ''
+        product_name: product.product_name,
+        product_category: product.product_category || '',
+        unit_price: product.unit_price.toString(),
+        description: product.description || ''
       });
     } else {
-      setEditingMenu(null);
+      setEditingProduct(null);
       setFormData({
-        name: '',
-        price: '',
-        duration: '',
+        product_name: '',
+        product_category: '',
+        unit_price: '',
         description: ''
       });
     }
@@ -95,11 +97,11 @@ export default function MenuManagement() {
 
   const handleCloseModal = () => {
     setShowModal(false);
-    setEditingMenu(null);
+    setEditingProduct(null);
     setFormData({
-      name: '',
-      price: '',
-      duration: '',
+      product_name: '',
+      product_category: '',
+      unit_price: '',
       description: ''
     });
     setError('');
@@ -109,14 +111,17 @@ export default function MenuManagement() {
     e.preventDefault();
     setError('');
 
+    if (!formData.product_name || !formData.unit_price) {
+      setError('商品名と単価は必須です');
+      return;
+    }
+
     try {
-      const baseUrl = editingMenu 
-        ? `/api/admin/menus/${editingMenu.menu_id}`
-        : '/api/admin/menus';
-      const url = getApiUrlWithTenantId(baseUrl);
-      
-      const method = editingMenu ? 'PUT' : 'POST';
-      
+      const url = editingProduct
+        ? getApiUrlWithTenantId(`/api/admin/products/${editingProduct.product_id}`)
+        : getApiUrlWithTenantId('/api/admin/products');
+
+      const method = editingProduct ? 'PUT' : 'POST';
       const response = await fetch(url, {
         method,
         headers: {
@@ -124,72 +129,46 @@ export default function MenuManagement() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          name: formData.name,
-          price: parseInt(formData.price),
-          duration: parseInt(formData.duration),
+          product_name: formData.product_name,
+          product_category: formData.product_category || null,
+          unit_price: parseInt(formData.unit_price),
           description: formData.description || null,
-          is_active: editingMenu ? editingMenu.is_active : true
+          is_active: editingProduct ? editingProduct.is_active : true
         }),
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        handleCloseModal();
+        loadProducts();
+      } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || '保存に失敗しました');
+        setError(errorData.error || '保存に失敗しました');
       }
-
-      handleCloseModal();
-      loadMenus();
-    } catch (error: any) {
-      setError(error.message || '保存に失敗しました');
+    } catch (error) {
+      console.error('商品保存エラー:', error);
+      setError('保存に失敗しました');
     }
   };
 
-  const handleDelete = async (menuId: number) => {
-    if (!confirm('このメニューを削除してもよろしいですか？')) {
-      return;
-    }
+  const handleDelete = async (productId: number) => {
+    if (!confirm('この商品を削除しますか？')) return;
 
     try {
-      const url = getApiUrlWithTenantId(`/api/admin/menus/${menuId}`);
+      const url = getApiUrlWithTenantId(`/api/admin/products/${productId}`);
       const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
       });
 
-      if (!response.ok) {
-        throw new Error('削除に失敗しました');
+      if (response.ok) {
+        loadProducts();
+      } else {
+        const errorData = await response.json();
+        alert(errorData.error || '削除に失敗しました');
       }
-
-      loadMenus();
-    } catch (error: any) {
-      alert(error.message || '削除に失敗しました');
-    }
-  };
-
-  const handleToggleActive = async (menu: Menu) => {
-    try {
-      const response = await fetch(`/api/admin/menus/${menu.menu_id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: menu.name,
-          price: menu.price,
-          duration: menu.duration,
-          description: menu.description,
-          is_active: !menu.is_active
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('更新に失敗しました');
-      }
-
-      loadMenus();
-    } catch (error: any) {
-      alert(error.message || '更新に失敗しました');
+    } catch (error) {
+      console.error('商品削除エラー:', error);
+      alert('削除に失敗しました');
     }
   };
 
@@ -208,7 +187,7 @@ export default function MenuManagement() {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-semibold text-gray-900">メニュー管理</h1>
+                <h1 className="text-xl font-semibold text-gray-900">商品管理</h1>
               </div>
               <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
                 <Link
@@ -233,13 +212,13 @@ export default function MenuManagement() {
                 </Link>
                 <Link
                   href={getAdminLinkUrl('/admin/menus')}
-                  className="border-pink-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   メニュー管理
                 </Link>
                 <Link
                   href={getAdminLinkUrl('/admin/products')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                  className="border-pink-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   商品管理
                 </Link>
@@ -276,13 +255,13 @@ export default function MenuManagement() {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">メニュー一覧</h2>
+            <h2 className="text-2xl font-bold text-gray-900">商品管理</h2>
             <button
               onClick={() => handleOpenModal()}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
             >
               <PlusIcon className="h-5 w-5 mr-2" />
-              メニューを追加
+              商品を追加
             </button>
           </div>
 
@@ -294,54 +273,44 @@ export default function MenuManagement() {
 
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
-              {loading ? (
+              {products.length === 0 ? (
                 <li className="px-6 py-4 text-center text-gray-500">
-                  読み込み中...
-                </li>
-              ) : menus.length === 0 ? (
-                <li className="px-6 py-4 text-center text-gray-500">
-                  メニューが登録されていません
+                  商品が登録されていません
                 </li>
               ) : (
-                menus.map((menu) => (
-                  <li key={menu.menu_id} className="px-6 py-4">
+                products.map((product) => (
+                  <li key={product.product_id} className="px-6 py-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center">
-                          <h3 className={`text-lg font-medium ${!menu.is_active ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {menu.name}
-                            {!menu.is_active && (
-                              <span className="ml-2 text-sm text-gray-500">(無効)</span>
-                            )}
+                          <h3 className="text-lg font-medium text-gray-900">
+                            {product.product_name}
                           </h3>
+                          {!product.is_active && (
+                            <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                              無効
+                            </span>
+                          )}
                         </div>
-                        <div className="mt-2 flex items-center text-sm text-gray-500">
-                          <span className="mr-4">¥{menu.price.toLocaleString()}</span>
-                          <span>{menu.duration}分</span>
-                          {menu.description && (
-                            <span className="ml-4 text-gray-400">{menu.description}</span>
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
+                          {product.product_category && (
+                            <div>カテゴリ: {product.product_category}</div>
+                          )}
+                          <div>単価: ¥{product.unit_price.toLocaleString()}</div>
+                          {product.description && (
+                            <div className="md:col-span-2">説明: {product.description}</div>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => handleToggleActive(menu)}
-                          className={`px-3 py-1 text-xs rounded ${
-                            menu.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {menu.is_active ? '有効' : '無効'}
-                        </button>
-                        <button
-                          onClick={() => handleOpenModal(menu)}
+                          onClick={() => handleOpenModal(product)}
                           className="p-2 text-gray-400 hover:text-gray-600"
                         >
                           <PencilIcon className="h-5 w-5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(menu.menu_id)}
+                          onClick={() => handleDelete(product.product_id)}
                           className="p-2 text-gray-400 hover:text-red-600"
                         >
                           <TrashIcon className="h-5 w-5" />
@@ -366,7 +335,7 @@ export default function MenuManagement() {
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">
-                    {editingMenu ? 'メニューを編集' : 'メニューを追加'}
+                    {editingProduct ? '商品を編集' : '商品を追加'}
                   </h3>
                   <button
                     onClick={handleCloseModal}
@@ -376,58 +345,48 @@ export default function MenuManagement() {
                   </button>
                 </div>
 
-                {error && (
-                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                    {error}
-                  </div>
-                )}
-
                 <form onSubmit={handleSubmit}>
                   <div className="space-y-4">
                     <div>
-                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                        メニュー名 <span className="text-red-500">*</span>
+                      <label htmlFor="product_name" className="block text-sm font-medium text-gray-700">
+                        商品名 <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        id="name"
+                        id="product_name"
                         required
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        value={formData.product_name}
+                        onChange={(e) => setFormData({ ...formData, product_name: e.target.value })}
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="price" className="block text-sm font-medium text-gray-700">
-                          価格（円） <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          id="price"
-                          required
-                          min="0"
-                          value={formData.price}
-                          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                        />
-                      </div>
+                    <div>
+                      <label htmlFor="product_category" className="block text-sm font-medium text-gray-700">
+                        カテゴリ
+                      </label>
+                      <input
+                        type="text"
+                        id="product_category"
+                        value={formData.product_category}
+                        onChange={(e) => setFormData({ ...formData, product_category: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
 
-                      <div>
-                        <label htmlFor="duration" className="block text-sm font-medium text-gray-700">
-                          所要時間（分） <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          id="duration"
-                          required
-                          min="1"
-                          value={formData.duration}
-                          onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                        />
-                      </div>
+                    <div>
+                      <label htmlFor="unit_price" className="block text-sm font-medium text-gray-700">
+                        単価 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="unit_price"
+                        required
+                        min="0"
+                        value={formData.unit_price}
+                        onChange={(e) => setFormData({ ...formData, unit_price: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
                     </div>
 
                     <div>
@@ -444,6 +403,12 @@ export default function MenuManagement() {
                     </div>
                   </div>
 
+                  {error && (
+                    <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                      {error}
+                    </div>
+                  )}
+
                   <div className="mt-6 flex justify-end space-x-3">
                     <button
                       type="button"
@@ -456,7 +421,7 @@ export default function MenuManagement() {
                       type="submit"
                       className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                     >
-                      {editingMenu ? '更新' : '追加'}
+                      {editingProduct ? '更新' : '追加'}
                     </button>
                   </div>
                 </form>
