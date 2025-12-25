@@ -736,6 +736,205 @@ export default function CustomerManagement() {
           </div>
         </div>
       )}
+
+      {/* カルテモーダル */}
+      {showChartModal && selectedCustomer && (
+        <div className="fixed z-20 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseChartModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {selectedCustomer.real_name} 様のカルテ
+                  </h3>
+                  <button
+                    onClick={handleCloseChartModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                {/* タブ */}
+                <div className="border-b border-gray-200 mb-4">
+                  <nav className="-mb-px flex space-x-8">
+                    <button
+                      onClick={() => setActiveTab('info')}
+                      className={`${
+                        activeTab === 'info'
+                          ? 'border-pink-500 text-pink-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
+                    >
+                      <UserCircleIcon className="h-5 w-5 mr-2" />
+                      顧客基本情報
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('history')}
+                      className={`${
+                        activeTab === 'history'
+                          ? 'border-pink-500 text-pink-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
+                    >
+                      <ClockIcon className="h-5 w-5 mr-2" />
+                      来店履歴
+                    </button>
+                  </nav>
+                </div>
+
+                {/* タブコンテンツ */}
+                <div className="mt-4">
+                  {activeTab === 'info' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            氏名
+                          </label>
+                          <p className="text-sm text-gray-900">{selectedCustomer.real_name}</p>
+                        </div>
+                        {selectedCustomer.email && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              メールアドレス
+                            </label>
+                            <p className="text-sm text-gray-900">{selectedCustomer.email}</p>
+                          </div>
+                        )}
+                        {selectedCustomer.phone_number && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              電話番号
+                            </label>
+                            <p className="text-sm text-gray-900">{selectedCustomer.phone_number}</p>
+                          </div>
+                        )}
+                        {selectedCustomer.address && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              住所
+                            </label>
+                            <p className="text-sm text-gray-900">{selectedCustomer.address}</p>
+                          </div>
+                        )}
+                        {selectedCustomer.birthday && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              生年月日
+                            </label>
+                            <p className="text-sm text-gray-900">
+                              {new Date(selectedCustomer.birthday).toLocaleDateString('ja-JP')}
+                            </p>
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            登録日
+                          </label>
+                          <p className="text-sm text-gray-900">
+                            {new Date(selectedCustomer.registered_date).toLocaleDateString('ja-JP')}
+                          </p>
+                        </div>
+                        {selectedCustomer.allergy_info && (
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              アレルギー情報
+                            </label>
+                            <p className="text-sm text-orange-600">{selectedCustomer.allergy_info}</p>
+                          </div>
+                        )}
+                        {selectedCustomer.preferences && (
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              希望・要望
+                            </label>
+                            <p className="text-sm text-gray-900">{selectedCustomer.preferences}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'history' && (
+                    <div className="space-y-4">
+                      {loadingHistory ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600"></div>
+                        </div>
+                      ) : customerHistory.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          来店履歴がありません
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {customerHistory.map((history) => (
+                            <div
+                              key={history.reservation_id}
+                              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                            >
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {new Date(history.reservation_date).toLocaleString('ja-JP', {
+                                      year: 'numeric',
+                                      month: 'long',
+                                      day: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-semibold text-gray-900">
+                                    ¥{history.total_price.toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="mt-2 space-y-1">
+                                <div className="flex items-center text-sm text-gray-600">
+                                  <span className="font-medium mr-2">メニュー:</span>
+                                  <span>
+                                    {Array.isArray(history.menus) && history.menus.length > 0
+                                      ? history.menus.map((m: any) => m.menu_name).join('、')
+                                      : history.menu_name || 'メニュー情報なし'}
+                                  </span>
+                                </div>
+                                {history.staff_name && (
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    <span className="font-medium mr-2">担当スタッフ:</span>
+                                    <span>{history.staff_name}</span>
+                                  </div>
+                                )}
+                                {Array.isArray(history.menus) && history.menus.length > 0 && (
+                                  <div className="flex items-center text-sm text-gray-600">
+                                    <span className="font-medium mr-2">所要時間:</span>
+                                    <span>{history.total_duration}分</span>
+                                  </div>
+                                )}
+                                {history.notes && (
+                                  <div className="mt-2 pt-2 border-t border-gray-100">
+                                    <p className="text-sm text-gray-700">
+                                      <span className="font-medium">対応詳細:</span>
+                                      <span className="ml-2">{history.notes}</span>
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
