@@ -8,6 +8,7 @@ export default function AdminLogin() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [tenantCode, setTenantCode] = useState('');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,8 +22,15 @@ export default function AdminLogin() {
     const trimmedPassword = password.trim();
     const trimmedTenantCode = tenantCode.trim();
 
-    if (!trimmedUsername || !trimmedPassword || !trimmedTenantCode) {
-      setError('すべての項目を入力してください');
+    if (!trimmedUsername || !trimmedPassword) {
+      setError('ユーザー名とパスワードを入力してください');
+      setLoading(false);
+      return;
+    }
+
+    // スーパー管理者でない場合、店舗コードが必要
+    if (!isSuperAdmin && !trimmedTenantCode) {
+      setError('店舗コードを入力してください');
       setLoading(false);
       return;
     }
@@ -37,7 +45,8 @@ export default function AdminLogin() {
         body: JSON.stringify({
           username: trimmedUsername,
           password: trimmedPassword,
-          tenantCode: trimmedTenantCode,
+          tenantCode: isSuperAdmin ? '' : trimmedTenantCode,
+          isSuperAdmin: isSuperAdmin,
         }),
       });
 
@@ -50,7 +59,12 @@ export default function AdminLogin() {
       console.log('ログイン結果:', result);
 
       if (result.success) {
-        router.push('/admin/dashboard');
+        // スーパー管理者の場合はスーパー管理者ダッシュボードへ、それ以外は店舗管理者ダッシュボードへ
+        if (result.isSuperAdmin) {
+          router.push('/super-admin/dashboard');
+        } else {
+          router.push('/admin/dashboard');
+        }
       } else {
         setError(result.error || 'ログインに失敗しました');
       }
@@ -80,24 +94,44 @@ export default function AdminLogin() {
             </div>
           )}
           <div className="space-y-4">
-            <div>
-              <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700">
-                店舗コード
-              </label>
+            <div className="flex items-center">
               <input
-                id="tenantCode"
-                type="text"
-                required
-                value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value)}
-                placeholder="例: beauty-salon-001"
-                className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                id="isSuperAdmin"
+                type="checkbox"
+                checked={isSuperAdmin}
+                onChange={(e) => {
+                  setIsSuperAdmin(e.target.checked);
+                  if (e.target.checked) {
+                    setTenantCode('');
+                  }
+                }}
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                 disabled={loading}
               />
-              <p className="mt-1 text-xs text-gray-500">
-                店舗コードを入力してください
-              </p>
+              <label htmlFor="isSuperAdmin" className="ml-2 block text-sm text-gray-900">
+                スーパー管理者としてログイン
+              </label>
             </div>
+            {!isSuperAdmin && (
+              <div>
+                <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700">
+                  店舗コード
+                </label>
+                <input
+                  id="tenantCode"
+                  type="text"
+                  required={!isSuperAdmin}
+                  value={tenantCode}
+                  onChange={(e) => setTenantCode(e.target.value)}
+                  placeholder="例: beauty-salon-001"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                  disabled={loading || isSuperAdmin}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  店舗コードを入力してください
+                </p>
+              </div>
+            )}
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-700">
                 ユーザー名
@@ -137,17 +171,10 @@ export default function AdminLogin() {
             </button>
           </div>
         </form>
-        <div className="text-center space-y-2">
-          <div>
-            <a href="/super-admin/login" className="text-sm text-indigo-600 hover:text-indigo-700">
-              スーパー管理者ログイン →
-            </a>
-          </div>
-          <div>
-            <a href="/" className="text-sm text-pink-600 hover:text-pink-700">
-              ← ホームに戻る
-            </a>
-          </div>
+        <div className="text-center">
+          <a href="/" className="text-sm text-pink-600 hover:text-pink-700">
+            ← ホームに戻る
+          </a>
         </div>
       </div>
     </div>

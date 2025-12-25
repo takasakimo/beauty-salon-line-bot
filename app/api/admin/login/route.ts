@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin } from '@/lib/auth';
+import { authenticateAdmin, authenticateSuperAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    let { username, password, tenantCode } = body;
+    let { username, password, tenantCode, isSuperAdmin } = body;
 
     // 入力値のトリム処理
     username = username?.trim() || '';
@@ -21,6 +21,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // スーパー管理者としてログインする場合
+    if (isSuperAdmin || !tenantCode) {
+      const result = await authenticateSuperAdmin(username, password);
+      
+      if (!result.success) {
+        console.error('スーパー管理者認証失敗:', {
+          username,
+          error: result.error
+        });
+        return NextResponse.json(
+          { success: false, error: result.error || 'ログインに失敗しました' },
+          { status: 401 }
+        );
+      }
+
+      // セッションクッキーを設定
+      const response = NextResponse.json({
+        success: true,
+        isSuperAdmin: true,
+        superAdminName: result.superAdmin?.fullName
+      });
+
+      if (result.sessionToken) {
+        response.cookies.set('session_token', result.sessionToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 7, // 7日間
+          path: '/'
+        });
+      }
+
+      return response;
+    }
+
+    // 店舗管理者としてログインする場合
     if (!tenantCode) {
       return NextResponse.json(
         { success: false, error: '店舗コードを入力してください' },
@@ -45,6 +81,7 @@ export async function POST(request: NextRequest) {
     // セッションクッキーを設定
     const response = NextResponse.json({
       success: true,
+      isSuperAdmin: false,
       adminName: result.admin?.fullName,
       tenantName: result.tenant?.salonName,
       role: result.admin?.role
