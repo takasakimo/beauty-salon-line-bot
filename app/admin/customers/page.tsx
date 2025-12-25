@@ -12,7 +12,9 @@ import {
   XMarkIcon,
   MagnifyingGlassIcon,
   QrCodeIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  UserCircleIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 interface Customer {
@@ -48,6 +50,11 @@ export default function CustomerManagement() {
   const [tenantCode, setTenantCode] = useState<string | null>(null);
   const [salonName, setSalonName] = useState<string | null>(null);
   const [loadingTenantInfo, setLoadingTenantInfo] = useState(false);
+  const [showChartModal, setShowChartModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [activeTab, setActiveTab] = useState<'info' | 'history'>('info');
+  const [customerHistory, setCustomerHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -84,6 +91,45 @@ export default function CustomerManagement() {
   const handleOpenQrModal = async () => {
     await loadTenantInfo();
     setShowQrModal(true);
+  };
+
+  // カルテモーダルを開く
+  const handleOpenChartModal = async (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setActiveTab('info');
+    setShowChartModal(true);
+    await loadCustomerHistory(customer.customer_id);
+  };
+
+  // カルテモーダルを閉じる
+  const handleCloseChartModal = () => {
+    setShowChartModal(false);
+    setSelectedCustomer(null);
+    setCustomerHistory([]);
+  };
+
+  // 顧客の来店履歴を取得
+  const loadCustomerHistory = async (customerId: number) => {
+    setLoadingHistory(true);
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/customers/${customerId}/history`);
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCustomerHistory(data);
+      } else {
+        console.error('来店履歴取得エラー:', response.status);
+        setCustomerHistory([]);
+      }
+    } catch (error) {
+      console.error('来店履歴取得エラー:', error);
+      setCustomerHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   // QRコードをダウンロード
@@ -415,9 +461,12 @@ export default function CustomerManagement() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center">
-                          <h3 className="text-lg font-medium text-gray-900">
+                          <button
+                            onClick={() => handleOpenChartModal(customer)}
+                            className="text-lg font-medium text-gray-900 hover:text-pink-600 cursor-pointer transition-colors"
+                          >
                             {customer.real_name}
-                          </h3>
+                          </button>
                         </div>
                         <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
                           {customer.email && (
