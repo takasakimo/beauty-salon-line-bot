@@ -1096,7 +1096,7 @@ export default function CustomerManagement() {
                   
                   <div>
                     <label htmlFor="note1" className="block text-sm font-medium text-gray-700 mb-1">
-                      メモ1
+                      対話内容
                     </label>
                     <textarea
                       id="note1"
@@ -1104,13 +1104,13 @@ export default function CustomerManagement() {
                       value={reservationNotes.note1}
                       onChange={(e) => setReservationNotes({ ...reservationNotes, note1: e.target.value })}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      placeholder="当日行った内容や話した内容を記録してください"
+                      placeholder="顧客との対話内容を記録してください"
                     />
                   </div>
 
                   <div>
                     <label htmlFor="note2" className="block text-sm font-medium text-gray-700 mb-1">
-                      メモ2
+                      提案内容
                     </label>
                     <textarea
                       id="note2"
@@ -1118,13 +1118,13 @@ export default function CustomerManagement() {
                       value={reservationNotes.note2}
                       onChange={(e) => setReservationNotes({ ...reservationNotes, note2: e.target.value })}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      placeholder="追加のメモを記録してください"
+                      placeholder="顧客への提案内容を記録してください"
                     />
                   </div>
 
                   <div>
                     <label htmlFor="note3" className="block text-sm font-medium text-gray-700 mb-1">
-                      メモ3
+                      その他
                     </label>
                     <textarea
                       id="note3"
@@ -1132,7 +1132,7 @@ export default function CustomerManagement() {
                       value={reservationNotes.note3}
                       onChange={(e) => setReservationNotes({ ...reservationNotes, note3: e.target.value })}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      placeholder="追加のメモを記録してください"
+                      placeholder="その他のメモを記録してください"
                     />
                   </div>
                 </div>
