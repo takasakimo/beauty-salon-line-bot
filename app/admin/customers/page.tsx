@@ -261,6 +261,7 @@ export default function CustomerManagement() {
       setEditingPurchase(null);
       const now = new Date();
       setPurchaseFormData({
+        product_id: '',
         product_name: '',
         product_category: '',
         quantity: '1',
@@ -1611,31 +1612,39 @@ export default function CustomerManagement() {
 
                 <div className="space-y-4">
                   <div>
-                    <label htmlFor="product_name" className="block text-sm font-medium text-gray-700 mb-1">
-                      商品名 <span className="text-red-500">*</span>
+                    <label htmlFor="product_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      商品 <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      id="product_name"
-                      value={purchaseFormData.product_name}
-                      onChange={(e) => setPurchaseFormData({ ...purchaseFormData, product_name: e.target.value })}
+                    <select
+                      id="product_id"
+                      value={purchaseFormData.product_id}
+                      onChange={(e) => handleProductChange(e.target.value)}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                       required
-                    />
+                    >
+                      <option value="">選択してください</option>
+                      {productsList.map((product) => (
+                        <option key={product.product_id} value={product.product_id}>
+                          {product.product_name} {product.product_category ? `(${product.product_category})` : ''} - ¥{product.unit_price.toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div>
-                    <label htmlFor="product_category" className="block text-sm font-medium text-gray-700 mb-1">
-                      カテゴリ
-                    </label>
-                    <input
-                      type="text"
-                      id="product_category"
-                      value={purchaseFormData.product_category}
-                      onChange={(e) => setPurchaseFormData({ ...purchaseFormData, product_category: e.target.value })}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                    />
-                  </div>
+                  {purchaseFormData.product_id && (
+                    <div>
+                      <label htmlFor="product_category_display" className="block text-sm font-medium text-gray-700 mb-1">
+                        カテゴリ
+                      </label>
+                      <input
+                        type="text"
+                        id="product_category_display"
+                        value={purchaseFormData.product_category}
+                        readOnly
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-50"
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
