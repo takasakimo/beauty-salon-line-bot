@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getApiUrlWithTenantId } from '@/lib/admin-utils';
 import { 
   PlusIcon,
   PencilIcon,
@@ -60,7 +61,8 @@ export default function CustomerManagement() {
   const loadCustomers = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/customers', {
+      const url = getApiUrlWithTenantId('/api/admin/customers');
+      const response = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -92,7 +94,9 @@ export default function CustomerManagement() {
   const searchCustomers = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/customers?search=${encodeURIComponent(searchQuery)}`, {
+      const baseUrl = `/api/admin/customers?search=${encodeURIComponent(searchQuery)}`;
+      const url = getApiUrlWithTenantId(baseUrl);
+      const response = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -166,9 +170,10 @@ export default function CustomerManagement() {
     setError('');
 
     try {
-      const url = editingCustomer 
+      const baseUrl = editingCustomer 
         ? `/api/admin/customers/${editingCustomer.customer_id}`
         : '/api/admin/customers';
+      const url = getApiUrlWithTenantId(baseUrl);
       
       const method = editingCustomer ? 'PUT' : 'POST';
       
@@ -207,7 +212,8 @@ export default function CustomerManagement() {
     }
 
     try {
-      const response = await fetch(`/api/admin/customers/${customerId}`, {
+      const url = getApiUrlWithTenantId(`/api/admin/customers/${customerId}`);
+      const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
       });

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getApiUrlWithTenantId } from '@/lib/admin-utils';
 import { 
   PlusIcon,
   PencilIcon,
@@ -39,7 +40,8 @@ export default function MenuManagement() {
 
   const loadMenus = async () => {
     try {
-      const response = await fetch('/api/admin/menus', {
+      const url = getApiUrlWithTenantId('/api/admin/menus');
+      const response = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -108,9 +110,10 @@ export default function MenuManagement() {
     setError('');
 
     try {
-      const url = editingMenu 
+      const baseUrl = editingMenu 
         ? `/api/admin/menus/${editingMenu.menu_id}`
         : '/api/admin/menus';
+      const url = getApiUrlWithTenantId(baseUrl);
       
       const method = editingMenu ? 'PUT' : 'POST';
       
@@ -147,7 +150,8 @@ export default function MenuManagement() {
     }
 
     try {
-      const response = await fetch(`/api/admin/menus/${menuId}`, {
+      const url = getApiUrlWithTenantId(`/api/admin/menus/${menuId}`);
+      const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
       });

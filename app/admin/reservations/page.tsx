@@ -341,11 +341,13 @@ export default function ReservationManagement() {
   const loadReservations = async () => {
     try {
       setLoading(true);
-      let url = '/api/admin/reservations';
+      let baseUrl = '/api/admin/reservations';
       const params = new URLSearchParams();
       if (filterDate) params.append('date', filterDate);
       if (filterStatus) params.append('status', filterStatus);
-      if (params.toString()) url += '?' + params.toString();
+      if (params.toString()) baseUrl += '?' + params.toString();
+      
+      const url = getApiUrlWithTenantId(baseUrl);
 
       const response = await fetch(url, {
         credentials: 'include',
@@ -378,7 +380,8 @@ export default function ReservationManagement() {
 
   const loadCustomers = async () => {
     try {
-      const response = await fetch('/api/admin/customers', {
+      const url = getApiUrlWithTenantId('/api/admin/customers');
+      const response = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -398,7 +401,8 @@ export default function ReservationManagement() {
   const loadMenus = async () => {
     try {
       // 管理画面用のメニューAPIを使用
-      const response = await fetch('/api/admin/menus', {
+      const url = getApiUrlWithTenantId('/api/admin/menus');
+      const response = await fetch(url, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -417,8 +421,9 @@ export default function ReservationManagement() {
 
   const loadStaff = async () => {
     try {
-      // 顧客向けAPIを使用（認証不要）
-      const response = await fetch('/api/staff?tenant=beauty-salon-001', {
+      // 管理画面用のスタッフAPIを使用
+      const url = getApiUrlWithTenantId('/api/admin/staff');
+      const response = await fetch(url, {
         credentials: 'include',
       });
       if (response.ok) {
@@ -523,9 +528,10 @@ export default function ReservationManagement() {
       // 日付と時間を結合
       const reservationDateTime = `${formData.reservation_date}T${formData.reservation_time}:00`;
 
-      const url = editingReservation 
+      const baseUrl = editingReservation 
         ? `/api/admin/reservations/${editingReservation.reservation_id}`
         : '/api/admin/reservations';
+      const url = getApiUrlWithTenantId(baseUrl);
       
       const method = editingReservation ? 'PUT' : 'POST';
       
@@ -575,7 +581,8 @@ export default function ReservationManagement() {
     }
 
     try {
-      const response = await fetch(`/api/admin/reservations/${reservationId}`, {
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}`);
+      const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -598,7 +605,8 @@ export default function ReservationManagement() {
 
       const reservationDateTime = new Date(reservation.reservation_date).toISOString();
 
-      const response = await fetch(`/api/admin/reservations/${reservationId}`, {
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}`);
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

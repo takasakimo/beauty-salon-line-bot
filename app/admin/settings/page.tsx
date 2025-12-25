@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { getApiUrlWithTenantId } from '@/lib/admin-utils';
 import Link from 'next/link';
 import { 
   Cog6ToothIcon,
@@ -78,7 +79,8 @@ export default function SettingsPage() {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('/api/admin/settings', {
+      const url = getApiUrlWithTenantId('/api/admin/settings');
+      const response = await fetch(url, {
         credentials: 'include',
       });
 
@@ -116,7 +118,8 @@ export default function SettingsPage() {
     setSuccess(false);
 
     try {
-      const response = await fetch('/api/admin/settings', {
+      const url = getApiUrlWithTenantId('/api/admin/settings');
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -152,7 +155,8 @@ export default function SettingsPage() {
   // 従業員管理関数
   const loadStaff = async () => {
     try {
-      const response = await fetch('/api/admin/staff', {
+      const url = getApiUrlWithTenantId('/api/admin/staff');
+      const response = await fetch(url, {
         credentials: 'include',
       });
 
@@ -175,7 +179,8 @@ export default function SettingsPage() {
 
   const loadMenus = async () => {
     try {
-      const response = await fetch('/api/admin/menus', {
+      const url = getApiUrlWithTenantId('/api/admin/menus');
+      const response = await fetch(url, {
         credentials: 'include',
       });
 
@@ -249,9 +254,10 @@ export default function SettingsPage() {
     setStaffError('');
 
     try {
-      const url = editingStaff 
+      const baseUrl = editingStaff 
         ? `/api/admin/staff/${editingStaff.staff_id}`
         : '/api/admin/staff';
+      const url = getApiUrlWithTenantId(baseUrl);
       
       const method = editingStaff ? 'PUT' : 'POST';
       
@@ -288,7 +294,8 @@ export default function SettingsPage() {
     }
 
     try {
-      const response = await fetch(`/api/admin/staff/${staffId}`, {
+      const url = getApiUrlWithTenantId(`/api/admin/staff/${staffId}`);
+      const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
       });
