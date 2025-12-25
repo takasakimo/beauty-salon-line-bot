@@ -129,11 +129,36 @@ export async function GET(
       [tenantId]
     );
 
-    // スタッフ数
-    const staffResult = await query(
-      'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1 AND is_active = true',
-      [tenantId]
-    );
+    // スタッフ数（is_activeカラムが存在するかチェック）
+    let staffResult;
+    try {
+      const staffColumnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'staff' AND column_name = 'is_active'`
+      );
+      
+      if (staffColumnCheck.rows.length > 0) {
+        // is_activeカラムが存在する場合
+        staffResult = await query(
+          'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1 AND is_active = true',
+          [tenantId]
+        );
+      } else {
+        // is_activeカラムが存在しない場合
+        staffResult = await query(
+          'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1',
+          [tenantId]
+        );
+      }
+    } catch (checkError: any) {
+      // エラーが発生した場合は、is_activeなしで取得
+      console.error('staff is_activeカラムチェックエラー:', checkError);
+      staffResult = await query(
+        'SELECT COUNT(*) as count FROM staff WHERE tenant_id = $1',
+        [tenantId]
+      );
+    }
 
     // business_hoursとclosed_daysをパース（カラムが存在する場合のみ）
     let businessHours = {};
