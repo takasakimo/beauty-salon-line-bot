@@ -90,7 +90,14 @@ function MyPageContent() {
     if (authenticated && customer) {
       loadTenants();
     }
-  }, [authenticated, customer, tenantCode]);
+  }, [authenticated, customer]);
+
+  useEffect(() => {
+    if (authenticated && customerId) {
+      // 店舗が変更されたときにデータを再読み込み
+      loadCustomerData(customerId);
+    }
+  }, [tenantCode, authenticated, customerId]);
 
   const checkAuth = async () => {
     try {
