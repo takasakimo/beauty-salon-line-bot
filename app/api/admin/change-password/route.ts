@@ -53,15 +53,24 @@ export async function POST(request: NextRequest) {
     let adminId: number | null = null;
     
     if (session.role === 'super_admin') {
-      // スーパー管理者の場合、tenantIdから管理者IDを取得（最初の管理者を使用）
-      const adminListResult = await query(
-        `SELECT admin_id 
+      console.log('スーパー管理者のパスワード変更:', { tenantId, sessionRole: session.role });
+      
+      // スーパー管理者の場合、tenantIdから管理者IDを取得（is_activeの条件を外して検索）
+      // まず、is_active = trueで検索
+      let adminListResult = await query(
+        `SELECT admin_id, is_active
          FROM tenant_admins 
-         WHERE tenant_id = $1 AND is_active = true
-         ORDER BY admin_id ASC
+         WHERE tenant_id = $1
+         ORDER BY is_active DESC, admin_id ASC
          LIMIT 1`,
         [tenantId]
       );
+      
+      console.log('管理者アカウント検索結果:', { 
+        tenantId, 
+        count: adminListResult.rows.length,
+        admins: adminListResult.rows.map(r => ({ admin_id: r.admin_id, is_active: r.is_active }))
+      });
       
       if (adminListResult.rows.length === 0) {
         return NextResponse.json(
@@ -71,8 +80,10 @@ export async function POST(request: NextRequest) {
       }
       
       adminId = adminListResult.rows[0].admin_id;
+      console.log('使用する管理者ID:', adminId);
     } else if (session.adminId) {
       adminId = session.adminId;
+      console.log('通常の管理者のパスワード変更:', { adminId, tenantId });
     } else {
       return NextResponse.json(
         { success: false, error: '管理者情報が見つかりません' },
