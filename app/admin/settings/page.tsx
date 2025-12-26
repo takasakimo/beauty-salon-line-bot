@@ -1240,6 +1240,8 @@ export default function SettingsPage() {
                       )}
                       </div>
                     )}
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-6 pt-4 border-t border-gray-200 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
