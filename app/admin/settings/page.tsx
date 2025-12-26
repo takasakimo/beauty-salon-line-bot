@@ -30,6 +30,17 @@ interface Staff {
   available_menus?: Array<{ menu_id: number; name: string }>;
 }
 
+interface Admin {
+  admin_id: number;
+  username: string;
+  email: string | null;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 interface BusinessHours {
   [key: string]: {
     open: string;
@@ -58,14 +69,24 @@ export default function SettingsPage() {
   
   // 従業員管理用のstate
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [admins, setAdmins] = useState<Admin[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(true);
+  const [loadingAdmins, setLoadingAdmins] = useState(true);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'staff' | 'admin'>('staff');
   const [staffFormData, setStaffFormData] = useState({
     name: '',
     email: '',
     phone_number: '',
     working_hours: ''
+  });
+  const [adminFormData, setAdminFormData] = useState({
+    username: '',
+    password: '',
+    fullName: '',
+    email: ''
   });
   const [staffError, setStaffError] = useState('');
   const [menus, setMenus] = useState<Menu[]>([]);
@@ -97,6 +118,7 @@ export default function SettingsPage() {
     
     loadSettings();
     loadStaff();
+    loadAdmins();
     loadMenus();
   }, []);
 
@@ -205,6 +227,30 @@ export default function SettingsPage() {
     }
   };
 
+  // 管理者一覧取得関数
+  const loadAdmins = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/admins');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setAdmins(data);
+      }
+    } catch (error) {
+      console.error('管理者取得エラー:', error);
+    } finally {
+      setLoadingAdmins(false);
+    }
+  };
+
   const loadMenus = async () => {
     try {
       const url = getApiUrlWithTenantId('/api/admin/menus');
@@ -230,9 +276,11 @@ export default function SettingsPage() {
     }
   };
 
-  const handleOpenStaffModal = (staffMember?: Staff) => {
+  const handleOpenStaffModal = (staffMember?: Staff, adminMember?: Admin) => {
     if (staffMember) {
+      setSelectedRole('staff');
       setEditingStaff(staffMember);
+      setEditingAdmin(null);
       setStaffFormData({
         name: staffMember.name,
         email: staffMember.email || '',
@@ -242,13 +290,31 @@ export default function SettingsPage() {
       // 対応可能メニューを設定
       const menuIds = staffMember.available_menus?.map(m => m.menu_id) || [];
       setSelectedMenuIds(menuIds);
-    } else {
+    } else if (adminMember) {
+      setSelectedRole('admin');
+      setEditingAdmin(adminMember);
       setEditingStaff(null);
+      setAdminFormData({
+        username: adminMember.username,
+        password: '',
+        fullName: adminMember.full_name,
+        email: adminMember.email || ''
+      });
+    } else {
+      setSelectedRole('staff');
+      setEditingStaff(null);
+      setEditingAdmin(null);
       setStaffFormData({
         name: '',
         email: '',
         phone_number: '',
         working_hours: ''
+      });
+      setAdminFormData({
+        username: '',
+        password: '',
+        fullName: '',
+        email: ''
       });
       setSelectedMenuIds([]);
     }
@@ -259,11 +325,19 @@ export default function SettingsPage() {
   const handleCloseStaffModal = () => {
     setShowStaffModal(false);
     setEditingStaff(null);
+    setEditingAdmin(null);
+    setSelectedRole('staff');
     setStaffFormData({
       name: '',
       email: '',
       phone_number: '',
       working_hours: ''
+    });
+    setAdminFormData({
+      username: '',
+      password: '',
+      fullName: '',
+      email: ''
     });
     setSelectedMenuIds([]);
     setStaffError('');
@@ -282,36 +356,85 @@ export default function SettingsPage() {
     setStaffError('');
 
     try {
-      const baseUrl = editingStaff 
-        ? `/api/admin/staff/${editingStaff.staff_id}`
-        : '/api/admin/staff';
-      const url = getApiUrlWithTenantId(baseUrl);
-      
-      const method = editingStaff ? 'PUT' : 'POST';
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: staffFormData.name,
-          email: staffFormData.email || null,
-          phone_number: staffFormData.phone_number || null,
-          working_hours: staffFormData.working_hours || null,
-          menu_ids: selectedMenuIds
-        }),
-      });
+      if (selectedRole === 'admin') {
+        // 管理者の追加・編集
+        const baseUrl = editingAdmin 
+          ? `/api/admin/admins/${editingAdmin.admin_id}`
+          : '/api/admin/admins';
+        const url = getApiUrlWithTenantId(baseUrl);
+        
+        const method = editingAdmin ? 'PUT' : 'POST';
+        
+        const requestBody: any = {
+          username: adminFormData.username,
+          fullName: adminFormData.fullName || adminFormData.username,
+          email: adminFormData.email || null
+        };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '保存に失敗しました');
+        // 新規作成時またはパスワードが入力されている場合はパスワードを含める
+        if (!editingAdmin || adminFormData.password) {
+          if (!adminFormData.password || adminFormData.password.length < 6) {
+            setStaffError('パスワードは6文字以上である必要があります');
+            return;
+          }
+          requestBody.password = adminFormData.password;
+        }
+
+        // 編集時はisActiveも含める
+        if (editingAdmin) {
+          requestBody.isActive = editingAdmin.is_active;
+        }
+        
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '保存に失敗しました');
+        }
+
+        await loadAdmins();
+        handleCloseStaffModal();
+      } else {
+        // 従業員の追加・編集
+        const baseUrl = editingStaff 
+          ? `/api/admin/staff/${editingStaff.staff_id}`
+          : '/api/admin/staff';
+        const url = getApiUrlWithTenantId(baseUrl);
+        
+        const method = editingStaff ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: staffFormData.name,
+            email: staffFormData.email || null,
+            phone_number: staffFormData.phone_number || null,
+            working_hours: staffFormData.working_hours || null,
+            menu_ids: selectedMenuIds
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '保存に失敗しました');
+        }
+
+        await loadStaff();
+        handleCloseStaffModal();
       }
-
-      handleCloseStaffModal();
-      loadStaff();
     } catch (error: any) {
+      console.error('保存エラー:', error);
       setStaffError(error.message || '保存に失敗しました');
     }
   };
@@ -323,6 +446,30 @@ export default function SettingsPage() {
 
     try {
       const url = getApiUrlWithTenantId(`/api/admin/staff/${staffId}`);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '削除に失敗しました');
+      }
+
+      await loadAdmins();
+    } catch (error: any) {
+      console.error('管理者削除エラー:', error);
+      setStaffError(error.message || '削除に失敗しました');
+    }
+  };
+
+  const handleDeleteAdmin = async (adminId: number) => {
+    if (!confirm('この管理者を削除してもよろしいですか？')) {
+      return;
+    }
+
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/admins/${adminId}`);
       const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
@@ -716,67 +863,124 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className="bg-white shadow overflow-hidden sm:rounded-md">
-              <ul className="divide-y divide-gray-200">
-                {loadingStaff ? (
-                  <li className="px-6 py-4 text-center text-gray-500">
-                    読み込み中...
-                  </li>
-                ) : staff.length === 0 ? (
-                  <li className="px-6 py-4 text-center text-gray-500">
-                    従業員が登録されていません
-                  </li>
-                ) : (
-                  staff.map((staffMember) => (
-                    <li key={staffMember.staff_id} className="px-6 py-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h3 className="text-lg font-medium text-gray-900">
-                            {staffMember.name}
-                          </h3>
-                          <div className="mt-2 flex items-center text-sm text-gray-500 space-x-4">
-                            {staffMember.email && (
-                              <span>{staffMember.email}</span>
-                            )}
-                            {staffMember.phone_number && (
-                              <span>{staffMember.phone_number}</span>
-                            )}
-                            {staffMember.working_hours && (
-                              <span>勤務時間: {staffMember.working_hours}</span>
+            {/* 従業員一覧 */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">従業員一覧</h3>
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {loadingStaff ? (
+                    <li className="px-6 py-4 text-center text-gray-500">
+                      読み込み中...
+                    </li>
+                  ) : staff.length === 0 ? (
+                    <li className="px-6 py-4 text-center text-gray-500">
+                      従業員が登録されていません
+                    </li>
+                  ) : (
+                    staff.map((staffMember) => (
+                      <li key={staffMember.staff_id} className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-medium text-gray-900">
+                              {staffMember.name}
+                            </h3>
+                            <div className="mt-2 flex items-center text-sm text-gray-500 space-x-4">
+                              {staffMember.email && (
+                                <span>{staffMember.email}</span>
+                              )}
+                              {staffMember.phone_number && (
+                                <span>{staffMember.phone_number}</span>
+                              )}
+                              {staffMember.working_hours && (
+                                <span>勤務時間: {staffMember.working_hours}</span>
+                              )}
+                            </div>
+                            {staffMember.available_menus && staffMember.available_menus.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-xs text-gray-500 mb-1">対応可能メニュー:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {staffMember.available_menus.map((menu: { menu_id: number; name: string }) => (
+                                    <span key={menu.menu_id} className="inline-block px-2 py-1 text-xs bg-pink-100 text-pink-800 rounded">
+                                      {menu.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
                             )}
                           </div>
-                          {staffMember.available_menus && staffMember.available_menus.length > 0 && (
-                            <div className="mt-2">
-                              <p className="text-xs text-gray-500 mb-1">対応可能メニュー:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {staffMember.available_menus.map((menu: { menu_id: number; name: string }) => (
-                                  <span key={menu.menu_id} className="inline-block px-2 py-1 text-xs bg-pink-100 text-pink-800 rounded">
-                                    {menu.name}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleOpenStaffModal(staffMember)}
+                              className="p-2 text-gray-400 hover:text-gray-600"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteStaff(staffMember.staff_id)}
+                              className="p-2 text-gray-400 hover:text-red-600"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleOpenStaffModal(staffMember)}
-                            className="p-2 text-gray-400 hover:text-gray-600"
-                          >
-                            <PencilIcon className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStaff(staffMember.staff_id)}
-                            className="p-2 text-gray-400 hover:text-red-600"
-                          >
-                            <TrashIcon className="h-5 w-5" />
-                          </button>
-                        </div>
-                      </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            {/* 管理者一覧 */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">管理者一覧</h3>
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {loadingAdmins ? (
+                    <li className="px-6 py-4 text-center text-gray-500">
+                      読み込み中...
                     </li>
-                  ))
-                )}
-              </ul>
+                  ) : admins.length === 0 ? (
+                    <li className="px-6 py-4 text-center text-gray-500">
+                      管理者が登録されていません
+                    </li>
+                  ) : (
+                    admins.map((adminMember) => (
+                      <li key={adminMember.admin_id} className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="text-lg font-medium text-gray-900">
+                              {adminMember.full_name || adminMember.username}
+                            </h3>
+                            <div className="mt-2 flex items-center text-sm text-gray-500 space-x-4">
+                              <span>ユーザー名: {adminMember.username}</span>
+                              {adminMember.email && (
+                                <span>{adminMember.email}</span>
+                              )}
+                              <span className={`px-2 py-1 text-xs rounded ${adminMember.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                {adminMember.is_active ? '有効' : '無効'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleOpenStaffModal(undefined, adminMember)}
+                              className="p-2 text-gray-400 hover:text-gray-600"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAdmin(adminMember.admin_id)}
+                              className="p-2 text-gray-400 hover:text-red-600"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -792,7 +996,10 @@ export default function SettingsPage() {
               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[85vh] overflow-y-auto">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium text-gray-900">
-                    {editingStaff ? '従業員を編集' : '従業員を追加'}
+                    {selectedRole === 'admin' 
+                      ? (editingAdmin ? '管理者を編集' : '管理者を追加')
+                      : (editingStaff ? '従業員を編集' : '従業員を追加')
+                    }
                   </h3>
                   <button
                     onClick={handleCloseStaffModal}
