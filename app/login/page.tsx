@@ -113,7 +113,8 @@ function CustomerLoginContent() {
     setError('');
 
     // パスワードが設定されていない店舗を選択した場合
-    if (needsPassword) {
+    // ただし、パスワードが入力されている場合は、ログインを試みる（パスワード設定処理が行われる可能性がある）
+    if (needsPassword && !password) {
       setError('この店舗ではパスワードが設定されていません。パスワードを設定してください。');
       setLoading(false);
       return;

@@ -127,11 +127,11 @@ export async function POST(request: NextRequest) {
           phone_number: row.phone_number,
           has_customer: true, // メールアドレスがcustomersテーブルに存在
           has_admin: false,  // メールアドレスがtenant_adminsテーブルに存在するかは後で判定
-          needs_password: !hasPassword // パスワードが設定されていない場合はtrue
+          needs_password: !hasPassword // パスワードが設定されていない場合はtrue（パスワードが一致する場合はfalse）
         };
         tenants.push(tenantData);
         tenantMap.set(row.tenant_id, tenantData);
-        console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました`);
+        console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました。needs_password: ${tenantData.needs_password} (hasPassword: ${hasPassword}, passwordMatch: ${passwordMatch})`);
       } else {
         console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストから除外しました`);
       }
@@ -177,20 +177,31 @@ export async function POST(request: NextRequest) {
             phone_number: row.phone_number,
             has_customer: false, // メールアドレスがcustomersテーブルに存在しない
             has_admin: true,     // メールアドレスがtenant_adminsテーブルに存在
-            needs_password: !hasPassword // パスワードが設定されていない場合はtrue
+            needs_password: !hasPassword // パスワードが設定されていない場合はtrue（パスワードが一致する場合はfalse）
           };
           tenants.push(tenantData);
           tenantMap.set(row.tenant_id, tenantData);
-          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました`);
+          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました。needs_password: ${tenantData.needs_password}`);
         } else {
           // 既に顧客として存在する場合は、管理者情報も追加
           existing.admin_id = row.admin_id;
           existing.has_admin = true; // メールアドレスがtenant_adminsテーブルにも存在
-          // パスワードが必要な場合は、既存のneeds_passwordを更新（どちらかがtrueならtrue）
-          if (!hasPassword) {
-            existing.needs_password = true;
+          // パスワードが必要な場合は、既存のneeds_passwordを更新
+          // 顧客側と管理者側の両方でパスワードが設定されていて一致する場合はfalse、それ以外はtrue
+          // 顧客側のneeds_passwordは既に設定されている（!hasPassword for customer）
+          // 管理者側でパスワードが設定されていない、または一致しない場合はtrue
+          const customerNeedsPassword = existing.needs_password;
+          const adminNeedsPassword = !hasPassword; // 管理者側でパスワードが設定されていない場合のみtrue
+          // 両方でパスワードが設定されていて一致する場合はfalse、それ以外はtrue
+          // ただし、顧客側でパスワードが一致している場合は、管理者側の状態に関係なくfalseにする
+          if (!customerNeedsPassword && passwordMatch) {
+            // 顧客側でパスワードが一致している場合は、管理者側の状態に関係なくfalse
+            existing.needs_password = false;
+          } else {
+            // 顧客側でパスワードが必要な場合、または管理者側でパスワードが必要な場合はtrue
+            existing.needs_password = customerNeedsPassword || adminNeedsPassword;
           }
-          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) の情報を既存の顧客店舗に追加しました`);
+          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) の情報を既存の顧客店舗に追加しました。needs_password: ${existing.needs_password} (顧客: ${customerNeedsPassword}, 管理者: ${adminNeedsPassword}, passwordMatch: ${passwordMatch})`);
         }
       } else {
         console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストから除外しました`);
