@@ -38,7 +38,6 @@ interface Admin {
   role: string;
   is_active: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 interface BusinessHours {
@@ -480,9 +479,10 @@ export default function SettingsPage() {
         throw new Error(errorData.error || '削除に失敗しました');
       }
 
-      loadStaff();
+      await loadAdmins();
     } catch (error: any) {
-      alert(error.message || '削除に失敗しました');
+      console.error('管理者削除エラー:', error);
+      setStaffError(error.message || '削除に失敗しました');
     }
   };
 
@@ -1017,59 +1017,163 @@ export default function SettingsPage() {
 
                 <form onSubmit={handleStaffSubmit}>
                   <div className="space-y-4">
-                    <div>
-                      <label htmlFor="staff_name" className="block text-sm font-medium text-gray-700 mb-1">
-                        名前 <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        id="staff_name"
-                        required
-                        value={staffFormData.name}
-                        onChange={(e) => setStaffFormData({ ...staffFormData, name: e.target.value })}
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      />
-                    </div>
+                    {/* ロール選択 */}
+                    {!editingStaff && !editingAdmin && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          ロール <span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex space-x-4">
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="role"
+                              value="staff"
+                              checked={selectedRole === 'staff'}
+                              onChange={(e) => {
+                                setSelectedRole('staff');
+                                setEditingAdmin(null);
+                                setEditingStaff(null);
+                              }}
+                              className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300"
+                            />
+                            <span className="text-sm text-gray-700">従業員</span>
+                          </label>
+                          <label className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="role"
+                              value="admin"
+                              checked={selectedRole === 'admin'}
+                              onChange={(e) => {
+                                setSelectedRole('admin');
+                                setEditingAdmin(null);
+                                setEditingStaff(null);
+                              }}
+                              className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300"
+                            />
+                            <span className="text-sm text-gray-700">管理者</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
 
-                    <div>
-                      <label htmlFor="staff_email" className="block text-sm font-medium text-gray-700 mb-1">
-                        メールアドレス
-                      </label>
-                      <input
-                        type="email"
-                        id="staff_email"
-                        value={staffFormData.email}
-                        onChange={(e) => setStaffFormData({ ...staffFormData, email: e.target.value })}
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      />
-                    </div>
+                    {selectedRole === 'admin' ? (
+                      // 管理者フォーム
+                      <>
+                        <div>
+                          <label htmlFor="admin_username" className="block text-sm font-medium text-gray-700 mb-1">
+                            ユーザー名 <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            id="admin_username"
+                            required
+                            value={adminFormData.username}
+                            onChange={(e) => setAdminFormData({ ...adminFormData, username: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
 
-                    <div>
-                      <label htmlFor="staff_phone" className="block text-sm font-medium text-gray-700 mb-1">
-                        電話番号
-                      </label>
-                      <input
-                        type="tel"
-                        id="staff_phone"
-                        value={staffFormData.phone_number}
-                        onChange={(e) => setStaffFormData({ ...staffFormData, phone_number: e.target.value })}
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      />
-                    </div>
+                        <div>
+                          <label htmlFor="admin_password" className="block text-sm font-medium text-gray-700 mb-1">
+                            パスワード {!editingAdmin && <span className="text-red-500">*</span>}
+                            {editingAdmin && <span className="text-gray-500 text-xs ml-2">(変更する場合のみ入力)</span>}
+                          </label>
+                          <input
+                            type="password"
+                            id="admin_password"
+                            required={!editingAdmin}
+                            value={adminFormData.password}
+                            onChange={(e) => setAdminFormData({ ...adminFormData, password: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                            placeholder={editingAdmin ? "変更する場合のみ入力" : "6文字以上"}
+                          />
+                          <p className="mt-1 text-xs text-gray-500">6文字以上で入力してください</p>
+                        </div>
 
-                    <div>
-                      <label htmlFor="staff_working_hours" className="block text-sm font-medium text-gray-700 mb-1">
-                        勤務時間
-                      </label>
-                      <input
-                        type="text"
-                        id="staff_working_hours"
-                        placeholder="例: 10:00-19:00"
-                        value={staffFormData.working_hours}
-                        onChange={(e) => setStaffFormData({ ...staffFormData, working_hours: e.target.value })}
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      />
-                    </div>
+                        <div>
+                          <label htmlFor="admin_fullName" className="block text-sm font-medium text-gray-700 mb-1">
+                            氏名
+                          </label>
+                          <input
+                            type="text"
+                            id="admin_fullName"
+                            value={adminFormData.fullName}
+                            onChange={(e) => setAdminFormData({ ...adminFormData, fullName: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="admin_email" className="block text-sm font-medium text-gray-700 mb-1">
+                            メールアドレス
+                          </label>
+                          <input
+                            type="email"
+                            id="admin_email"
+                            value={adminFormData.email}
+                            onChange={(e) => setAdminFormData({ ...adminFormData, email: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      // 従業員フォーム
+                      <>
+                        <div>
+                          <label htmlFor="staff_name" className="block text-sm font-medium text-gray-700 mb-1">
+                            名前 <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            id="staff_name"
+                            required
+                            value={staffFormData.name}
+                            onChange={(e) => setStaffFormData({ ...staffFormData, name: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="staff_email" className="block text-sm font-medium text-gray-700 mb-1">
+                            メールアドレス
+                          </label>
+                          <input
+                            type="email"
+                            id="staff_email"
+                            value={staffFormData.email}
+                            onChange={(e) => setStaffFormData({ ...staffFormData, email: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="staff_phone" className="block text-sm font-medium text-gray-700 mb-1">
+                            電話番号
+                          </label>
+                          <input
+                            type="tel"
+                            id="staff_phone"
+                            value={staffFormData.phone_number}
+                            onChange={(e) => setStaffFormData({ ...staffFormData, phone_number: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="staff_working_hours" className="block text-sm font-medium text-gray-700 mb-1">
+                            勤務時間
+                          </label>
+                          <input
+                            type="text"
+                            id="staff_working_hours"
+                            placeholder="例: 10:00-19:00"
+                            value={staffFormData.working_hours}
+                            onChange={(e) => setStaffFormData({ ...staffFormData, working_hours: e.target.value })}
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          />
+                        </div>
 
                     {selectedRole === 'staff' && (
                       <div className="border-t border-gray-200 pt-4">
@@ -1143,7 +1247,10 @@ export default function SettingsPage() {
                       type="submit"
                       className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-pink-600 text-base font-medium text-white hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 sm:col-start-2 sm:text-sm"
                     >
-                      {editingStaff ? '更新' : '追加'}
+                      {selectedRole === 'admin' 
+                        ? (editingAdmin ? '更新' : '追加')
+                        : (editingStaff ? '更新' : '追加')
+                      }
                     </button>
                     <button
                       type="button"

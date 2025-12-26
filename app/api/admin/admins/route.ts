@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await query(
-      `SELECT admin_id, username, email, full_name, role, is_active, created_at, updated_at
+      `SELECT admin_id, username, email, full_name, role, is_active, created_at
        FROM tenant_admins
        WHERE tenant_id = $1
        ORDER BY admin_id`,
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     const result = await query(
       `INSERT INTO tenant_admins (tenant_id, username, password_hash, full_name, email, role, is_active)
        VALUES ($1, $2, $3, $4, $5, 'admin', true)
-       RETURNING admin_id, username, email, full_name, role, is_active, created_at, updated_at`,
+       RETURNING admin_id, username, email, full_name, role, is_active, created_at`,
       [tenantId, username.trim(), passwordHash, fullName || username.trim(), email || null]
     );
 

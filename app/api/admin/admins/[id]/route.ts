@@ -61,7 +61,7 @@ export async function PUT(
     // パスワードが提供されている場合は更新
     let updateQuery = `
       UPDATE tenant_admins 
-      SET username = $1, full_name = $2, email = $3, is_active = $4, updated_at = CURRENT_TIMESTAMP
+      SET username = $1, full_name = $2, email = $3, is_active = $4
     `;
     const updateParams: any[] = [username.trim(), fullName || username.trim(), email || null, isActive !== undefined ? isActive : true];
 
@@ -75,13 +75,13 @@ export async function PUT(
       const passwordHash = hashPassword(password);
       updateQuery = `
         UPDATE tenant_admins 
-        SET username = $1, password_hash = $2, full_name = $3, email = $4, is_active = $5, updated_at = CURRENT_TIMESTAMP
+        SET username = $1, password_hash = $2, full_name = $3, email = $4, is_active = $5
       `;
       updateParams.splice(1, 0, passwordHash);
     }
 
     updateQuery += ` WHERE admin_id = $${updateParams.length + 1} AND tenant_id = $${updateParams.length + 2}
-                     RETURNING admin_id, username, email, full_name, role, is_active, created_at, updated_at`;
+                     RETURNING admin_id, username, email, full_name, role, is_active, created_at`;
     updateParams.push(adminId, tenantId);
 
     const result = await query(updateQuery, updateParams);
