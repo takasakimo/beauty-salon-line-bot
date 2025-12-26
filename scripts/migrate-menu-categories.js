@@ -1,9 +1,24 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
+// 接続文字列を取得
+let connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING;
+
+// SSL設定の調整（sslmodeパラメータを削除）
+if (connectionString) {
+  try {
+    const url = new URL(connectionString);
+    url.searchParams.delete('sslmode');
+    url.searchParams.delete('supa');
+    connectionString = url.toString();
+  } catch (e) {
+    // URL解析に失敗した場合はそのまま使用
+  }
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING,
-  ssl: process.env.DATABASE_URL || process.env.POSTGRES_URL ? {
+  connectionString: connectionString,
+  ssl: (process.env.DATABASE_URL || process.env.POSTGRES_URL) ? {
     rejectUnauthorized: false
   } : false
 });
@@ -14,6 +29,8 @@ async function migrate() {
     await client.query('BEGIN');
 
     // menu_categoriesテーブルを作成
+    console.log('Creating menu_categories table...');
+    
     await client.query(`
       CREATE TABLE IF NOT EXISTS menu_categories (
         category_id SERIAL PRIMARY KEY,
@@ -31,12 +48,18 @@ async function migrate() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_menu_categories_tenant_id ON menu_categories(tenant_id)
     `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_menu_categories_is_active ON menu_categories(is_active)
+    `);
+
+    console.log('✅ menu_categoriesテーブルを作成しました');
+    console.log('✅ インデックスを作成しました');
 
     await client.query('COMMIT');
-    console.log('menu_categoriesテーブルの作成が完了しました');
+    console.log('Migration completed successfully!');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('マイグレーションエラー:', error);
+    console.error('Migration failed:', error);
     throw error;
   } finally {
     client.release();

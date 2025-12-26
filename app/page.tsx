@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SparklesIcon } from '@heroicons/react/24/solid';
 
 export default function Home() {
-  const [tenantCode, setTenantCode] = useState<string>('beauty-salon-001');
+  const defaultTenantCode = 'beauty-salon-001';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-pink-50">
@@ -23,53 +22,43 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
-            <h2 className="text-lg font-semibold mb-6 text-gray-900">
-              店舗コードを入力
-            </h2>
-            <div className="mb-6">
-              <input
-                type="text"
-                value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value)}
-                placeholder="店舗コードを入力"
-                className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 顧客向けメインセクション */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <Link
-                href={`/login?tenant=${tenantCode}&redirect=/reservation`}
-                className="bg-pink-600 hover:bg-pink-700 text-white font-medium py-3 px-6 rounded-lg text-center transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+                href={`/login?tenant=${defaultTenantCode}&redirect=/reservation`}
+                className="bg-pink-600 hover:bg-pink-700 text-white font-medium py-4 px-6 rounded-lg text-center transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 text-lg"
               >
                 予約する
               </Link>
               <Link
-                href={`/login?tenant=${tenantCode}&redirect=/mypage`}
-                className="bg-white border-2 border-pink-600 text-pink-600 hover:bg-pink-50 font-medium py-3 px-6 rounded-lg text-center transition-all"
+                href={`/login?tenant=${defaultTenantCode}&redirect=/mypage`}
+                className="bg-white border-2 border-pink-600 text-pink-600 hover:bg-pink-50 font-medium py-4 px-6 rounded-lg text-center transition-all text-lg"
               >
                 マイページ
               </Link>
             </div>
-            <div className="mt-4 text-center">
+            <div className="text-center">
               <p className="text-sm text-gray-600">
                 初めてご利用の方は{' '}
-                <Link href={`/register?tenant=${tenantCode}`} className="text-pink-600 hover:text-pink-700 font-medium">
+                <Link href={`/register?tenant=${defaultTenantCode}`} className="text-pink-600 hover:text-pink-700 font-medium underline">
                   新規登録
                 </Link>
               </p>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-lg font-semibold mb-6 text-gray-900">
-              スタッフの方はこちら
-            </h2>
-            <Link
-              href="/admin/login"
-              className="block bg-gray-800 hover:bg-gray-900 text-white font-medium py-3 px-6 rounded-lg text-center transition-all shadow-md hover:shadow-lg"
-            >
-              管理画面にログイン
-            </Link>
+          {/* スタッフ向けセクション（小さく控えめに） */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-600">スタッフの方はこちら</p>
+              <Link
+                href="/admin/login"
+                className="text-sm bg-gray-700 hover:bg-gray-800 text-white font-medium py-2 px-4 rounded-lg transition-all"
+              >
+                管理画面にログイン
+              </Link>
+            </div>
           </div>
         </div>
       </div>
