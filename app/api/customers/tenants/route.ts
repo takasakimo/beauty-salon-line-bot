@@ -70,11 +70,12 @@ export async function POST(request: NextRequest) {
     console.log('管理者検索結果（emailのみ）:', { count: adminSearchResult.rows.length });
 
     const tenants: any[] = [];
+    const tenantMap = new Map<number, any>();
 
     // 顧客として登録されている店舗を追加（パスワード検証）
     for (const row of customerSearchResult.rows) {
       if (row.password_hash === passwordHash) {
-        tenants.push({
+        const tenantData = {
           tenant_id: row.tenant_id,
           tenant_code: row.tenant_code,
           salon_name: row.salon_name,
@@ -82,8 +83,11 @@ export async function POST(request: NextRequest) {
           real_name: row.real_name,
           email: row.email,
           phone_number: row.phone_number,
-          is_admin: false
-        });
+          has_customer: true, // メールアドレスがcustomersテーブルに存在
+          has_admin: false    // メールアドレスがtenant_adminsテーブルに存在するかは後で判定
+        };
+        tenants.push(tenantData);
+        tenantMap.set(row.tenant_id, tenantData);
       }
     }
 
@@ -92,10 +96,10 @@ export async function POST(request: NextRequest) {
     // 管理者として登録されている店舗を追加（パスワード検証、重複チェック）
     for (const row of adminSearchResult.rows) {
       if (row.password_hash === passwordHash) {
-        // 既に顧客として追加されている場合はスキップ
-        const existing = tenants.find(t => t.tenant_id === row.tenant_id);
+        const existing = tenantMap.get(row.tenant_id);
         if (!existing) {
-          tenants.push({
+          // 顧客として存在しない場合は新規追加
+          const tenantData = {
             tenant_id: row.tenant_id,
             tenant_code: row.tenant_code,
             salon_name: row.salon_name,
@@ -104,12 +108,15 @@ export async function POST(request: NextRequest) {
             real_name: row.real_name,
             email: row.email,
             phone_number: row.phone_number,
-            is_admin: true
-          });
+            has_customer: false, // メールアドレスがcustomersテーブルに存在しない
+            has_admin: true      // メールアドレスがtenant_adminsテーブルに存在
+          };
+          tenants.push(tenantData);
+          tenantMap.set(row.tenant_id, tenantData);
         } else {
           // 既に顧客として存在する場合は、管理者情報も追加
           existing.admin_id = row.admin_id;
-          existing.is_admin = true;
+          existing.has_admin = true; // メールアドレスがtenant_adminsテーブルにも存在
         }
       }
     }

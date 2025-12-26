@@ -14,7 +14,8 @@ interface Tenant {
   real_name: string;
   email: string;
   phone_number?: string;
-  is_admin: boolean;
+  has_customer: boolean; // メールアドレスがcustomersテーブルに存在
+  has_admin: boolean;    // メールアドレスがtenant_adminsテーブルに存在
 }
 
 function CustomerLoginContent() {
@@ -189,7 +190,12 @@ function CustomerLoginContent() {
                     {tenant.salon_name}
                   </p>
                   <p className="text-sm text-gray-500">
-                    {tenant.is_admin ? '（管理者として登録済み）' : '（顧客として登録済み）'}
+                    {tenant.has_customer && tenant.has_admin 
+                      ? '（顧客・管理者として登録済み）'
+                      : tenant.has_admin 
+                        ? '（管理者として登録済み）'
+                        : '（顧客として登録済み）'
+                    }
                   </p>
                 </div>
                 <div className="flex-shrink-0">
