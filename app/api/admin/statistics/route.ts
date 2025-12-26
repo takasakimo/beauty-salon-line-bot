@@ -62,16 +62,58 @@ export async function GET(request: NextRequest) {
       [tenantId]
     );
 
-    // 今月の売上
-    const monthlySalesResult = await query(
-      `SELECT SUM(m.price) as total
-       FROM reservations r
-       JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
-       WHERE r.status = 'completed'
-       AND r.tenant_id = $1
-       AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
-      [tenantId]
-    );
+    // 今月の売上（予約分）
+    // 複数メニュー対応: reservation_menusテーブルから合計金額を取得
+    let monthlyReservationSales = 0;
+    try {
+      const monthlyReservationSalesResult = await query(
+        `SELECT COALESCE(SUM(COALESCE(rm.price, COALESCE(r.price, m.price))), 0) as total
+         FROM reservations r
+         LEFT JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
+         LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
+         LEFT JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id AND rm_menu.tenant_id = $1
+         WHERE r.status IN ('confirmed', 'completed')
+         AND r.tenant_id = $1
+         AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
+        [tenantId]
+      );
+      monthlyReservationSales = parseFloat(monthlyReservationSalesResult.rows[0]?.total || '0');
+    } catch (error: any) {
+      // reservation_menusテーブルが存在しない場合はフォールバック
+      if (error.message && error.message.includes('reservation_menus')) {
+        const fallbackResult = await query(
+          `SELECT COALESCE(SUM(COALESCE(r.price, m.price)), 0) as total
+           FROM reservations r
+           LEFT JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
+           WHERE r.status IN ('confirmed', 'completed')
+           AND r.tenant_id = $1
+           AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
+          [tenantId]
+        );
+        monthlyReservationSales = parseFloat(fallbackResult.rows[0]?.total || '0');
+      } else {
+        throw error;
+      }
+    }
+
+    // 今月の売上（商品販売分）
+    let monthlyProductSales = 0;
+    try {
+      const monthlyProductSalesResult = await query(
+        `SELECT COALESCE(SUM(total_price), 0) as total
+         FROM product_purchases
+         WHERE DATE_TRUNC('month', purchase_date) = DATE_TRUNC('month', CURRENT_DATE)
+         AND tenant_id = $1`,
+        [tenantId]
+      );
+      monthlyProductSales = parseFloat(monthlyProductSalesResult.rows[0]?.total || '0');
+    } catch (error: any) {
+      // product_purchasesテーブルが存在しない場合は0
+      console.warn('product_purchasesテーブルが存在しません:', error);
+      monthlyProductSales = 0;
+    }
+
+    const monthlySales = monthlyReservationSales + monthlyProductSales;
 
     // 今日の予約数
     const todayReservationsResult = await query(
@@ -83,16 +125,58 @@ export async function GET(request: NextRequest) {
       [tenantId]
     );
 
-    // 今日の売上
-    const todaySalesResult = await query(
-      `SELECT SUM(m.price) as total
-       FROM reservations r
-       JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
-       WHERE DATE(r.reservation_date) = CURRENT_DATE
-       AND r.status = 'confirmed'
-       AND r.tenant_id = $1`,
-      [tenantId]
-    );
+    // 今日の売上（予約分）
+    // 複数メニュー対応: reservation_menusテーブルから合計金額を取得
+    let todayReservationSales = 0;
+    try {
+      const todayReservationSalesResult = await query(
+        `SELECT COALESCE(SUM(COALESCE(rm.price, COALESCE(r.price, m.price))), 0) as total
+         FROM reservations r
+         LEFT JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
+         LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
+         LEFT JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id AND rm_menu.tenant_id = $1
+         WHERE DATE(r.reservation_date) = CURRENT_DATE
+         AND r.status IN ('confirmed', 'completed')
+         AND r.tenant_id = $1`,
+        [tenantId]
+      );
+      todayReservationSales = parseFloat(todayReservationSalesResult.rows[0]?.total || '0');
+    } catch (error: any) {
+      // reservation_menusテーブルが存在しない場合はフォールバック
+      if (error.message && error.message.includes('reservation_menus')) {
+        const fallbackResult = await query(
+          `SELECT COALESCE(SUM(COALESCE(r.price, m.price)), 0) as total
+           FROM reservations r
+           LEFT JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
+           WHERE DATE(r.reservation_date) = CURRENT_DATE
+           AND r.status IN ('confirmed', 'completed')
+           AND r.tenant_id = $1`,
+          [tenantId]
+        );
+        todayReservationSales = parseFloat(fallbackResult.rows[0]?.total || '0');
+      } else {
+        throw error;
+      }
+    }
+
+    // 今日の売上（商品販売分）
+    let todayProductSales = 0;
+    try {
+      const todayProductSalesResult = await query(
+        `SELECT COALESCE(SUM(total_price), 0) as total
+         FROM product_purchases
+         WHERE DATE(purchase_date) = CURRENT_DATE
+         AND tenant_id = $1`,
+        [tenantId]
+      );
+      todayProductSales = parseFloat(todayProductSalesResult.rows[0]?.total || '0');
+    } catch (error: any) {
+      // product_purchasesテーブルが存在しない場合は0
+      console.warn('product_purchasesテーブルが存在しません:', error);
+      todayProductSales = 0;
+    }
+
+    const todaySales = todayReservationSales + todayProductSales;
 
     // テナント情報を追加
     const tenantResult = await query(
@@ -105,9 +189,9 @@ export async function GET(request: NextRequest) {
       newCustomersMonth: parseInt(newCustomersResult.rows[0].total),
       regularCustomers: parseInt(regularCustomersResult.rows[0].total),
       averageSpending: Math.round(avgSpendingResult.rows[0].average || 0),
-      monthlySales: monthlySalesResult.rows[0].total || 0,
+      monthlySales: monthlySales,
       todayReservations: parseInt(todayReservationsResult.rows[0].total),
-      todaySales: todaySalesResult.rows[0].total || 0,
+      todaySales: todaySales,
       tenantName: tenantResult.rows[0]?.salon_name || 'ビューティーサロン'
     });
   } catch (error: any) {
