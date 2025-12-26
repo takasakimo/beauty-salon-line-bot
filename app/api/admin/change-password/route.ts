@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const session = await getAuthFromRequest(request);
-    if (!session || !session.adminId) {
+    if (!session) {
       return NextResponse.json(
         { success: false, error: '認証が必要です' },
         { status: 401 }
@@ -47,12 +47,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 管理者IDを決定
+    // スーパー管理者の場合は、tenantIdから管理者IDを取得
+    // 通常の管理者の場合は、session.adminIdを使用
+    let adminId: number | null = null;
+    
+    if (session.role === 'super_admin') {
+      // スーパー管理者の場合、tenantIdから管理者IDを取得（最初の管理者を使用）
+      const adminListResult = await query(
+        `SELECT admin_id 
+         FROM tenant_admins 
+         WHERE tenant_id = $1 AND is_active = true
+         ORDER BY admin_id ASC
+         LIMIT 1`,
+        [tenantId]
+      );
+      
+      if (adminListResult.rows.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'この店舗に管理者アカウントが見つかりません' },
+          { status: 404 }
+        );
+      }
+      
+      adminId = adminListResult.rows[0].admin_id;
+    } else if (session.adminId) {
+      adminId = session.adminId;
+    } else {
+      return NextResponse.json(
+        { success: false, error: '管理者情報が見つかりません' },
+        { status: 401 }
+      );
+    }
+
     // 管理者情報を取得
     const adminResult = await query(
       `SELECT admin_id, password_hash 
        FROM tenant_admins 
        WHERE admin_id = $1 AND tenant_id = $2`,
-      [session.adminId, tenantId]
+      [adminId, tenantId]
     );
 
     if (adminResult.rows.length === 0) {
@@ -88,7 +121,7 @@ export async function POST(request: NextRequest) {
       `UPDATE tenant_admins 
        SET password_hash = $1, updated_at = CURRENT_TIMESTAMP 
        WHERE admin_id = $2 AND tenant_id = $3`,
-      [newPasswordHash, session.adminId, tenantId]
+      [newPasswordHash, adminId, tenantId]
     );
 
     return NextResponse.json({
