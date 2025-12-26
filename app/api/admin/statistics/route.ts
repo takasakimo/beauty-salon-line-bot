@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
     );
 
     // 今月の売上（予約分）
+    // 完了した予約のみを集計（未来の予約は含めない）
     // 複数メニュー対応: reservation_menusテーブルから合計金額を取得
     let monthlyReservationSales = 0;
     try {
@@ -72,9 +73,10 @@ export async function GET(request: NextRequest) {
          LEFT JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
          LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
          LEFT JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id AND rm_menu.tenant_id = $1
-         WHERE r.status IN ('confirmed', 'completed')
+         WHERE r.status = 'completed'
          AND r.tenant_id = $1
-         AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
+         AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
+         AND r.reservation_date <= NOW()`,
         [tenantId]
       );
       monthlyReservationSales = parseFloat(monthlyReservationSalesResult.rows[0]?.total || '0');
@@ -85,9 +87,10 @@ export async function GET(request: NextRequest) {
           `SELECT COALESCE(SUM(COALESCE(r.price, m.price)), 0) as total
            FROM reservations r
            LEFT JOIN menus m ON r.menu_id = m.menu_id AND m.tenant_id = $1
-           WHERE r.status IN ('confirmed', 'completed')
+           WHERE r.status = 'completed'
            AND r.tenant_id = $1
-           AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)`,
+           AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
+           AND r.reservation_date <= NOW()`,
           [tenantId]
         );
         monthlyReservationSales = parseFloat(fallbackResult.rows[0]?.total || '0');

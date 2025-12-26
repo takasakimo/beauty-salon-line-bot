@@ -94,6 +94,7 @@ export async function GET(request: NextRequest) {
         `;
       }
     } else if (type === 'month') {
+      // 今月の売上は完了した予約のみ（未来の予約は含めない）
       reservationQuery = `
         SELECT 
           r.reservation_id,
@@ -110,9 +111,10 @@ export async function GET(request: NextRequest) {
         LEFT JOIN staff s ON r.staff_id = s.staff_id AND s.tenant_id = $1
         LEFT JOIN reservation_menus rm ON r.reservation_id = rm.reservation_id
         LEFT JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id AND rm_menu.tenant_id = $1
-        WHERE r.status IN ('confirmed', 'completed')
+        WHERE r.status = 'completed'
         AND r.tenant_id = $1
         AND DATE_TRUNC('month', r.reservation_date) = DATE_TRUNC('month', CURRENT_DATE)
+        AND r.reservation_date <= NOW()
         ORDER BY r.reservation_date ASC
       `;
     }
