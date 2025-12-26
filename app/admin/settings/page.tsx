@@ -987,17 +987,18 @@ export default function SettingsPage() {
                   <div className="space-y-4">
                     <div>
                       <label htmlFor="current_password" className="block text-sm font-medium text-gray-700 mb-1">
-                        現在のパスワード <span className="text-red-500">*</span>
+                        現在のパスワード {passwordFormData.currentPassword || '(パスワード未設定の場合は空白のまま)'}
                       </label>
                       <input
                         type="password"
                         id="current_password"
-                        required
                         value={passwordFormData.currentPassword}
                         onChange={(e) => setPasswordFormData({ ...passwordFormData, currentPassword: e.target.value })}
                         className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                         disabled={changingPassword || passwordSuccess}
+                        placeholder="パスワード未設定の場合は空白のまま"
                       />
+                      <p className="mt-1 text-xs text-gray-500">パスワードが設定されていない場合は空白のままで変更できます</p>
                     </div>
 
                     <div>

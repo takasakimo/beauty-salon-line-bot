@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
     const { currentPassword, newPassword, confirmPassword } = body;
 
     // バリデーション
-    if (!currentPassword || !newPassword || !confirmPassword) {
+    if (!newPassword || !confirmPassword) {
       return NextResponse.json(
-        { success: false, error: 'すべてのフィールドを入力してください' },
+        { success: false, error: '新しいパスワードと確認用パスワードを入力してください' },
         { status: 400 }
       );
     }
@@ -47,8 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 現在のパスワードを確認
-    const currentPasswordHash = hashPassword(currentPassword);
+    // 管理者情報を取得
     const adminResult = await query(
       `SELECT admin_id, password_hash 
        FROM tenant_admins 
@@ -66,7 +65,15 @@ export async function POST(request: NextRequest) {
     const admin = adminResult.rows[0];
     
     // パスワードが設定されている場合は、現在のパスワードを確認
+    // パスワードが設定されていない場合は、現在のパスワード欄が空白でも変更可能
     if (admin.password_hash) {
+      if (!currentPassword) {
+        return NextResponse.json(
+          { success: false, error: '現在のパスワードを入力してください' },
+          { status: 400 }
+        );
+      }
+      const currentPasswordHash = hashPassword(currentPassword);
       if (admin.password_hash !== currentPasswordHash) {
         return NextResponse.json(
           { success: false, error: '現在のパスワードが正しくありません' },

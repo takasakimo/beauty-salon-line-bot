@@ -34,7 +34,10 @@ export default function SuperAdminDashboard() {
     tenantCode: '',
     salonName: '',
     isActive: true,
-    maxConcurrentReservations: 3
+    maxConcurrentReservations: 3,
+    adminUsername: '',
+    adminPassword: '',
+    adminFullName: ''
   });
 
   useEffect(() => {
@@ -71,7 +74,10 @@ export default function SuperAdminDashboard() {
       tenantCode: '',
       salonName: '',
       isActive: true,
-      maxConcurrentReservations: 3
+      maxConcurrentReservations: 3,
+      adminUsername: '',
+      adminPassword: '',
+      adminFullName: ''
     });
     setEditingTenant(null);
     setShowAddModal(true);
@@ -82,7 +88,10 @@ export default function SuperAdminDashboard() {
       tenantCode: tenant.tenantCode,
       salonName: tenant.salonName,
       isActive: tenant.isActive,
-      maxConcurrentReservations: tenant.maxConcurrentReservations
+      maxConcurrentReservations: tenant.maxConcurrentReservations,
+      adminUsername: '',
+      adminPassword: '',
+      adminFullName: ''
     });
     setEditingTenant(tenant);
     setShowAddModal(true);
@@ -315,6 +324,55 @@ export default function SuperAdminDashboard() {
                     有効
                   </label>
                 </div>
+                
+                {/* 新規作成時のみ管理者アカウント情報を入力 */}
+                {!editingTenant && (
+                  <>
+                    <div className="border-t border-gray-200 pt-4 mt-4">
+                      <h4 className="text-sm font-medium text-gray-900 mb-3">管理者アカウント情報</h4>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        管理者ユーザー名 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={formData.adminUsername}
+                        onChange={(e) => setFormData({ ...formData, adminUsername: e.target.value })}
+                        placeholder="admin"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        管理者パスワード <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={formData.adminPassword}
+                        onChange={(e) => setFormData({ ...formData, adminPassword: e.target.value })}
+                        placeholder="6文字以上"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">6文字以上で入力してください</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        管理者氏名
+                      </label>
+                      <input
+                        type="text"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={formData.adminFullName}
+                        onChange={(e) => setFormData({ ...formData, adminFullName: e.target.value })}
+                        placeholder="管理者名（任意）"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="mt-6 flex justify-end gap-2">
                 <button
