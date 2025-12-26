@@ -1071,13 +1071,14 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    <div className="border-t border-gray-200 pt-4">
-                      <label className="block text-sm font-medium text-gray-700 mb-3">
-                        対応可能なメニュー
-                        <span className="ml-2 text-gray-500 font-normal text-xs">
-                          ({menus.length}件のメニューから選択)
-                        </span>
-                      </label>
+                    {selectedRole === 'staff' && (
+                      <div className="border-t border-gray-200 pt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                          対応可能なメニュー
+                          <span className="ml-2 text-gray-500 font-normal text-xs">
+                            ({menus.length}件のメニューから選択)
+                          </span>
+                        </label>
                       {loadingStaff ? (
                         <div className="border border-gray-300 rounded-md p-4 text-center">
                           <p className="text-sm text-gray-500">メニューを読み込み中...</p>
@@ -1133,7 +1134,8 @@ export default function SettingsPage() {
                           </p>
                         </>
                       )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-6 pt-4 border-t border-gray-200 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
