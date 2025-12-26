@@ -3,18 +3,32 @@
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, BuildingStorefrontIcon } from '@heroicons/react/24/outline';
+
+interface Tenant {
+  tenant_id: number;
+  tenant_code: string;
+  salon_name: string;
+  customer_id?: number;
+  admin_id?: number;
+  real_name: string;
+  email: string;
+  phone_number?: string;
+  is_admin: boolean;
+}
 
 function CustomerLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tenantCode = searchParams.get('tenant') || 'beauty-salon-001';
+  const defaultTenantCode = searchParams.get('tenant') || 'beauty-salon-001';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [showTenantSelection, setShowTenantSelection] = useState(false);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const emailInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -22,11 +36,12 @@ function CustomerLoginContent() {
     emailInputRef.current?.focus();
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleCheckTenants = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setSuccess(false);
+    setShowTenantSelection(false);
 
     // バリデーション
     if (!email || !password) {
@@ -34,6 +49,59 @@ function CustomerLoginContent() {
       setLoading(false);
       return;
     }
+
+    try {
+      // まず店舗一覧を取得
+      const tenantsResponse = await fetch('/api/customers/tenants', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+        }),
+      });
+
+      const tenantsResult = await tenantsResponse.json();
+
+      if (!tenantsResult.success) {
+        setError(tenantsResult.error || 'ログインに失敗しました');
+        setPassword('');
+        setLoading(false);
+        return;
+      }
+
+      const tenantList: Tenant[] = tenantsResult.tenants || [];
+
+      if (tenantList.length === 0) {
+        setError('登録されている店舗が見つかりません');
+        setPassword('');
+        setLoading(false);
+        return;
+      }
+
+      // 店舗が1つの場合は直接ログイン
+      if (tenantList.length === 1) {
+        await performLogin(tenantList[0].tenant_code);
+      } else {
+        // 複数の店舗がある場合は選択画面を表示
+        setTenants(tenantList);
+        setShowTenantSelection(true);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('店舗一覧取得エラー:', error);
+      setError('ログイン処理中にエラーが発生しました。しばらくしてから再度お試しください。');
+      setPassword('');
+      setLoading(false);
+    }
+  };
+
+  const performLogin = async (selectedTenantCode: string) => {
+    setLoading(true);
+    setError('');
 
     try {
       const response = await fetch('/api/customers/login', {
@@ -45,7 +113,7 @@ function CustomerLoginContent() {
         body: JSON.stringify({
           email: email.trim(),
           password,
-          tenantCode,
+          tenantCode: selectedTenantCode,
         }),
       });
 
@@ -57,23 +125,28 @@ function CustomerLoginContent() {
         setTimeout(() => {
           const redirect = searchParams.get('redirect');
           if (redirect) {
-            router.push(`${redirect}?tenant=${tenantCode}`);
+            router.push(`${redirect}?tenant=${selectedTenantCode}`);
           } else {
-            router.push(`/mypage?tenant=${tenantCode}`);
+            router.push(`/mypage?tenant=${selectedTenantCode}`);
           }
         }, 500);
       } else {
         setError(result.error || 'ログインに失敗しました');
-        // エラー時はパスワードフィールドをクリア
         setPassword('');
+        setShowTenantSelection(false);
       }
     } catch (error) {
       console.error('ログインエラー:', error);
       setError('ログイン処理中にエラーが発生しました。しばらくしてから再度お試しください。');
       setPassword('');
+      setShowTenantSelection(false);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTenantSelect = (tenant: Tenant) => {
+    performLogin(tenant.tenant_code);
   };
 
   return (
@@ -81,13 +154,57 @@ function CustomerLoginContent() {
       <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-sm border border-gray-200">
         <div>
           <h2 className="text-center text-2xl font-semibold text-gray-900">
-            ログイン
+            {showTenantSelection ? '店舗を選択' : 'ログイン'}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            メールアドレスまたはユーザー名とパスワードでログイン
+            {showTenantSelection 
+              ? 'ログインする店舗を選択してください'
+              : 'メールアドレスまたはユーザー名とパスワードでログイン'
+            }
           </p>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+
+        {showTenantSelection ? (
+          // 店舗選択画面
+          <div className="mt-8 space-y-4">
+            {tenants.map((tenant) => (
+              <button
+                key={tenant.tenant_id}
+                onClick={() => handleTenantSelect(tenant)}
+                disabled={loading}
+                className="w-full flex items-center p-4 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex-shrink-0">
+                  <BuildingStorefrontIcon className="h-8 w-8 text-pink-600" />
+                </div>
+                <div className="ml-4 flex-1 text-left">
+                  <p className="text-lg font-semibold text-gray-900">
+                    {tenant.salon_name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {tenant.is_admin ? '（管理者として登録済み）' : '（顧客として登録済み）'}
+                  </p>
+                </div>
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                setShowTenantSelection(false);
+                setTenants([]);
+              }}
+              className="w-full mt-4 text-sm text-gray-600 hover:text-gray-900 underline"
+            >
+              戻る
+            </button>
+          </div>
+        ) : (
+          // ログインフォーム
+          <form className="mt-8 space-y-6" onSubmit={handleCheckTenants}>
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-start">
               <svg className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -202,29 +319,30 @@ function CustomerLoginContent() {
               )}
             </button>
           </div>
-        </form>
-        <div className="text-center space-y-3">
-          <p className="text-sm text-gray-600">
-            アカウントをお持ちでない方は{' '}
-            <Link 
-              href={`/register?tenant=${tenantCode}`} 
-              className="text-pink-600 hover:text-pink-700 font-medium underline-offset-2 hover:underline"
-            >
-              新規登録
-            </Link>
-          </p>
-          <div className="pt-3 border-t border-gray-200">
-            <Link 
-              href={`/?tenant=${tenantCode}`} 
-              className="text-sm text-gray-500 hover:text-gray-700 inline-flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              ホームに戻る
-            </Link>
-          </div>
-        </div>
+            <div className="text-center space-y-3">
+              <p className="text-sm text-gray-600">
+                アカウントをお持ちでない方は{' '}
+                <Link 
+                  href={`/register?tenant=${defaultTenantCode}`} 
+                  className="text-pink-600 hover:text-pink-700 font-medium underline-offset-2 hover:underline"
+                >
+                  新規登録
+                </Link>
+              </p>
+              <div className="pt-3 border-t border-gray-200">
+                <Link 
+                  href={`/?tenant=${defaultTenantCode}`} 
+                  className="text-sm text-gray-500 hover:text-gray-700 inline-flex items-center"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  ホームに戻る
+                </Link>
+              </div>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
