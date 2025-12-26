@@ -300,7 +300,7 @@ export default function ReservationManagement() {
     customer_name: '',
     customer_email: '',
     customer_phone: '',
-    menu_id: '',
+    selectedMenuIds: [] as number[],
     staff_id: '',
     reservation_date: '',
     reservation_time: '',
@@ -323,12 +323,12 @@ export default function ReservationManagement() {
 
   // スタッフ、メニュー、日付が選択されたら利用可能な時間を取得
   useEffect(() => {
-    if (formData.staff_id && formData.menu_id && formData.reservation_date) {
+    if (formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date) {
       loadAvailableTimes();
     } else {
       setAvailableTimes([]);
     }
-  }, [formData.staff_id, formData.menu_id, formData.reservation_date]);
+  }, [formData.staff_id, formData.selectedMenuIds, formData.reservation_date]);
 
   const loadData = async () => {
     await Promise.all([
@@ -437,15 +437,17 @@ export default function ReservationManagement() {
   };
 
   const loadAvailableTimes = async () => {
-    if (!formData.staff_id || !formData.menu_id || !formData.reservation_date) {
+    if (!formData.staff_id || formData.selectedMenuIds.length === 0 || !formData.reservation_date) {
       setAvailableTimes([]);
       return;
     }
 
     setLoadingTimes(true);
     try {
+      // 複数メニューの場合は最初のメニューIDを使用（合計時間はAPI側で計算）
+      const menuIdsParam = formData.selectedMenuIds.join(',');
       const response = await fetch(
-        `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${formData.menu_id}&staff_id=${formData.staff_id}`
+        `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${menuIdsParam}&staff_id=${formData.staff_id}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -470,12 +472,16 @@ export default function ReservationManagement() {
     if (reservation) {
       setEditingReservation(reservation);
       const dateTime = new Date(reservation.reservation_date);
+      // 複数メニューの場合はmenus配列から取得、そうでなければmenu_idから
+      const menuIds = reservation.menus && reservation.menus.length > 0
+        ? reservation.menus.map(m => m.menu_id)
+        : [reservation.menu_id];
       setFormData({
         customer_id: reservation.customer_id.toString(),
         customer_name: reservation.customer_name,
         customer_email: reservation.customer_email || '',
         customer_phone: reservation.customer_phone || '',
-        menu_id: reservation.menu_id.toString(),
+        selectedMenuIds: menuIds,
         staff_id: reservation.staff_id.toString(),
         reservation_date: dateTime.toISOString().split('T')[0],
         reservation_time: dateTime.toTimeString().slice(0, 5),
@@ -490,7 +496,7 @@ export default function ReservationManagement() {
         customer_name: '',
         customer_email: '',
         customer_phone: '',
-        menu_id: '',
+        selectedMenuIds: [],
         staff_id: '',
         reservation_date: today,
         reservation_time: '10:00',
@@ -500,6 +506,23 @@ export default function ReservationManagement() {
     }
     setError('');
     setShowModal(true);
+  };
+
+  const handleMenuToggle = (menuId: number) => {
+    const isSelected = formData.selectedMenuIds.includes(menuId);
+    if (isSelected) {
+      setFormData({
+        ...formData,
+        selectedMenuIds: formData.selectedMenuIds.filter(id => id !== menuId),
+        reservation_time: ''
+      });
+    } else {
+      setFormData({
+        ...formData,
+        selectedMenuIds: [...formData.selectedMenuIds, menuId],
+        reservation_time: ''
+      });
+    }
   };
 
   const handleCloseModal = () => {
@@ -537,8 +560,8 @@ export default function ReservationManagement() {
       const method = editingReservation ? 'PUT' : 'POST';
       
       const body: any = {
-        menu_id: parseInt(formData.menu_id),
-        staff_id: parseInt(formData.staff_id),
+        menu_ids: formData.selectedMenuIds,
+        staff_id: formData.staff_id ? parseInt(formData.staff_id) : null,
         reservation_date: reservationDateTime,
         status: formData.status,
         notes: formData.notes || null
@@ -1080,28 +1103,63 @@ export default function ReservationManagement() {
                       </>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="menu_id" className="block text-sm font-medium text-gray-700">
-                          メニュー <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          id="menu_id"
-                          required
-                          value={formData.menu_id}
-                          onChange={(e) => {
-                            setFormData({ ...formData, menu_id: e.target.value, reservation_time: '' });
-                          }}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                        >
-                          <option value="">選択してください</option>
-                          {menus.map((menu) => (
-                            <option key={menu.menu_id} value={menu.menu_id}>
-                              {menu.name} (¥{menu.price.toLocaleString()}, {menu.duration}分)
-                            </option>
-                          ))}
-                        </select>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        メニュー <span className="text-red-500">*</span>
+                        <span className="ml-2 text-xs text-gray-500">
+                          複数のメニューを選択できます
+                        </span>
+                      </label>
+                      <div className="grid grid-cols-1 gap-3 max-h-60 overflow-y-auto border border-gray-300 rounded-md p-3">
+                        {menus.length === 0 ? (
+                          <p className="text-sm text-gray-500">メニューが登録されていません</p>
+                        ) : (
+                          menus.map((menu) => {
+                            const isSelected = formData.selectedMenuIds.includes(menu.menu_id);
+                            return (
+                              <label
+                                key={menu.menu_id}
+                                className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'border-pink-500 bg-pink-50'
+                                    : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleMenuToggle(menu.menu_id)}
+                                  className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded mr-3 flex-shrink-0"
+                                />
+                                <div className="flex-1">
+                                  <div className="font-medium text-gray-900">{menu.name}</div>
+                                  <div className="text-sm text-gray-600">
+                                    ¥{menu.price.toLocaleString()} / {menu.duration}分
+                                  </div>
+                                </div>
+                              </label>
+                            );
+                          })
+                        )}
                       </div>
+                      {formData.selectedMenuIds.length > 0 && (
+                        <div className="mt-2 text-sm text-gray-600">
+                          選択中: {formData.selectedMenuIds.length}件
+                          {(() => {
+                            const selectedMenus = menus.filter(m => formData.selectedMenuIds.includes(m.menu_id));
+                            const totalPrice = selectedMenus.reduce((sum, m) => sum + m.price, 0);
+                            const totalDuration = selectedMenus.reduce((sum, m) => sum + m.duration, 0);
+                            return (
+                              <span className="ml-2">
+                                (合計: ¥{totalPrice.toLocaleString()} / {totalDuration}分)
+                              </span>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                       <div>
                         <label htmlFor="staff_id" className="block text-sm font-medium text-gray-700">
@@ -1145,13 +1203,13 @@ export default function ReservationManagement() {
                       <div>
                         <label htmlFor="reservation_time" className="block text-sm font-medium text-gray-700">
                           予約時間 <span className="text-red-500">*</span>
-                          {formData.staff_id && formData.menu_id && formData.reservation_date && (
+                          {formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date && (
                             <span className="ml-2 text-xs text-gray-500">
                               {loadingTimes ? '(読み込み中...)' : `(${availableTimes.length}件の空き時間)`}
                             </span>
                           )}
                         </label>
-                        {formData.staff_id && formData.menu_id && formData.reservation_date ? (
+                        {formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date ? (
                           <select
                             id="reservation_time"
                             required
@@ -1178,10 +1236,10 @@ export default function ReservationManagement() {
                             onChange={(e) => setFormData({ ...formData, reservation_time: e.target.value })}
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                             placeholder="スタッフとメニューを選択してください"
-                            disabled={!formData.staff_id || !formData.menu_id}
+                            disabled={!formData.staff_id || formData.selectedMenuIds.length === 0}
                           />
                         )}
-                        {formData.staff_id && formData.menu_id && formData.reservation_date && availableTimes.length === 0 && !loadingTimes && (
+                        {formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date && availableTimes.length === 0 && !loadingTimes && (
                           <p className="mt-1 text-sm text-red-600">
                             この日は利用可能な時間がありません。別の日付を選択してください。
                           </p>

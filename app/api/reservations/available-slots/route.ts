@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const date = request.nextUrl.searchParams.get('date');
-    const menuId = request.nextUrl.searchParams.get('menu_id');
+    const menuIdParam = request.nextUrl.searchParams.get('menu_id');
     const staffId = request.nextUrl.searchParams.get('staff_id');
 
     if (!date) {
@@ -24,15 +24,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // メニュー情報を取得（durationが必要）
+    // メニュー情報を取得（複数メニュー対応）
     let duration = 60; // デフォルト
-    if (menuId) {
-      const menuResult = await query(
-        'SELECT duration FROM menus WHERE menu_id = $1 AND tenant_id = $2',
-        [menuId, tenantId]
-      );
-      if (menuResult.rows.length > 0) {
-        duration = menuResult.rows[0].duration;
+    if (menuIdParam) {
+      // カンマ区切りの場合は複数メニュー
+      const menuIds = menuIdParam.includes(',') 
+        ? menuIdParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        : [parseInt(menuIdParam)];
+      
+      if (menuIds.length > 0) {
+        try {
+          const menuResult = await query(
+            `SELECT SUM(duration) as total_duration FROM menus 
+             WHERE menu_id = ANY($1::int[]) AND tenant_id = $2`,
+            [menuIds, tenantId]
+          );
+          if (menuResult.rows.length > 0 && menuResult.rows[0].total_duration) {
+            duration = parseInt(menuResult.rows[0].total_duration);
+          }
+        } catch (error: any) {
+          // フォールバック: 最初のメニューのみ
+          const menuResult = await query(
+            'SELECT duration FROM menus WHERE menu_id = $1 AND tenant_id = $2',
+            [menuIds[0], tenantId]
+          );
+          if (menuResult.rows.length > 0) {
+            duration = menuResult.rows[0].duration;
+          }
+        }
       }
     }
 

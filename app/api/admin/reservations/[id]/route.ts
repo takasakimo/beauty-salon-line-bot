@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, getPool } from '@/lib/db';
 import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -29,35 +29,48 @@ export async function PUT(
     const body = await request.json();
     const { 
       menu_id,
+      menu_ids,
       staff_id,
       reservation_date,
       status,
       notes
     } = body;
 
+    // menu_idsが配列の場合はそれを使用、そうでなければmenu_idを配列に変換
+    const menuIds = menu_ids && Array.isArray(menu_ids) && menu_ids.length > 0
+      ? menu_ids
+      : menu_id
+        ? [menu_id]
+        : [];
+
     // バリデーション
-    if (!menu_id || !reservation_date) {
+    if (menuIds.length === 0 || !reservation_date) {
       return NextResponse.json(
         { error: 'メニュー、予約日時は必須です' },
         { status: 400 }
       );
     }
 
-    // メニュー情報を取得（価格と所要時間）
+    // メニュー情報を取得（複数メニュー対応）
     const menuResult = await query(
-      'SELECT price, duration FROM menus WHERE menu_id = $1 AND tenant_id = $2',
-      [menu_id, tenantId]
+      `SELECT menu_id, price, duration FROM menus 
+       WHERE menu_id = ANY($1::int[]) AND tenant_id = $2`,
+      [menuIds, tenantId]
     );
 
-    if (menuResult.rows.length === 0) {
+    if (menuResult.rows.length !== menuIds.length) {
       return NextResponse.json(
-        { error: 'メニューが見つかりません' },
+        { error: '一部のメニューが見つかりません' },
         { status: 404 }
       );
     }
 
-    const price = menuResult.rows[0].price;
-    const duration = menuResult.rows[0].duration;
+    // 合計金額と合計時間を計算
+    const totalPrice = menuResult.rows.reduce((sum, row) => sum + row.price, 0);
+    const totalDuration = menuResult.rows.reduce((sum, row) => sum + row.duration, 0);
+    
+    // 最初のメニューIDをmenu_idとして使用（後方互換性のため）
+    const firstMenuId = menuIds[0];
 
     // 最大同時予約数を取得
     const tenantResult = await query(
@@ -66,29 +79,59 @@ export async function PUT(
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
 
-    // 予約日時を計算
+    // 予約日時を計算（合計時間を使用）
     const reservationDateTime = new Date(reservation_date);
-    const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
+    const reservationEndTime = new Date(reservationDateTime.getTime() + totalDuration * 60000);
 
     // スタッフが指定されている場合、時間の重複チェック（自分自身を除く）
     if (staff_id) {
 
-      // 同じスタッフの既存予約をチェック（更新対象の予約を除く）
-      const conflictCheck = await query(
-        `SELECT reservation_id, reservation_date, m.duration
-         FROM reservations r
-         LEFT JOIN menus m ON r.menu_id = m.menu_id
-         WHERE r.tenant_id = $1
-         AND r.staff_id = $2
-         AND r.status = 'confirmed'
-         AND DATE(r.reservation_date) = DATE($3)
-         AND r.reservation_id != $4`,
-        [tenantId, staff_id, reservation_date, reservationId]
-      );
+      // 同じスタッフの既存予約をチェック（更新対象の予約を除く、複数メニュー対応）
+      let conflictCheck;
+      try {
+        conflictCheck = await query(
+          `SELECT 
+            r.reservation_id, 
+            r.reservation_date,
+            COALESCE(
+              (SELECT SUM(rm_menu.duration) 
+               FROM reservation_menus rm 
+               JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id 
+               WHERE rm.reservation_id = r.reservation_id),
+              m.duration,
+              60
+            ) as duration
+           FROM reservations r
+           LEFT JOIN menus m ON r.menu_id = m.menu_id
+           WHERE r.tenant_id = $1
+           AND r.staff_id = $2
+           AND r.status = 'confirmed'
+           AND DATE(r.reservation_date) = DATE($3)
+           AND r.reservation_id != $4`,
+          [tenantId, staff_id, reservation_date, reservationId]
+        );
+      } catch (error: any) {
+        // reservation_menusテーブルが存在しない場合はフォールバック
+        if (error.message && error.message.includes('reservation_menus')) {
+          conflictCheck = await query(
+            `SELECT reservation_id, reservation_date, COALESCE(m.duration, 60) as duration
+             FROM reservations r
+             LEFT JOIN menus m ON r.menu_id = m.menu_id
+             WHERE r.tenant_id = $1
+             AND r.staff_id = $2
+             AND r.status = 'confirmed'
+             AND DATE(r.reservation_date) = DATE($3)
+             AND r.reservation_id != $4`,
+            [tenantId, staff_id, reservation_date, reservationId]
+          );
+        } else {
+          throw error;
+        }
+      }
 
       for (const existingReservation of conflictCheck.rows) {
         const existingStart = new Date(existingReservation.reservation_date);
-        const existingDuration = existingReservation.duration || 60;
+        const existingDuration = parseFloat(existingReservation.duration) || 60;
         const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
 
         // 時間帯が重複しているかチェック
@@ -100,25 +143,53 @@ export async function PUT(
         }
       }
     } else {
-      // スタッフ未指定の場合：最大同時予約数をチェック（更新対象の予約を除く）
-      const concurrentCheck = await query(
-        `SELECT 
-           r.reservation_date,
-           COALESCE(m.duration, 60) as duration
-         FROM reservations r
-         LEFT JOIN menus m ON r.menu_id = m.menu_id
-         WHERE r.tenant_id = $1
-         AND r.status = 'confirmed'
-         AND DATE(r.reservation_date) = DATE($2)
-         AND r.reservation_id != $3`,
-        [tenantId, reservation_date, reservationId]
-      );
+      // スタッフ未指定の場合：最大同時予約数をチェック（更新対象の予約を除く、複数メニュー対応）
+      let concurrentCheck;
+      try {
+        concurrentCheck = await query(
+          `SELECT 
+            r.reservation_date,
+            COALESCE(
+              (SELECT SUM(rm_menu.duration) 
+               FROM reservation_menus rm 
+               JOIN menus rm_menu ON rm.menu_id = rm_menu.menu_id 
+               WHERE rm.reservation_id = r.reservation_id),
+              m.duration,
+              60
+            ) as duration
+           FROM reservations r
+           LEFT JOIN menus m ON r.menu_id = m.menu_id
+           WHERE r.tenant_id = $1
+           AND r.status = 'confirmed'
+           AND DATE(r.reservation_date) = DATE($2)
+           AND r.reservation_id != $3`,
+          [tenantId, reservation_date, reservationId]
+        );
+      } catch (error: any) {
+        // reservation_menusテーブルが存在しない場合はフォールバック
+        if (error.message && error.message.includes('reservation_menus')) {
+          concurrentCheck = await query(
+            `SELECT 
+              r.reservation_date,
+              COALESCE(m.duration, 60) as duration
+             FROM reservations r
+             LEFT JOIN menus m ON r.menu_id = m.menu_id
+             WHERE r.tenant_id = $1
+             AND r.status = 'confirmed'
+             AND DATE(r.reservation_date) = DATE($2)
+             AND r.reservation_id != $3`,
+            [tenantId, reservation_date, reservationId]
+          );
+        } else {
+          throw error;
+        }
+      }
 
       // JavaScriptで時間帯の重複をチェック
       let concurrentCount = 0;
       concurrentCheck.rows.forEach((row: any) => {
         const existingStart = new Date(row.reservation_date);
-        const existingDuration = row.duration || 60;
+        const existingDuration = parseFloat(row.duration) || 60;
         const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
         
         // 時間帯が重複しているかチェック
@@ -135,37 +206,83 @@ export async function PUT(
       }
     }
 
-    const result = await query(
-      `UPDATE reservations 
-       SET 
-         menu_id = $1,
-         staff_id = $2,
-         reservation_date = $3,
-         status = $4,
-         price = $5,
-         notes = $6
-       WHERE reservation_id = $7 AND tenant_id = $8
-       RETURNING *`,
-      [
-        menu_id,
-        staff_id,
-        reservation_date,
-        status || 'confirmed',
-        price,
-        notes || null,
-        reservationId,
-        tenantId
-      ]
-    );
-
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: '予約が見つかりません' },
-        { status: 404 }
+    // トランザクションで予約とメニューを更新
+    const pool = getPool();
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // 予約を更新（最初のメニューIDをmenu_idとして使用）
+      const result = await client.query(
+        `UPDATE reservations 
+         SET 
+           menu_id = $1,
+           staff_id = $2,
+           reservation_date = $3,
+           status = $4,
+           price = $5,
+           notes = $6
+         WHERE reservation_id = $7 AND tenant_id = $8
+         RETURNING *`,
+        [
+          firstMenuId,
+          staff_id || null,
+          reservation_date,
+          status || 'confirmed',
+          totalPrice,
+          notes || null,
+          reservationId,
+          tenantId
+        ]
       );
-    }
 
-    return NextResponse.json(result.rows[0]);
+      if (result.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { error: '予約が見つかりません' },
+          { status: 404 }
+        );
+      }
+
+      // reservation_menusテーブルを更新
+      if (menuIds.length > 0) {
+        try {
+          // 既存のメニューを削除
+          await client.query(
+            `DELETE FROM reservation_menus WHERE reservation_id = $1`,
+            [reservationId]
+          );
+          
+          // 新しいメニューを追加
+          for (const menuId of menuIds) {
+            const menu = menuResult.rows.find(m => m.menu_id === menuId);
+            if (menu) {
+              await client.query(
+                `INSERT INTO reservation_menus (reservation_id, menu_id, price)
+                 VALUES ($1, $2, $3)`,
+                [reservationId, menuId, menu.price]
+              );
+            }
+          }
+        } catch (error: any) {
+          // reservation_menusテーブルが存在しない場合はスキップ
+          if (error.message && error.message.includes('reservation_menus')) {
+            console.warn('reservation_menusテーブルが存在しません。単一メニューとして保存します。');
+          } else {
+            throw error;
+          }
+        }
+      }
+      
+      await client.query('COMMIT');
+      return NextResponse.json(result.rows[0]);
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('Error updating reservation:', error);
     return NextResponse.json(
