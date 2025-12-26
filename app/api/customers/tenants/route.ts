@@ -108,7 +108,15 @@ export async function POST(request: NextRequest) {
 
       // パスワードが一致するか、パスワードが設定されていない場合は店舗を追加
       // パスワードが設定されていない場合は、後でパスワード設定を促す
-      if (passwordMatch || !hasPassword) {
+      const shouldAddTenant = passwordMatch || !hasPassword;
+      console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) 追加判定:`, {
+        shouldAdd: shouldAddTenant,
+        passwordMatch,
+        hasPassword,
+        reason: !hasPassword ? 'パスワード未設定のため追加' : passwordMatch ? 'パスワード一致のため追加' : 'パスワード不一致のため除外'
+      });
+      
+      if (shouldAddTenant) {
         const tenantData = {
           tenant_id: row.tenant_id,
           tenant_code: row.tenant_code,
@@ -123,6 +131,9 @@ export async function POST(request: NextRequest) {
         };
         tenants.push(tenantData);
         tenantMap.set(row.tenant_id, tenantData);
+        console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました`);
+      } else {
+        console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストから除外しました`);
       }
     }
 
@@ -143,7 +154,15 @@ export async function POST(request: NextRequest) {
       });
 
       // パスワードが一致するか、パスワードが設定されていない場合は店舗を追加
-      if (passwordMatch || !hasPassword) {
+      const shouldAddTenant = passwordMatch || !hasPassword;
+      console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) 追加判定:`, {
+        shouldAdd: shouldAddTenant,
+        passwordMatch,
+        hasPassword,
+        reason: !hasPassword ? 'パスワード未設定のため追加' : passwordMatch ? 'パスワード一致のため追加' : 'パスワード不一致のため除外'
+      });
+      
+      if (shouldAddTenant) {
         const existing = tenantMap.get(row.tenant_id);
         if (!existing) {
           // 顧客として存在しない場合は新規追加
@@ -162,6 +181,7 @@ export async function POST(request: NextRequest) {
           };
           tenants.push(tenantData);
           tenantMap.set(row.tenant_id, tenantData);
+          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました`);
         } else {
           // 既に顧客として存在する場合は、管理者情報も追加
           existing.admin_id = row.admin_id;
@@ -170,7 +190,10 @@ export async function POST(request: NextRequest) {
           if (!hasPassword) {
             existing.needs_password = true;
           }
+          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) の情報を既存の顧客店舗に追加しました`);
         }
+      } else {
+        console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストから除外しました`);
       }
     }
 
