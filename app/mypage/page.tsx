@@ -93,15 +93,15 @@ function MyPageContent() {
   }, [authenticated, customer]);
 
   useEffect(() => {
-    if (authenticated && customerId) {
+    if (authenticated && customerId && tenantCode) {
       // 店舗が変更されたときにデータを再読み込み
       loadCustomerData(customerId);
     }
-  }, [tenantCode, authenticated, customerId]);
+  }, [tenantCode]);
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/customers/me', {
+      const response = await fetch(`/api/customers/me?tenant=${tenantCode}`, {
         credentials: 'include'
       });
 
@@ -116,7 +116,9 @@ function MyPageContent() {
         setCustomer(customerData);
         setCustomerId(customerData.customer_id);
         setAuthenticated(true);
-        loadCustomerData(customerData.customer_id);
+        if (customerData.customer_id) {
+          loadCustomerData(customerData.customer_id);
+        }
       }
     } catch (error) {
       console.error('認証確認エラー:', error);
@@ -208,7 +210,8 @@ function MyPageContent() {
 
   const handleTenantChange = (newTenantCode: string) => {
     // 店舗を切り替えてマイページを再読み込み
-    router.push(`/mypage?tenant=${newTenantCode}`);
+    // ページを完全にリロードして、新しい店舗のデータを取得
+    window.location.href = `/mypage?tenant=${newTenantCode}`;
   };
 
   // 予約前日までかどうかをチェック
