@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { BuildingStorefrontIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
 interface MenuItem {
   menu_id: number;
@@ -44,6 +45,16 @@ interface Customer {
   registered_date: string;
 }
 
+interface Tenant {
+  tenant_id: number;
+  tenant_code: string;
+  salon_name: string;
+  customer_id?: number;
+  admin_id?: number;
+  has_customer: boolean;
+  has_admin: boolean;
+}
+
 function MyPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -67,10 +78,19 @@ function MyPageContent() {
   const [availableTimes, setAvailableTimes] = useState<string[]>([]);
   const [loadingTimes, setLoadingTimes] = useState(false);
   const [error, setError] = useState('');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
+  const [loadingTenants, setLoadingTenants] = useState(false);
 
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (authenticated && customer) {
+      loadTenants();
+    }
+  }, [authenticated, customer, tenantCode]);
 
   const checkAuth = async () => {
     try {
@@ -154,6 +174,34 @@ function MyPageContent() {
     } catch (error) {
       console.error('スタッフ取得エラー:', error);
     }
+  };
+
+  const loadTenants = async () => {
+    try {
+      setLoadingTenants(true);
+      const response = await fetch('/api/customers/my-tenants', {
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.tenants) {
+          setTenants(result.tenants);
+          // 現在の店舗を特定
+          const current = result.tenants.find((t: Tenant) => t.tenant_code === tenantCode);
+          setCurrentTenant(current || result.tenants[0] || null);
+        }
+      }
+    } catch (error) {
+      console.error('店舗一覧取得エラー:', error);
+    } finally {
+      setLoadingTenants(false);
+    }
+  };
+
+  const handleTenantChange = (newTenantCode: string) => {
+    // 店舗を切り替えてマイページを再読み込み
+    router.push(`/mypage?tenant=${newTenantCode}`);
   };
 
   // 予約前日までかどうかをチェック
@@ -313,12 +361,38 @@ function MyPageContent() {
             <h1 className="text-2xl font-bold text-gray-900">
               マイページ
             </h1>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-gray-600 hover:text-gray-900"
-            >
-              ログアウト
-            </button>
+            <div className="flex items-center gap-4">
+              {/* 店舗切り替え */}
+              {tenants.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={tenantCode}
+                    onChange={(e) => handleTenantChange(e.target.value)}
+                    className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm text-gray-700 hover:border-pink-500 focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent cursor-pointer"
+                    disabled={loadingTenants}
+                  >
+                    {tenants.map((tenant) => (
+                      <option key={tenant.tenant_id} value={tenant.tenant_code}>
+                        {tenant.salon_name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                </div>
+              )}
+              {tenants.length === 1 && currentTenant && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <BuildingStorefrontIcon className="h-5 w-5 text-pink-600" />
+                  <span>{currentTenant.salon_name}</span>
+                </div>
+              )}
+              <button
+                onClick={handleLogout}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                ログアウト
+              </button>
+            </div>
           </div>
 
           {customer && (
