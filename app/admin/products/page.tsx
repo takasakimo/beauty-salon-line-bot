@@ -10,7 +10,8 @@ import {
   TrashIcon,
   XMarkIcon,
   ChevronDownIcon,
-  ChevronUpIcon
+  ChevronUpIcon,
+  ShoppingBagIcon
 } from '@heroicons/react/24/outline';
 
 interface Product {
@@ -62,10 +63,25 @@ export default function ProductManagement() {
   const [categoryError, setCategoryError] = useState('');
   const [isCategoriesExpanded, setIsCategoriesExpanded] = useState(true);
   const [isProductsExpanded, setIsProductsExpanded] = useState(true);
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [selectedProductForSale, setSelectedProductForSale] = useState<Product | null>(null);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [saleFormData, setSaleFormData] = useState({
+    customer_id: '',
+    quantity: '1',
+    staff_id: '',
+    purchase_date: '',
+    purchase_time: '',
+    notes: ''
+  });
+  const [saleError, setSaleError] = useState('');
 
   useEffect(() => {
     loadProducts();
     loadCategories();
+    loadCustomers();
+    loadStaffList();
   }, []);
 
   const loadProducts = async () => {
@@ -114,6 +130,37 @@ export default function ProductManagement() {
       }
     } catch (error) {
       console.error('カテゴリ取得エラー:', error);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/customers');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCustomers(data);
+      }
+    } catch (error) {
+      console.error('顧客取得エラー:', error);
+    }
+  };
+
+  const loadStaffList = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/staff');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStaffList(data);
+      }
+    } catch (error) {
+      console.error('スタッフ取得エラー:', error);
     }
   };
 
@@ -346,6 +393,93 @@ export default function ProductManagement() {
     }
   };
 
+  const handleOpenSaleModal = (product: Product) => {
+    setSelectedProductForSale(product);
+    const now = new Date();
+    setSaleFormData({
+      customer_id: '',
+      quantity: '1',
+      staff_id: '',
+      purchase_date: now.toISOString().split('T')[0],
+      purchase_time: now.toTimeString().slice(0, 5),
+      notes: ''
+    });
+    setSaleError('');
+    setShowSaleModal(true);
+  };
+
+  const handleCloseSaleModal = () => {
+    setShowSaleModal(false);
+    setSelectedProductForSale(null);
+    setSaleFormData({
+      customer_id: '',
+      quantity: '1',
+      staff_id: '',
+      purchase_date: '',
+      purchase_time: '',
+      notes: ''
+    });
+    setSaleError('');
+  };
+
+  const handleSaleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaleError('');
+
+    if (!selectedProductForSale) return;
+
+    if (!saleFormData.customer_id) {
+      setSaleError('顧客を選択してください');
+      return;
+    }
+
+    if (!saleFormData.quantity || parseInt(saleFormData.quantity) <= 0) {
+      setSaleError('数量を正しく入力してください');
+      return;
+    }
+
+    try {
+      const quantity = parseInt(saleFormData.quantity);
+      const unitPrice = selectedProductForSale.unit_price;
+      const totalPrice = quantity * unitPrice;
+
+      const purchaseDateTime = new Date(`${saleFormData.purchase_date}T${saleFormData.purchase_time}`);
+      
+      const url = getApiUrlWithTenantId('/api/admin/product-purchases');
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          customer_id: parseInt(saleFormData.customer_id),
+          product_id: selectedProductForSale.product_id,
+          product_name: selectedProductForSale.product_name,
+          product_category: selectedProductForSale.product_category || null,
+          quantity: quantity,
+          unit_price: unitPrice,
+          total_price: totalPrice,
+          purchase_date: purchaseDateTime.toISOString(),
+          staff_id: saleFormData.staff_id ? parseInt(saleFormData.staff_id) : null,
+          notes: saleFormData.notes || null
+        }),
+      });
+
+      if (response.ok) {
+        alert('商品を販売しました');
+        handleCloseSaleModal();
+        loadProducts(); // 在庫数を更新するため
+      } else {
+        const errorData = await response.json();
+        setSaleError(errorData.error || '販売に失敗しました');
+      }
+    } catch (error) {
+      console.error('商品販売エラー:', error);
+      setSaleError('販売に失敗しました');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -561,6 +695,13 @@ export default function ProductManagement() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleOpenSaleModal(product)}
+                            className="p-2 text-green-600 hover:text-green-700"
+                            title="販売"
+                          >
+                            <ShoppingBagIcon className="h-5 w-5" />
+                          </button>
                           <button
                             onClick={() => handleOpenModal(product)}
                             className="p-2 text-gray-400 hover:text-gray-600"
@@ -814,6 +955,156 @@ export default function ProductManagement() {
                       className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                     >
                       {editingCategory ? '更新' : '追加'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 販売モーダル */}
+      {showSaleModal && selectedProductForSale && (
+        <div className="fixed z-10 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseSaleModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    商品を販売: {selectedProductForSale.product_name}
+                  </h3>
+                  <button
+                    onClick={handleCloseSaleModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaleSubmit}>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="customer_id" className="block text-sm font-medium text-gray-700">
+                        顧客 <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="customer_id"
+                        required
+                        value={saleFormData.customer_id}
+                        onChange={(e) => setSaleFormData({ ...saleFormData, customer_id: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      >
+                        <option value="">選択してください</option>
+                        {customers.map((customer) => (
+                          <option key={customer.customer_id} value={customer.customer_id}>
+                            {customer.real_name} ({customer.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="quantity" className="block text-sm font-medium text-gray-700">
+                        数量 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        id="quantity"
+                        required
+                        min="1"
+                        value={saleFormData.quantity}
+                        onChange={(e) => setSaleFormData({ ...saleFormData, quantity: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                      <p className="mt-1 text-sm text-gray-500">
+                        単価: ¥{selectedProductForSale.unit_price.toLocaleString()} × {saleFormData.quantity || 0} = ¥{((selectedProductForSale.unit_price) * parseInt(saleFormData.quantity || '0')).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="staff_id" className="block text-sm font-medium text-gray-700">
+                        担当スタッフ
+                      </label>
+                      <select
+                        id="staff_id"
+                        value={saleFormData.staff_id}
+                        onChange={(e) => setSaleFormData({ ...saleFormData, staff_id: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      >
+                        <option value="">選択してください</option>
+                        {staffList.map((staff) => (
+                          <option key={staff.staff_id} value={staff.staff_id}>
+                            {staff.staff_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="purchase_date" className="block text-sm font-medium text-gray-700">
+                          購入日 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          id="purchase_date"
+                          required
+                          value={saleFormData.purchase_date}
+                          onChange={(e) => setSaleFormData({ ...saleFormData, purchase_date: e.target.value })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="purchase_time" className="block text-sm font-medium text-gray-700">
+                          購入時刻 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="time"
+                          id="purchase_time"
+                          required
+                          value={saleFormData.purchase_time}
+                          onChange={(e) => setSaleFormData({ ...saleFormData, purchase_time: e.target.value })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
+                        メモ
+                      </label>
+                      <textarea
+                        id="notes"
+                        rows={3}
+                        value={saleFormData.notes}
+                        onChange={(e) => setSaleFormData({ ...saleFormData, notes: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+                  </div>
+
+                  {saleError && (
+                    <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                      {saleError}
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={handleCloseSaleModal}
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    >
+                      販売する
                     </button>
                   </div>
                 </form>
