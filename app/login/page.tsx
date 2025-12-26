@@ -52,6 +52,7 @@ function CustomerLoginContent() {
 
     try {
       // まず店舗一覧を取得
+      console.log('店舗一覧取得開始:', { email: email.trim() });
       const tenantsResponse = await fetch('/api/customers/tenants', {
         method: 'POST',
         headers: {
@@ -65,8 +66,10 @@ function CustomerLoginContent() {
       });
 
       const tenantsResult = await tenantsResponse.json();
+      console.log('店舗一覧取得レスポンス:', tenantsResult);
 
       if (!tenantsResult.success) {
+        console.error('店舗一覧取得失敗:', tenantsResult.error);
         setError(tenantsResult.error || 'ログインに失敗しました');
         setPassword('');
         setLoading(false);
@@ -74,8 +77,10 @@ function CustomerLoginContent() {
       }
 
       const tenantList: Tenant[] = tenantsResult.tenants || [];
+      console.log('店舗リスト:', { count: tenantList.length, tenants: tenantList });
 
       if (tenantList.length === 0) {
+        console.error('店舗が見つかりません');
         setError('登録されている店舗が見つかりません');
         setPassword('');
         setLoading(false);
@@ -84,9 +89,11 @@ function CustomerLoginContent() {
 
       // 店舗が1つの場合は直接ログイン
       if (tenantList.length === 1) {
+        console.log('店舗が1つのため直接ログイン:', tenantList[0].tenant_code);
         await performLogin(tenantList[0].tenant_code);
       } else {
         // 複数の店舗がある場合は選択画面を表示
+        console.log('複数店舗のため選択画面を表示:', tenantList.length);
         setTenants(tenantList);
         setShowTenantSelection(true);
         setLoading(false);
