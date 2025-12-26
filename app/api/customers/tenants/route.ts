@@ -45,7 +45,16 @@ export async function POST(request: NextRequest) {
       [trimmedEmail]
     );
 
-    console.log('顧客検索結果（emailのみ）:', { count: customerSearchResult.rows.length });
+    console.log('顧客検索結果（emailのみ）:', { 
+      count: customerSearchResult.rows.length,
+      details: customerSearchResult.rows.map(r => ({
+        tenant_id: r.tenant_id,
+        salon_name: r.salon_name,
+        tenant_code: r.tenant_code,
+        has_password_hash: !!r.password_hash,
+        password_hash_preview: r.password_hash ? r.password_hash.substring(0, 20) + '...' : 'NULL'
+      }))
+    });
 
     // 管理者としても登録されている可能性があるので、管理者テーブルもチェック
     const adminSearchResult = await query(
@@ -67,14 +76,34 @@ export async function POST(request: NextRequest) {
       [trimmedEmail]
     );
 
-    console.log('管理者検索結果（emailのみ）:', { count: adminSearchResult.rows.length });
+    console.log('管理者検索結果（emailのみ）:', { 
+      count: adminSearchResult.rows.length,
+      details: adminSearchResult.rows.map(r => ({
+        tenant_id: r.tenant_id,
+        salon_name: r.salon_name,
+        tenant_code: r.tenant_code,
+        has_password_hash: !!r.password_hash,
+        password_hash_preview: r.password_hash ? r.password_hash.substring(0, 20) + '...' : 'NULL'
+      }))
+    });
 
     const tenants: any[] = [];
     const tenantMap = new Map<number, any>();
 
+    console.log('入力パスワードハッシュ:', { hashPreview: passwordHash.substring(0, 20) + '...', fullLength: passwordHash.length });
+
     // 顧客として登録されている店舗を追加（パスワード検証）
     for (const row of customerSearchResult.rows) {
-      if (row.password_hash === passwordHash) {
+      const passwordMatch = row.password_hash === passwordHash;
+      console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) パスワード検証:`, {
+        match: passwordMatch,
+        stored_hash_preview: row.password_hash ? row.password_hash.substring(0, 20) + '...' : 'NULL',
+        input_hash_preview: passwordHash.substring(0, 20) + '...',
+        stored_hash_length: row.password_hash ? row.password_hash.length : 0,
+        input_hash_length: passwordHash.length
+      });
+
+      if (passwordMatch) {
         const tenantData = {
           tenant_id: row.tenant_id,
           tenant_code: row.tenant_code,
@@ -95,7 +124,16 @@ export async function POST(request: NextRequest) {
 
     // 管理者として登録されている店舗を追加（パスワード検証、重複チェック）
     for (const row of adminSearchResult.rows) {
-      if (row.password_hash === passwordHash) {
+      const passwordMatch = row.password_hash === passwordHash;
+      console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) パスワード検証:`, {
+        match: passwordMatch,
+        stored_hash_preview: row.password_hash ? row.password_hash.substring(0, 20) + '...' : 'NULL',
+        input_hash_preview: passwordHash.substring(0, 20) + '...',
+        stored_hash_length: row.password_hash ? row.password_hash.length : 0,
+        input_hash_length: passwordHash.length
+      });
+
+      if (passwordMatch) {
         const existing = tenantMap.get(row.tenant_id);
         if (!existing) {
           // 顧客として存在しない場合は新規追加
@@ -123,7 +161,16 @@ export async function POST(request: NextRequest) {
 
     console.log('パスワード検証後の管理者店舗:', { count: tenants.length });
 
-    console.log('最終的な店舗リスト:', { count: tenants.length, tenants: tenants.map(t => ({ tenant_id: t.tenant_id, salon_name: t.salon_name, is_admin: t.is_admin })) });
+    console.log('最終的な店舗リスト:', { 
+      count: tenants.length, 
+      tenants: tenants.map(t => ({ 
+        tenant_id: t.tenant_id, 
+        salon_name: t.salon_name, 
+        tenant_code: t.tenant_code,
+        has_customer: t.has_customer,
+        has_admin: t.has_admin
+      })) 
+    });
 
     if (tenants.length === 0) {
       console.log('店舗が見つかりませんでした');
