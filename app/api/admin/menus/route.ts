@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await query(
-      `SELECT menu_id, name, price, duration, description, is_active
+      `SELECT menu_id, name, price, duration, description, category, is_active
        FROM menus 
        WHERE tenant_id = $1 
        ORDER BY menu_id`,
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const body = await request.json();
-    const { name, price, duration, description } = body;
+    const { name, price, duration, description, category } = body;
 
     // バリデーション
     if (!name || !price || !duration) {
@@ -71,10 +71,10 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await query(
-      `INSERT INTO menus (name, price, duration, description, tenant_id, is_active)
-       VALUES ($1, $2, $3, $4, $5, true)
+      `INSERT INTO menus (name, price, duration, description, category, tenant_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
        RETURNING *`,
-      [name, parseInt(price), parseInt(duration), description || null, tenantId]
+      [name, parseInt(price), parseInt(duration), description || null, category || null, tenantId]
     );
 
     return NextResponse.json(result.rows[0]);

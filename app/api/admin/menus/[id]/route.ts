@@ -27,7 +27,7 @@ export async function PUT(
     }
     const menuId = parseInt(params.id);
     const body = await request.json();
-    const { name, price, duration, description, is_active } = body;
+    const { name, price, duration, description, category, is_active } = body;
 
     // バリデーション
     if (!name || !price || !duration) {
@@ -39,14 +39,15 @@ export async function PUT(
 
     const result = await query(
       `UPDATE menus 
-       SET name = $1, price = $2, duration = $3, description = $4, is_active = $5
-       WHERE menu_id = $6 AND tenant_id = $7
+       SET name = $1, price = $2, duration = $3, description = $4, category = $5, is_active = $6
+       WHERE menu_id = $7 AND tenant_id = $8
        RETURNING *`,
       [
         name,
         parseInt(price),
         parseInt(duration),
         description || null,
+        category || null,
         is_active !== undefined ? is_active : true,
         menuId,
         tenantId
