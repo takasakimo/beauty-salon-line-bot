@@ -94,8 +94,11 @@ export async function POST(request: NextRequest) {
 
     // 顧客として登録されている店舗を追加（パスワード検証）
     for (const row of customerSearchResult.rows) {
-      const passwordMatch = row.password_hash === passwordHash;
+      const hasPassword = !!row.password_hash;
+      const passwordMatch = hasPassword && row.password_hash === passwordHash;
+      
       console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) パスワード検証:`, {
+        has_password: hasPassword,
         match: passwordMatch,
         stored_hash_preview: row.password_hash ? row.password_hash.substring(0, 20) + '...' : 'NULL',
         input_hash_preview: passwordHash.substring(0, 20) + '...',
@@ -103,7 +106,9 @@ export async function POST(request: NextRequest) {
         input_hash_length: passwordHash.length
       });
 
-      if (passwordMatch) {
+      // パスワードが一致するか、パスワードが設定されていない場合は店舗を追加
+      // パスワードが設定されていない場合は、後でパスワード設定を促す
+      if (passwordMatch || !hasPassword) {
         const tenantData = {
           tenant_id: row.tenant_id,
           tenant_code: row.tenant_code,
@@ -113,7 +118,8 @@ export async function POST(request: NextRequest) {
           email: row.email,
           phone_number: row.phone_number,
           has_customer: true, // メールアドレスがcustomersテーブルに存在
-          has_admin: false    // メールアドレスがtenant_adminsテーブルに存在するかは後で判定
+          has_admin: false,  // メールアドレスがtenant_adminsテーブルに存在するかは後で判定
+          needs_password: !hasPassword // パスワードが設定されていない場合はtrue
         };
         tenants.push(tenantData);
         tenantMap.set(row.tenant_id, tenantData);
@@ -124,8 +130,11 @@ export async function POST(request: NextRequest) {
 
     // 管理者として登録されている店舗を追加（パスワード検証、重複チェック）
     for (const row of adminSearchResult.rows) {
-      const passwordMatch = row.password_hash === passwordHash;
+      const hasPassword = !!row.password_hash;
+      const passwordMatch = hasPassword && row.password_hash === passwordHash;
+      
       console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) パスワード検証:`, {
+        has_password: hasPassword,
         match: passwordMatch,
         stored_hash_preview: row.password_hash ? row.password_hash.substring(0, 20) + '...' : 'NULL',
         input_hash_preview: passwordHash.substring(0, 20) + '...',
@@ -133,7 +142,8 @@ export async function POST(request: NextRequest) {
         input_hash_length: passwordHash.length
       });
 
-      if (passwordMatch) {
+      // パスワードが一致するか、パスワードが設定されていない場合は店舗を追加
+      if (passwordMatch || !hasPassword) {
         const existing = tenantMap.get(row.tenant_id);
         if (!existing) {
           // 顧客として存在しない場合は新規追加
@@ -147,7 +157,8 @@ export async function POST(request: NextRequest) {
             email: row.email,
             phone_number: row.phone_number,
             has_customer: false, // メールアドレスがcustomersテーブルに存在しない
-            has_admin: true      // メールアドレスがtenant_adminsテーブルに存在
+            has_admin: true,     // メールアドレスがtenant_adminsテーブルに存在
+            needs_password: !hasPassword // パスワードが設定されていない場合はtrue
           };
           tenants.push(tenantData);
           tenantMap.set(row.tenant_id, tenantData);
@@ -155,6 +166,10 @@ export async function POST(request: NextRequest) {
           // 既に顧客として存在する場合は、管理者情報も追加
           existing.admin_id = row.admin_id;
           existing.has_admin = true; // メールアドレスがtenant_adminsテーブルにも存在
+          // パスワードが必要な場合は、既存のneeds_passwordを更新（どちらかがtrueならtrue）
+          if (!hasPassword) {
+            existing.needs_password = true;
+          }
         }
       }
     }

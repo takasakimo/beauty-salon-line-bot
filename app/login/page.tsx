@@ -16,6 +16,7 @@ interface Tenant {
   phone_number?: string;
   has_customer: boolean; // メールアドレスがcustomersテーブルに存在
   has_admin: boolean;    // メールアドレスがtenant_adminsテーブルに存在
+  needs_password?: boolean; // パスワードが設定されていない場合はtrue
 }
 
 function CustomerLoginContent() {
@@ -91,7 +92,7 @@ function CustomerLoginContent() {
       // 店舗が1つの場合は直接ログイン
       if (tenantList.length === 1) {
         console.log('店舗が1つのため直接ログイン:', tenantList[0].tenant_code);
-        await performLogin(tenantList[0].tenant_code);
+        await performLogin(tenantList[0].tenant_code, tenantList[0].needs_password);
       } else {
         // 複数の店舗がある場合は選択画面を表示
         console.log('複数店舗のため選択画面を表示:', tenantList.length);
@@ -107,9 +108,16 @@ function CustomerLoginContent() {
     }
   };
 
-  const performLogin = async (selectedTenantCode: string) => {
+  const performLogin = async (selectedTenantCode: string, needsPassword?: boolean) => {
     setLoading(true);
     setError('');
+
+    // パスワードが設定されていない店舗を選択した場合
+    if (needsPassword) {
+      setError('この店舗ではパスワードが設定されていません。パスワードを設定してください。');
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch('/api/customers/login', {
@@ -154,7 +162,7 @@ function CustomerLoginContent() {
   };
 
   const handleTenantSelect = (tenant: Tenant) => {
-    performLogin(tenant.tenant_code);
+    performLogin(tenant.tenant_code, tenant.needs_password);
   };
 
   return (
@@ -196,6 +204,9 @@ function CustomerLoginContent() {
                         ? '（管理者として登録済み）'
                         : '（顧客として登録済み）'
                     }
+                    {tenant.needs_password && (
+                      <span className="text-orange-600 font-medium ml-1">※パスワード設定が必要</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex-shrink-0">

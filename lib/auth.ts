@@ -391,7 +391,7 @@ export async function authenticateCustomer(
   email: string,
   password: string,
   tenantCode?: string
-): Promise<{ success: boolean; sessionToken?: string; customer?: any; tenant?: any; error?: string }> {
+): Promise<{ success: boolean; sessionToken?: string; customer?: any; tenant?: any; error?: string; needsPassword?: boolean }> {
   try {
     const actualTenantCode = tenantCode || 'beauty-salon-001';
     
@@ -414,29 +414,57 @@ export async function authenticateCustomer(
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
     
-    // まず顧客テーブルで認証を試みる
+    // まず顧客テーブルで認証を試みる（パスワードが設定されている場合）
     const customerResult = await query(
-      `SELECT customer_id, real_name, email, phone_number 
+      `SELECT customer_id, real_name, email, phone_number, password_hash
        FROM customers 
-       WHERE tenant_id = $1 AND email = $2 AND password_hash = $3`,
+       WHERE tenant_id = $1 AND email = $2 AND (password_hash = $3 OR password_hash IS NULL)`,
       [tenant.tenant_id, email, passwordHash]
     );
 
     let customer: any = null;
     let isAdmin = false;
+    let needsPassword = false;
 
     if (customerResult.rows.length > 0) {
-      // 顧客として見つかった
-      customer = customerResult.rows[0];
-    } else {
+      const row = customerResult.rows[0];
+      // パスワードが設定されていない場合は、入力されたパスワードを設定してログインを許可
+      if (!row.password_hash) {
+        // パスワードハッシュを設定
+        const newPasswordHash = hashPassword(password);
+        await query(
+          'UPDATE customers SET password_hash = $1 WHERE customer_id = $2',
+          [newPasswordHash, row.customer_id]
+        );
+        // パスワードを設定したので、そのまま認証を続行
+        customer = {
+          customer_id: row.customer_id,
+          real_name: row.real_name,
+          email: row.email,
+          phone_number: row.phone_number
+        };
+      }
+      // パスワードが一致する場合のみ顧客として認証
+      if (row.password_hash === passwordHash) {
+        customer = {
+          customer_id: row.customer_id,
+          real_name: row.real_name,
+          email: row.email,
+          phone_number: row.phone_number
+        };
+      }
+    }
+    
+    if (!customer) {
       // 顧客として見つからない場合、管理者テーブルをチェック
+      // 管理者テーブルをチェック
       // メールアドレスまたはユーザー名で検索
       const adminResult = await query(
         `SELECT admin_id, full_name, username, email, password_hash, is_active
          FROM tenant_admins 
          WHERE tenant_id = $1 
          AND (email = $2 OR username = $2)
-         AND password_hash = $3`,
+         AND (password_hash = $3 OR password_hash IS NULL)`,
         [tenant.tenant_id, email, passwordHash]
       );
 
@@ -447,15 +475,37 @@ export async function authenticateCustomer(
           return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
         }
 
-        // 管理者情報を顧客情報として扱う
-        isAdmin = true;
-        customer = {
-          customer_id: null, // 管理者は顧客IDを持たない
-          real_name: admin.full_name || admin.username,
-          email: admin.email || admin.username,
-          phone_number: null,
-          admin_id: admin.admin_id // 管理者IDを保持
-        };
+        // パスワードが設定されていない場合は、入力されたパスワードを設定してログインを許可
+        if (!admin.password_hash) {
+          // パスワードハッシュを設定
+          const newPasswordHash = hashPassword(password);
+          await query(
+            'UPDATE tenant_admins SET password_hash = $1 WHERE admin_id = $2',
+            [newPasswordHash, admin.admin_id]
+          );
+          // パスワードを設定したので、そのまま認証を続行
+          isAdmin = true;
+          customer = {
+            customer_id: null,
+            real_name: admin.full_name || admin.username,
+            email: admin.email || admin.username,
+            phone_number: null,
+            admin_id: admin.admin_id
+          };
+        }
+
+        // パスワードが一致する場合のみ管理者として認証
+        if (admin.password_hash === passwordHash) {
+          // 管理者情報を顧客情報として扱う
+          isAdmin = true;
+          customer = {
+            customer_id: null, // 管理者は顧客IDを持たない
+            real_name: admin.full_name || admin.username,
+            email: admin.email || admin.username,
+            phone_number: null,
+            admin_id: admin.admin_id // 管理者IDを保持
+          };
+        }
       }
     }
 
