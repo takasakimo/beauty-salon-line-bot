@@ -1,0 +1,99 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { query } from '@/lib/db';
+import { getAuthFromRequest, getTenantIdFromRequest, hashPassword } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getAuthFromRequest(request);
+    if (!session || !session.adminId) {
+      return NextResponse.json(
+        { success: false, error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
+
+    const tenantId = getTenantIdFromRequest(request, session);
+    if (!tenantId) {
+      return NextResponse.json(
+        { success: false, error: '店舗IDが指定されていません' },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const { currentPassword, newPassword, confirmPassword } = body;
+
+    // バリデーション
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return NextResponse.json(
+        { success: false, error: 'すべてのフィールドを入力してください' },
+        { status: 400 }
+      );
+    }
+
+    if (newPassword !== confirmPassword) {
+      return NextResponse.json(
+        { success: false, error: '新しいパスワードと確認用パスワードが一致しません' },
+        { status: 400 }
+      );
+    }
+
+    if (newPassword.length < 6) {
+      return NextResponse.json(
+        { success: false, error: '新しいパスワードは6文字以上である必要があります' },
+        { status: 400 }
+      );
+    }
+
+    // 現在のパスワードを確認
+    const currentPasswordHash = hashPassword(currentPassword);
+    const adminResult = await query(
+      `SELECT admin_id, password_hash 
+       FROM tenant_admins 
+       WHERE admin_id = $1 AND tenant_id = $2`,
+      [session.adminId, tenantId]
+    );
+
+    if (adminResult.rows.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '管理者情報が見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    const admin = adminResult.rows[0];
+    
+    // パスワードが設定されている場合は、現在のパスワードを確認
+    if (admin.password_hash) {
+      if (admin.password_hash !== currentPasswordHash) {
+        return NextResponse.json(
+          { success: false, error: '現在のパスワードが正しくありません' },
+          { status: 401 }
+        );
+      }
+    }
+
+    // 新しいパスワードを設定
+    const newPasswordHash = hashPassword(newPassword);
+    await query(
+      `UPDATE tenant_admins 
+       SET password_hash = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE admin_id = $2 AND tenant_id = $3`,
+      [newPasswordHash, session.adminId, tenantId]
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: 'パスワードを変更しました'
+    });
+  } catch (error: any) {
+    console.error('パスワード変更エラー:', error);
+    return NextResponse.json(
+      { success: false, error: 'サーバーエラー' },
+      { status: 500 }
+    );
+  }
+}
+
