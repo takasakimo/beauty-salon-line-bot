@@ -103,35 +103,7 @@ export async function GET(request: NextRequest) {
       console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });
     }
 
-    // 現在時刻を取得（ローカル時間を使用）
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    
-    // 選択された日付が今日の場合、現在時刻より前の時間を除外
-    if (date === today) {
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      const currentTimeInMinutes = currentHour * 60 + currentMinute;
-      
-      // 現在時刻より前のスロットを除外（バッファ時間30分 + 作業時間を考慮）
-      // 例：現在が14:00で作業時間が60分の場合、14:30以降のスロットのみ表示（バッファ30分）
-      // ただし、作業時間を考慮して、開始時間 + 作業時間が営業時間内に収まる必要がある
-      const bufferMinutes = 30; // バッファ時間（30分）
-      const minStartTime = currentTimeInMinutes + bufferMinutes;
-      
-      const filteredSlots = slots.filter(slot => {
-        const [hour, minute] = slot.split(':').map(Number);
-        const slotTimeInMinutes = hour * 60 + minute;
-        // バッファ時間を考慮した最小開始時間以降のスロットのみ
-        return slotTimeInMinutes >= minStartTime;
-      });
-      
-      // スロットを更新
-      slots.length = 0;
-      slots.push(...filteredSlots);
-    }
-
-    // 予約済みスロットを取得
+    // 予約済みスロットを取得（当日の時間計算の前に取得）
     // スタッフが指定されている場合は、そのスタッフの予約のみをチェック
     let queryText = '';
     let queryParams: any[] = [];
@@ -277,16 +249,58 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 空きスロットを返す（閉店時間を考慮）
+    // 現在時刻を取得（ローカル時間を使用）
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    // 当日の場合、現在時刻と既存予約の終了時間を考慮
+    let minStartTime = 0; // 最小開始時間（分単位）
+    if (date === today) {
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTimeInMinutes = currentHour * 60 + currentMinute;
+      const bufferMinutes = 30; // バッファ時間（30分）
+      minStartTime = currentTimeInMinutes + bufferMinutes;
+      
+      // 既存予約の終了時間も考慮（既存予約の終了時間の方が遅い場合はそれを使用）
+      result.rows.forEach((row: any) => {
+        const reservationDateStr = row.reservation_date;
+        let reservationDate: Date;
+        if (typeof reservationDateStr === 'string') {
+          const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0];
+          reservationDate = new Date(dateStr);
+        } else {
+          reservationDate = new Date(reservationDateStr);
+        }
+        const reservationDuration = row.duration || 60;
+        const reservationHour = reservationDate.getHours();
+        const reservationMinute = reservationDate.getMinutes();
+        const reservationStartTime = reservationHour * 60 + reservationMinute;
+        const reservationEndTime = reservationStartTime + reservationDuration;
+        
+        // 既存予約の終了時間が現在時刻 + バッファより遅い場合は、それを使用
+        if (reservationEndTime > minStartTime) {
+          minStartTime = reservationEndTime;
+        }
+      });
+    }
+    
+    // 空きスロットを返す（閉店時間と当日の時間制限を考慮）
     const availableSlots = slots.filter(slot => {
       // 既に予約済みのスロットは除外
       if (unavailableSlots.has(slot)) {
         return false;
       }
       
-      // 予約開始時間 + 作業時間が閉店時間を超えないかチェック
       const [hour, minute] = slot.split(':').map(Number);
       const slotTimeInMinutes = hour * 60 + minute;
+      
+      // 当日の場合、最小開始時間以降のスロットのみ
+      if (date === today && slotTimeInMinutes < minStartTime) {
+        return false;
+      }
+      
+      // 予約開始時間 + 作業時間が閉店時間を超えないかチェック
       const slotEndTimeInMinutes = slotTimeInMinutes + duration;
       
       // 閉店時間を超える場合は除外
@@ -326,6 +340,7 @@ export async function GET(request: NextRequest) {
       unavailableCount: unavailableSlots.size,
       availableCount: availableSlots.length,
       isToday: date === today,
+      minStartTime: date === today ? `${Math.floor(minStartTime / 60).toString().padStart(2, '0')}:${(minStartTime % 60).toString().padStart(2, '0')}` : null,
       openTime,
       closeTime,
       dayOfWeek,
