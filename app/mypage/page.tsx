@@ -390,12 +390,6 @@ function MyPageContent() {
                   <ChevronDownIcon className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 </div>
               )}
-              {tenants.length === 1 && currentTenant && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <BuildingStorefrontIcon className="h-5 w-5 text-pink-600" />
-                  <span>{currentTenant.salon_name}</span>
-                </div>
-              )}
               <button
                 onClick={handleLogout}
                 className="text-sm text-gray-600 hover:text-gray-900"
@@ -513,19 +507,27 @@ function MyPageContent() {
             )}
           </div>
 
-          <div className="flex gap-4">
-            <button
-              onClick={() => router.push(`/reservation?tenant=${tenantCode}`)}
-              className="flex-1 px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg"
-            >
-              新規予約
-            </button>
-            <button
-              onClick={() => router.push(`/?tenant=${tenantCode}`)}
-              className="px-6 py-3 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm"
-            >
-              ホームに戻る
-            </button>
+          <div className="flex items-center justify-between gap-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-2 text-gray-700">
+              <BuildingStorefrontIcon className="h-5 w-5 text-pink-600" />
+              <span className="font-medium">
+                {currentTenant ? currentTenant.salon_name : tenants.length > 1 ? tenants.find(t => t.tenant_code === tenantCode)?.salon_name : '店舗名'}
+              </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => router.push(`/reservation?tenant=${tenantCode}`)}
+                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg"
+              >
+                新規予約
+              </button>
+              <button
+                onClick={() => router.push(`/?tenant=${tenantCode}`)}
+                className="px-6 py-3 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm"
+              >
+                ホームに戻る
+              </button>
+            </div>
           </div>
         </div>
       </div>
