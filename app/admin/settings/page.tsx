@@ -67,6 +67,8 @@ export default function SettingsPage() {
   const [calendarMode, setCalendarMode] = useState<'closed' | 'hours'>('closed'); // カレンダーモード
   const [selectedDateForHours, setSelectedDateForHours] = useState<string>(''); // 営業時間を変更する日付
   const [tempHours, setTempHours] = useState({ open: '10:00', close: '19:00' }); // 一時的な営業時間
+  const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -839,6 +841,9 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        const now = new Date();
+                        setCalendarYear(now.getFullYear());
+                        setCalendarMonth(now.getMonth());
                         setCalendarMode('closed');
                         setShowCalendarModal(true);
                       }}
@@ -849,6 +854,9 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        const now = new Date();
+                        setCalendarYear(now.getFullYear());
+                        setCalendarMonth(now.getMonth());
                         setCalendarMode('hours');
                         setShowCalendarModal(true);
                       }}
@@ -1516,21 +1524,106 @@ export default function SettingsPage() {
                     <p className="text-sm text-gray-600 mb-4">
                       休業日にしたい日付をクリックしてください
                     </p>
+                    
+                    {/* 年月選択 */}
+                    <div className="flex items-center justify-between mb-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (calendarMonth === 0) {
+                            setCalendarYear(prev => prev - 1);
+                            setCalendarMonth(11);
+                          } else {
+                            setCalendarMonth(prev => prev - 1);
+                          }
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={calendarYear}
+                          onChange={(e) => setCalendarYear(parseInt(e.target.value))}
+                          className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                        >
+                          {Array.from({ length: 5 }, (_, i) => {
+                            const year = new Date().getFullYear() - 1 + i;
+                            return (
+                              <option key={year} value={year}>{year}年</option>
+                            );
+                          })}
+                        </select>
+                        <select
+                          value={calendarMonth}
+                          onChange={(e) => setCalendarMonth(parseInt(e.target.value))}
+                          className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <option key={i} value={i}>{i + 1}月</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (calendarMonth === 11) {
+                            setCalendarYear(prev => prev + 1);
+                            setCalendarMonth(0);
+                          } else {
+                            setCalendarMonth(prev => prev + 1);
+                          }
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    {/* 曜日ヘッダー */}
+                    <div className="grid grid-cols-7 gap-2 mb-2">
+                      {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
+                        <div key={day} className="text-center text-sm font-medium text-gray-700 p-2">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* カレンダーグリッド */}
                     <div className="grid grid-cols-7 gap-2 mb-4">
                       {(() => {
                         const today = new Date();
-                        const dates: Date[] = [];
-                        // 今日から3ヶ月分の日付を生成
-                        for (let i = 0; i < 90; i++) {
-                          const date = new Date(today);
-                          date.setDate(today.getDate() + i);
-                          dates.push(date);
+                        const firstDay = new Date(calendarYear, calendarMonth, 1);
+                        const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+                        const startDay = firstDay.getDay();
+                        const daysInMonth = lastDay.getDate();
+                        
+                        const dates: (Date | null)[] = [];
+                        
+                        // 前月の空白を埋める
+                        for (let i = 0; i < startDay; i++) {
+                          dates.push(null);
                         }
-                        return dates.map((date) => {
+                        
+                        // 今月の日付を追加
+                        for (let day = 1; day <= daysInMonth; day++) {
+                          dates.push(new Date(calendarYear, calendarMonth, day));
+                        }
+                        
+                        return dates.map((date, index) => {
+                          if (!date) {
+                            return <div key={`empty-${index}`} className="p-2"></div>;
+                          }
+                          
                           const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                           const isClosed = temporaryClosedDays.includes(dateStr);
                           const dayName = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
-                          const isToday = dateStr === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                          const isToday = dateStr === todayStr;
                           
                           return (
                             <button
@@ -1545,9 +1638,9 @@ export default function SettingsPage() {
                               }}
                               className={`p-2 text-sm rounded ${
                                 isClosed
-                                  ? 'bg-red-500 text-white'
+                                  ? 'bg-red-500 text-white hover:bg-red-600'
                                   : isToday
-                                  ? 'bg-pink-100 text-pink-700'
+                                  ? 'bg-pink-100 text-pink-700 hover:bg-pink-200'
                                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                               }`}
                             >
@@ -1615,52 +1708,193 @@ export default function SettingsPage() {
                       </div>
                     ) : (
                       <div>
-                        <p className="text-sm text-gray-600 mb-4">
-                          営業時間を変更したい日付をクリックしてください
-                        </p>
-                        <div className="grid grid-cols-7 gap-2">
-                          {(() => {
-                            const today = new Date();
-                            const dates: Date[] = [];
-                            // 今日から3ヶ月分の日付を生成
-                            for (let i = 0; i < 90; i++) {
-                              const date = new Date(today);
-                              date.setDate(today.getDate() + i);
-                              dates.push(date);
-                            }
-                            return dates.map((date) => {
-                              const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                              const hasSpecialHours = specialBusinessHours[dateStr];
-                              const dayName = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
-                              const isToday = dateStr === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-                              
-                              return (
-                                <button
-                                  key={dateStr}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedDateForHours(dateStr);
-                                    if (hasSpecialHours) {
-                                      setTempHours(hasSpecialHours);
-                                    } else {
-                                      setTempHours({ open: '10:00', close: '19:00' });
-                                    }
-                                  }}
-                                  className={`p-2 text-sm rounded ${
-                                    hasSpecialHours
-                                      ? 'bg-blue-500 text-white'
-                                      : isToday
-                                      ? 'bg-pink-100 text-pink-700'
-                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                  }`}
+                        {selectedDateForHours ? (
+                          <div>
+                            <p className="text-sm text-gray-600 mb-4">
+                              {selectedDateForHours} の営業時間を設定してください
+                            </p>
+                            <div className="flex items-center space-x-4 mb-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">開始時間</label>
+                                <input
+                                  type="time"
+                                  value={tempHours.open}
+                                  onChange={(e) => setTempHours(prev => ({ ...prev, open: e.target.value }))}
+                                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">終了時間</label>
+                                <input
+                                  type="time"
+                                  value={tempHours.close}
+                                  onChange={(e) => setTempHours(prev => ({ ...prev, close: e.target.value }))}
+                                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-end space-x-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSpecialBusinessHours(prev => ({
+                                    ...prev,
+                                    [selectedDateForHours]: tempHours
+                                  }));
+                                  setSelectedDateForHours('');
+                                  setTempHours({ open: '10:00', close: '19:00' });
+                                }}
+                                className="px-4 py-2 bg-pink-600 text-white rounded-md hover:bg-pink-700"
+                              >
+                                設定
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDateForHours('');
+                                  setTempHours({ open: '10:00', close: '19:00' });
+                                }}
+                                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                              >
+                                キャンセル
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm text-gray-600 mb-4">
+                              営業時間を変更したい日付をクリックしてください
+                            </p>
+                            
+                            {/* 年月選択 */}
+                            <div className="flex items-center justify-between mb-4">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (calendarMonth === 0) {
+                                    setCalendarYear(prev => prev - 1);
+                                    setCalendarMonth(11);
+                                  } else {
+                                    setCalendarMonth(prev => prev - 1);
+                                  }
+                                }}
+                                className="p-2 hover:bg-gray-100 rounded"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                </svg>
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={calendarYear}
+                                  onChange={(e) => setCalendarYear(parseInt(e.target.value))}
+                                  className="px-3 py-1 border border-gray-300 rounded-md text-sm"
                                 >
-                                  <div>{date.getDate()}</div>
-                                  <div className="text-xs">{dayName}</div>
-                                </button>
-                              );
-                            });
-                          })()}
-                        </div>
+                                  {Array.from({ length: 5 }, (_, i) => {
+                                    const year = new Date().getFullYear() - 1 + i;
+                                    return (
+                                      <option key={year} value={year}>{year}年</option>
+                                    );
+                                  })}
+                                </select>
+                                <select
+                                  value={calendarMonth}
+                                  onChange={(e) => setCalendarMonth(parseInt(e.target.value))}
+                                  className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                                >
+                                  {Array.from({ length: 12 }, (_, i) => (
+                                    <option key={i} value={i}>{i + 1}月</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (calendarMonth === 11) {
+                                    setCalendarYear(prev => prev + 1);
+                                    setCalendarMonth(0);
+                                  } else {
+                                    setCalendarMonth(prev => prev + 1);
+                                  }
+                                }}
+                                className="p-2 hover:bg-gray-100 rounded"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
+                            </div>
+                            
+                            {/* 曜日ヘッダー */}
+                            <div className="grid grid-cols-7 gap-2 mb-2">
+                              {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
+                                <div key={day} className="text-center text-sm font-medium text-gray-700 p-2">
+                                  {day}
+                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* カレンダーグリッド */}
+                            <div className="grid grid-cols-7 gap-2">
+                              {(() => {
+                                const today = new Date();
+                                const firstDay = new Date(calendarYear, calendarMonth, 1);
+                                const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+                                const startDay = firstDay.getDay();
+                                const daysInMonth = lastDay.getDate();
+                                
+                                const dates: (Date | null)[] = [];
+                                
+                                // 前月の空白を埋める
+                                for (let i = 0; i < startDay; i++) {
+                                  dates.push(null);
+                                }
+                                
+                                // 今月の日付を追加
+                                for (let day = 1; day <= daysInMonth; day++) {
+                                  dates.push(new Date(calendarYear, calendarMonth, day));
+                                }
+                                
+                                return dates.map((date, index) => {
+                                  if (!date) {
+                                    return <div key={`empty-${index}`} className="p-2"></div>;
+                                  }
+                                  
+                                  const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                                  const hasSpecialHours = specialBusinessHours[dateStr];
+                                  const dayName = ['日', '月', '火', '水', '木', '金', '土'][date.getDay()];
+                                  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                                  const isToday = dateStr === todayStr;
+                                  
+                                  return (
+                                    <button
+                                      key={dateStr}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedDateForHours(dateStr);
+                                        if (hasSpecialHours) {
+                                          setTempHours(hasSpecialHours);
+                                        } else {
+                                          setTempHours({ open: '10:00', close: '19:00' });
+                                        }
+                                      }}
+                                      className={`p-2 text-sm rounded ${
+                                        hasSpecialHours
+                                          ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                          : isToday
+                                          ? 'bg-pink-100 text-pink-700 hover:bg-pink-200'
+                                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      <div>{date.getDate()}</div>
+                                      <div className="text-xs">{dayName}</div>
+                                    </button>
+                                  );
+                                });
+                              })()}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
