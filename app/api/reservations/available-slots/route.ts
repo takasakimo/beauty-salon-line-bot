@@ -175,29 +175,7 @@ export async function GET(request: NextRequest) {
     let unavailableSlots: Set<string> = new Set();
 
     if (staffId) {
-      // スタッフ指定の場合：各予約の開始時間から所要時間分を確保できない時間を計算
-      result.rows.forEach((row: any) => {
-        const reservationDate = new Date(row.reservation_date);
-        const reservationDuration = row.duration || 60; // デフォルト60分
-        
-        // 予約開始時間
-        const startHour = reservationDate.getHours();
-        const startMinute = reservationDate.getMinutes();
-        const startTime = startHour * 60 + startMinute; // 分単位
-        
-        // 予約終了時間（開始時間 + 所要時間）
-        const endTime = startTime + reservationDuration;
-        
-        // 予約時間帯に含まれるすべてのスロットを計算
-        for (let time = startTime; time < endTime; time += 30) {
-          const hour = Math.floor(time / 60);
-          const minute = time % 60;
-          const slot = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-          unavailableSlots.add(slot);
-        }
-      });
-      
-      // 新しい予約の所要時間を考慮して、確保できない時間帯を計算
+      // スタッフ指定の場合：既存予約の終了時間を考慮して、次の予約が取れる時間のみを表示
       const newUnavailableSlots: Set<string> = new Set();
       slots.forEach(slot => {
         const [hour, minute] = slot.split(':').map(Number);
@@ -213,6 +191,8 @@ export async function GET(request: NextRequest) {
           const reservationEndTime = reservationStartTime + reservationDuration;
           
           // 時間帯が重複しているかチェック
+          // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
+          // つまり、slotTime < reservationEndTime && slotEndTime > reservationStartTime
           if (slotTime < reservationEndTime && slotEndTime > reservationStartTime) {
             hasConflict = true;
           }
@@ -225,22 +205,24 @@ export async function GET(request: NextRequest) {
       
       unavailableSlots = newUnavailableSlots;
     } else {
-      // スタッフ未指定の場合：最大同時予約数を考慮
+      // スタッフ未指定の場合：最大同時予約数を考慮し、既存予約の終了時間も考慮
       // 各スロットで、その時間帯の予約数をチェック
       slots.forEach(slot => {
         const [hour, minute] = slot.split(':').map(Number);
-        const slotDateTime = new Date(`${date}T${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`);
-        const slotEndTime = new Date(slotDateTime.getTime() + duration * 60000);
+        const slotTime = hour * 60 + minute; // 分単位
+        const slotEndTime = slotTime + duration;
         
         // このスロットと時間帯が重複する予約をカウント
         let count = 0;
         result.rows.forEach((row: any) => {
           const reservationDate = new Date(row.reservation_date);
           const reservationDuration = row.duration || 60;
-          const reservationEnd = new Date(reservationDate.getTime() + reservationDuration * 60000);
+          const reservationStartTime = reservationDate.getHours() * 60 + reservationDate.getMinutes();
+          const reservationEndTime = reservationStartTime + reservationDuration;
           
           // 時間帯が重複しているかチェック
-          if (slotDateTime < reservationEnd && slotEndTime > reservationDate) {
+          // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
+          if (slotTime < reservationEndTime && slotEndTime > reservationStartTime) {
             count++;
           }
         });
