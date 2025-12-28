@@ -101,11 +101,14 @@ export async function POST(request: NextRequest) {
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
 
-    // 予約日時を計算
-    const reservationDateTime = new Date(reservation_date);
+    // 予約日時を計算（JST時刻として保存）
+    // reservation_dateはJST（+09:00）形式で送られてくるので、タイムゾーン情報を除去してJST時刻として保存
+    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
+    const reservationDateTime = new Date(dateStr);
     const reservationEndTime = new Date(reservationDateTime.getTime() + totalDuration * 60000);
 
     // 同じ時間帯の既存予約数をカウント（スタッフ未指定の予約も含む）
+    const dateStrForQuery = dateStr.replace('T', ' '); // Tをスペースに変換
     const concurrentCheck = await query(
       `SELECT 
          r.reservation_date,
@@ -115,7 +118,7 @@ export async function POST(request: NextRequest) {
        WHERE r.tenant_id = $1
        AND r.status = 'confirmed'
        AND DATE(r.reservation_date) = DATE($2)`,
-      [tenantId, reservation_date]
+      [tenantId, dateStrForQuery]
     );
 
     // JavaScriptで時間帯の重複をチェック
@@ -146,9 +149,11 @@ export async function POST(request: NextRequest) {
       await client.query('BEGIN');
 
       // 予約を作成（menu_idは最初のメニューを設定、後でreservation_menusに全メニューを保存）
+      // JST時刻をそのまま保存（YYYY-MM-DD HH:mm:ss形式）
+      const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
       const insertQuery = `
         INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, NOW())
         RETURNING reservation_id
       `;
       const result = await client.query(insertQuery, [
@@ -156,7 +161,7 @@ export async function POST(request: NextRequest) {
         actualCustomerId,
         staff_id || null,
         menuIds[0], // 最初のメニューIDを設定（後方互換性のため）
-        reservation_date,
+        dateStrForDb, // JST時刻（YYYY-MM-DD HH:mm:ss形式）
         status,
         totalPrice
       ]);

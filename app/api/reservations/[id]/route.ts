@@ -213,16 +213,17 @@ export async function PUT(
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
 
-    // 予約日時を計算
-    const reservationDateTime = new Date(reservation_date);
+    // 予約日時を計算（JST時刻として保存）
+    // reservation_dateはJST（+09:00）形式で送られてくるので、タイムゾーン情報を除去してJST時刻として保存
+    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
+    const reservationDateTime = new Date(dateStr);
     const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
 
     // スタッフが指定されている場合、時間の重複チェック（自分自身を除く）
     if (staff_id) {
-      const reservationDateTime = new Date(reservation_date);
-      const reservationEndTime = new Date(reservationDateTime.getTime() + duration * 60000);
 
       // 同じスタッフの既存予約をチェック（更新対象の予約を除く）
+      const dateStrForQuery = dateStr.replace('T', ' '); // Tをスペースに変換
       const conflictCheck = await query(
         `SELECT reservation_id, reservation_date, m.duration
          FROM reservations r
@@ -232,7 +233,7 @@ export async function PUT(
          AND r.status = 'confirmed'
          AND DATE(r.reservation_date) = DATE($3)
          AND r.reservation_id != $4`,
-        [tenantId, staff_id, reservation_date, reservationId]
+        [tenantId, staff_id, dateStrForQuery, reservationId]
       );
 
       for (const existingReservation of conflictCheck.rows) {
@@ -250,6 +251,7 @@ export async function PUT(
       }
     } else {
       // スタッフ未指定の場合：最大同時予約数をチェック（自分自身を除く）
+      const dateStrForQuery = dateStr.replace('T', ' '); // Tをスペースに変換
       const concurrentCheck = await query(
         `SELECT 
            r.reservation_date,
@@ -260,7 +262,7 @@ export async function PUT(
          AND r.status = 'confirmed'
          AND DATE(r.reservation_date) = DATE($2)
          AND r.reservation_id != $3`,
-        [tenantId, reservation_date, reservationId]
+        [tenantId, dateStrForQuery, reservationId]
       );
 
       // JavaScriptで時間帯の重複をチェック
@@ -284,20 +286,21 @@ export async function PUT(
       }
     }
 
-    // 予約を更新
+    // 予約を更新（JST時刻をそのまま保存）
+    const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
     const result = await query(
       `UPDATE reservations 
        SET 
          menu_id = $1,
          staff_id = $2,
-         reservation_date = $3,
+         reservation_date = $3::timestamp,
          price = $4
        WHERE reservation_id = $5 AND tenant_id = $6
        RETURNING *`,
       [
         menu_id,
         staff_id || null,
-        reservation_date,
+        dateStrForDb, // JST時刻（YYYY-MM-DD HH:mm:ss形式）
         price,
         reservationId,
         tenantId
