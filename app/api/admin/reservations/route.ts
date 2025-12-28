@@ -183,9 +183,28 @@ export async function POST(request: NextRequest) {
     // 最初のメニューIDをmenu_idとして使用（後方互換性のため）
     const firstMenuId = menuIds[0];
 
-    // 店舗情報を取得（最大同時予約数と営業時間）
+    // 店舗情報を取得（最大同時予約数と営業時間、定休日設定）
+    // カラムが存在するかチェック
+    let selectColumns = 'max_concurrent_reservations, business_hours';
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'tenants' AND column_name IN ('closed_days', 'temporary_closed_days')`
+      );
+      const columnNames = columnCheck.rows.map((row: any) => row.column_name);
+      if (columnNames.includes('closed_days')) {
+        selectColumns += ', closed_days';
+      }
+      if (columnNames.includes('temporary_closed_days')) {
+        selectColumns += ', temporary_closed_days';
+      }
+    } catch (checkError: any) {
+      console.error('カラムチェックエラー:', checkError);
+    }
+    
     const tenantResult = await query(
-      'SELECT max_concurrent_reservations, business_hours FROM tenants WHERE tenant_id = $1',
+      `SELECT ${selectColumns} FROM tenants WHERE tenant_id = $1`,
       [tenantId]
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
@@ -201,6 +220,30 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error('business_hoursのパースエラー:', e);
     }
+    
+    // 定休日（曜日ベース）を取得
+    let closedDays: number[] = [];
+    try {
+      if (tenantResult.rows[0]?.closed_days) {
+        closedDays = typeof tenantResult.rows[0].closed_days === 'string'
+          ? JSON.parse(tenantResult.rows[0].closed_days)
+          : tenantResult.rows[0].closed_days;
+      }
+    } catch (e) {
+      console.error('closed_daysのパースエラー:', e);
+    }
+    
+    // 臨時休業日を取得
+    let temporaryClosedDays: string[] = [];
+    try {
+      if (tenantResult.rows[0]?.temporary_closed_days) {
+        temporaryClosedDays = typeof tenantResult.rows[0].temporary_closed_days === 'string'
+          ? JSON.parse(tenantResult.rows[0].temporary_closed_days)
+          : tenantResult.rows[0].temporary_closed_days;
+      }
+    } catch (e) {
+      console.error('temporary_closed_daysのパースエラー:', e);
+    }
 
     // 予約日時を計算（合計時間を使用）
     // reservation_dateはJST（+09:00）形式で送られてくるので、タイムゾーン情報を除去してJST時刻として保存
@@ -211,6 +254,26 @@ export async function POST(request: NextRequest) {
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
     const dayOfWeek = reservationDateTimeLocal.getDay();
+    
+    // 予約日付を取得（YYYY-MM-DD形式）
+    const reservationDateStr = dateStr.split('T')[0];
+    
+    // 臨時休業日のチェック
+    if (Array.isArray(temporaryClosedDays) && temporaryClosedDays.includes(reservationDateStr)) {
+      return NextResponse.json(
+        { success: false, error: '選択された日付は臨時休業日のため、予約できません。別の日付を選択してください。' },
+        { status: 400 }
+      );
+    }
+    
+    // 曜日ベースの定休日チェック
+    if (Array.isArray(closedDays) && closedDays.includes(dayOfWeek)) {
+      const dayNames = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
+      return NextResponse.json(
+        { success: false, error: `選択された日付は${dayNames[dayOfWeek]}（定休日）のため、予約できません。別の日付を選択してください。` },
+        { status: 400 }
+      );
+    }
     
     // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
     const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };

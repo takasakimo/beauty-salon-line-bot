@@ -62,9 +62,12 @@ export async function GET(request: NextRequest) {
       const columnCheck = await query(
         `SELECT column_name 
          FROM information_schema.columns 
-         WHERE table_name = 'tenants' AND column_name IN ('temporary_closed_days', 'special_business_hours')`
+         WHERE table_name = 'tenants' AND column_name IN ('closed_days', 'temporary_closed_days', 'special_business_hours')`
       );
       const columnNames = columnCheck.rows.map((row: any) => row.column_name);
+      if (columnNames.includes('closed_days')) {
+        selectColumns += ', closed_days';
+      }
       if (columnNames.includes('temporary_closed_days')) {
         selectColumns += ', temporary_closed_days';
       }
@@ -93,6 +96,18 @@ export async function GET(request: NextRequest) {
       console.error('business_hoursのパースエラー:', e);
     }
     
+    // 定休日（曜日ベース）を取得
+    let closedDays: number[] = [];
+    try {
+      if (tenantResult.rows[0]?.closed_days) {
+        closedDays = typeof tenantResult.rows[0].closed_days === 'string'
+          ? JSON.parse(tenantResult.rows[0].closed_days)
+          : tenantResult.rows[0].closed_days;
+      }
+    } catch (e) {
+      console.error('closed_daysのパースエラー:', e);
+    }
+    
     // 臨時休業日を取得
     let temporaryClosedDays: string[] = [];
     try {
@@ -117,15 +132,20 @@ export async function GET(request: NextRequest) {
       console.error('special_business_hoursのパースエラー:', e);
     }
     
+    // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
+    // 日付文字列を正しくパース（YYYY-MM-DD形式を想定）
+    const dateObj = new Date(date + 'T00:00:00'); // タイムゾーン問題を回避
+    const dayOfWeek = dateObj.getDay();
+    
     // 臨時休業日の場合は空のスロットを返す
     if (temporaryClosedDays.includes(date)) {
       return NextResponse.json([]);
     }
     
-    // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
-    // 日付文字列を正しくパース（YYYY-MM-DD形式を想定）
-    const dateObj = new Date(date + 'T00:00:00'); // タイムゾーン問題を回避
-    const dayOfWeek = dateObj.getDay();
+    // 曜日ベースの定休日チェック（closed_daysに含まれている曜日の場合は空のスロットを返す）
+    if (Array.isArray(closedDays) && closedDays.includes(dayOfWeek)) {
+      return NextResponse.json([]);
+    }
     
     // 特別営業時間が設定されている場合はそれを使用、そうでなければ曜日の営業時間を使用
     let dayBusinessHours: { open: string; close: string };
@@ -150,10 +170,10 @@ export async function GET(request: NextRequest) {
     const slots: string[] = [];
     // 営業時間が有効な場合のみスロットを生成
     if (openTimeInMinutes < closeTimeInMinutes) {
-      for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
-        const hour = Math.floor(time / 60);
-        const minute = time % 60;
-        slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+    for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
+      const hour = Math.floor(time / 60);
+      const minute = time % 60;
+      slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
       }
     } else {
       console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });
@@ -164,7 +184,7 @@ export async function GET(request: NextRequest) {
     // JST時間を取得（UTC+9時間）
     const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
     const today = `${jstNow.getUTCFullYear()}-${String(jstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(jstNow.getUTCDate()).padStart(2, '0')}`;
-    
+      
     // デバッグログ：当日判定の確認
     console.log('日付比較:', {
       requestedDate: date,
