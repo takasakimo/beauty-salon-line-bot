@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
     }
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
-    const dateObj = new Date(date);
+    // 日付文字列を正しくパース（YYYY-MM-DD形式を想定）
+    const dateObj = new Date(date + 'T00:00:00'); // タイムゾーン問題を回避
     const dayOfWeek = dateObj.getDay();
     
     // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
@@ -91,10 +92,15 @@ export async function GET(request: NextRequest) {
     
     // 営業時間のスロットを生成（30分間隔）
     const slots: string[] = [];
-    for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
-      const hour = Math.floor(time / 60);
-      const minute = time % 60;
-      slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+    // 営業時間が有効な場合のみスロットを生成
+    if (openTimeInMinutes < closeTimeInMinutes) {
+      for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
+        const hour = Math.floor(time / 60);
+        const minute = time % 60;
+        slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+      }
+    } else {
+      console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });
     }
 
     // 現在時刻を取得（ローカル時間を使用）
@@ -257,15 +263,36 @@ export async function GET(request: NextRequest) {
       return true;
     });
     
-    // デバッグログ（開発環境のみ）
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('空き時間計算結果:', {
+    // デバッグログ（問題特定のため本番環境でも出力）
+    console.log('空き時間計算結果:', {
+      date,
+      duration,
+      totalSlots: slots.length,
+      unavailableCount: unavailableSlots.size,
+      availableCount: availableSlots.length,
+      isToday: date === today,
+      openTime,
+      closeTime,
+      dayOfWeek,
+      openTimeInMinutes,
+      closeTimeInMinutes,
+      businessHours: JSON.stringify(businessHours),
+      dayBusinessHours: JSON.stringify(dayBusinessHours),
+      slots: slots.slice(0, 10), // 最初の10個を表示
+      availableSlots: availableSlots.slice(0, 10), // 最初の10個を表示
+      existingReservations: result.rows.length
+    });
+    
+    // スロットが空の場合の警告
+    if (slots.length === 0) {
+      console.warn('スロットが生成されませんでした:', {
         date,
-        duration,
-        totalSlots: slots.length,
-        unavailableCount: unavailableSlots.size,
-        availableCount: availableSlots.length,
-        isToday: date === today
+        openTime,
+        closeTime,
+        openTimeInMinutes,
+        closeTimeInMinutes,
+        dayOfWeek,
+        businessHours: JSON.stringify(businessHours)
       });
     }
     
