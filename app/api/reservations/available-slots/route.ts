@@ -97,9 +97,9 @@ export async function GET(request: NextRequest) {
       slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
     }
 
-    // 現在時刻を取得（サーバーのタイムゾーンを使用）
+    // 現在時刻を取得（ローカル時間を使用）
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
     // 選択された日付が今日の場合、現在時刻より前の時間を除外
     if (date === today) {
@@ -107,13 +107,16 @@ export async function GET(request: NextRequest) {
       const currentMinute = now.getMinutes();
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
       
-      // 現在時刻より前のスロットを除外（作業時間を考慮して、現在時刻 + 作業時間より前のスロットも除外）
-      // 例：現在が14:00で作業時間が60分の場合、15:00以降のスロットのみ表示
-      const minStartTime = currentTimeInMinutes + duration; // 作業時間を加味
+      // 現在時刻より前のスロットを除外（バッファ時間30分 + 作業時間を考慮）
+      // 例：現在が14:00で作業時間が60分の場合、14:30以降のスロットのみ表示（バッファ30分）
+      // ただし、作業時間を考慮して、開始時間 + 作業時間が営業時間内に収まる必要がある
+      const bufferMinutes = 30; // バッファ時間（30分）
+      const minStartTime = currentTimeInMinutes + bufferMinutes;
       
       const filteredSlots = slots.filter(slot => {
         const [hour, minute] = slot.split(':').map(Number);
         const slotTimeInMinutes = hour * 60 + minute;
+        // バッファ時間を考慮した最小開始時間以降のスロットのみ
         return slotTimeInMinutes >= minStartTime;
       });
       
@@ -253,6 +256,18 @@ export async function GET(request: NextRequest) {
       
       return true;
     });
+    
+    // デバッグログ（開発環境のみ）
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('空き時間計算結果:', {
+        date,
+        duration,
+        totalSlots: slots.length,
+        unavailableCount: unavailableSlots.size,
+        availableCount: availableSlots.length,
+        isToday: date === today
+      });
+    }
     
     return NextResponse.json(availableSlots);
   } catch (error: any) {
