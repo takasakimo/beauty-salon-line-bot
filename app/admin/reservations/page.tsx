@@ -629,6 +629,11 @@ export default function ReservationManagement() {
 
       const reservationDateTime = new Date(reservation.reservation_date).toISOString();
 
+      // 複数メニューの場合はmenu_idsを配列で送信、そうでなければmenu_idを送信
+      const menuIds = reservation.menus && reservation.menus.length > 0
+        ? reservation.menus.map(m => m.menu_id)
+        : [reservation.menu_id];
+
       const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}`);
       const response = await fetch(url, {
         method: 'PUT',
@@ -637,7 +642,8 @@ export default function ReservationManagement() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          menu_id: reservation.menu_id,
+          menu_ids: menuIds,
+          menu_id: reservation.menu_id, // 後方互換性のため
           staff_id: reservation.staff_id,
           reservation_date: reservationDateTime,
           status: newStatus,
@@ -646,7 +652,8 @@ export default function ReservationManagement() {
       });
 
       if (!response.ok) {
-        throw new Error('ステータス変更に失敗しました');
+        const errorData = await response.json().catch(() => ({ error: 'ステータス変更に失敗しました' }));
+        throw new Error(errorData.error || 'ステータス変更に失敗しました');
       }
 
       loadReservations();

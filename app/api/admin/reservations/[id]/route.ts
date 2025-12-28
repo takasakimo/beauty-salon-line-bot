@@ -214,6 +214,9 @@ export async function PUT(
       await client.query('BEGIN');
       
       // 予約を更新（最初のメニューIDをmenu_idとして使用）
+      // statusが明示的に指定されている場合はそれを使用、そうでなければ既存のstatusを保持
+      const updateStatus = status !== undefined ? status : 'confirmed';
+      
       const result = await client.query(
         `UPDATE reservations 
          SET 
@@ -229,9 +232,9 @@ export async function PUT(
           firstMenuId,
           staff_id || null,
           reservation_date,
-          status || 'confirmed',
+          updateStatus,
           totalPrice,
-          notes || null,
+          notes !== undefined ? notes : null,
           reservationId,
           tenantId
         ]
