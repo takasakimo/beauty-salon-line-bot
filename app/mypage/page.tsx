@@ -507,17 +507,19 @@ function MyPageContent() {
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between gap-4 pt-6 mt-6 border-t border-gray-200">
             <div className="flex items-center gap-2 text-gray-700">
               <BuildingStorefrontIcon className="h-5 w-5 text-pink-600" />
-              <span className="font-medium">
-                {currentTenant ? currentTenant.salon_name : tenants.length > 1 ? tenants.find(t => t.tenant_code === tenantCode)?.salon_name : '店舗名'}
+              <span className="font-medium text-base">
+                {currentTenant?.salon_name || 
+                 (tenants.length > 0 ? tenants.find(t => t.tenant_code === tenantCode)?.salon_name : null) ||
+                 '店舗名'}
               </span>
             </div>
             <div className="flex gap-4">
               <button
                 onClick={() => router.push(`/reservation?tenant=${tenantCode}`)}
-                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg"
+                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg font-medium"
               >
                 新規予約
               </button>
