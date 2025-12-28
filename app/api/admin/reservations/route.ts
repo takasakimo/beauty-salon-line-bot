@@ -194,11 +194,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 予約日時を計算（合計時間を使用）
+    // reservation_dateはJST（+09:00）形式で送られてくるので、UTCに変換してから使用
     const reservationDateTime = new Date(reservation_date);
-    const reservationEndTime = new Date(reservationDateTime.getTime() + totalDuration * 60000);
+    // ローカルタイムとして解釈（タイムゾーン情報を無視して、指定された時刻をそのまま使用）
+    // 文字列からタイムゾーン情報を除去して、ローカルタイムとして解釈
+    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
+    const localDateTime = new Date(dateStr);
+    const reservationDateTimeLocal = localDateTime;
+    const reservationEndTime = new Date(reservationDateTimeLocal.getTime() + totalDuration * 60000);
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
-    const dayOfWeek = reservationDateTime.getDay();
+    const dayOfWeek = reservationDateTimeLocal.getDay();
     
     // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
     const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
@@ -208,7 +214,7 @@ export async function POST(request: NextRequest) {
     const [closeHour, closeMinute] = closeTime.split(':').map(Number);
     const closeTimeInMinutes = closeHour * 60 + closeMinute;
     
-    // 予約終了時間を分単位に変換
+    // 予約終了時間を分単位に変換（ローカルタイムで計算）
     const reservationEndHour = reservationEndTime.getHours();
     const reservationEndMinute = reservationEndTime.getMinutes();
     const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
@@ -223,9 +229,6 @@ export async function POST(request: NextRequest) {
 
     // スタッフが指定されている場合、時間の重複チェック
     if (staff_id) {
-      const reservationDateTime = new Date(reservation_date);
-      const reservationEndTime = new Date(reservationDateTime.getTime() + totalDuration * 60000);
-
       // 同じスタッフの既存予約をチェック
       const conflictCheck = await query(
         `SELECT reservation_id, reservation_date, m.duration
@@ -235,7 +238,7 @@ export async function POST(request: NextRequest) {
          AND r.staff_id = $2
          AND r.status = 'confirmed'
          AND DATE(r.reservation_date) = DATE($3)`,
-        [tenantId, staff_id, reservation_date]
+        [tenantId, staff_id, dateStr]
       );
 
       for (const existingReservation of conflictCheck.rows) {
@@ -244,7 +247,7 @@ export async function POST(request: NextRequest) {
         const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
 
         // 時間帯が重複しているかチェック
-        if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+        if (reservationDateTimeLocal < existingEnd && reservationEndTime > existingStart) {
           return NextResponse.json(
             { error: `この時間帯は既に予約が入っています。既存予約: ${existingStart.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` },
             { status: 400 }
@@ -356,6 +359,8 @@ export async function POST(request: NextRequest) {
       await client.query('BEGIN');
       
       // 予約を作成（最初のメニューIDをmenu_idとして使用）
+      // reservation_dateからタイムゾーン情報を除去して、ローカルタイムとして保存
+      const dateStrForDb = dateStr; // タイムゾーン情報を除去した日時文字列
       const reservationResult = await client.query(
         `INSERT INTO reservations (
           tenant_id, 
@@ -375,7 +380,7 @@ export async function POST(request: NextRequest) {
           actualCustomerId,
           staff_id || null,
           firstMenuId,
-          reservation_date,
+          dateStrForDb, // タイムゾーン情報を除去した日時文字列
           status,
           totalPrice,
           notes || null
