@@ -152,6 +152,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const pool = getPool();
+  const client = await pool.connect();
+  
   try {
     const session = await getAuthFromRequest(request);
     if (!session) {
@@ -170,33 +173,48 @@ export async function DELETE(
     }
     const staffId = parseInt(params.id);
 
-    // 予約に使用されているスタッフは削除できない
-    const reservationCheck = await query(
-      `SELECT COUNT(*) as count 
-       FROM reservations 
-       WHERE staff_id = $1 AND tenant_id = $2 AND status != 'cancelled'`,
+    // トランザクション開始
+    await client.query('BEGIN');
+
+    // このスタッフが割り当てられている予約のstaff_idをNULLに更新
+    const updateResult = await client.query(
+      `UPDATE reservations 
+       SET staff_id = NULL
+       WHERE staff_id = $1 AND tenant_id = $2`,
       [staffId, tenantId]
     );
 
-    if (parseInt(reservationCheck.rows[0].count) > 0) {
-      return NextResponse.json(
-        { error: 'このスタッフに関連する予約があるため削除できません' },
-        { status: 400 }
-      );
-    }
+    console.log(`スタッフID ${staffId} の予約 ${updateResult.rowCount} 件のスタッフ割り当てを解除しました`);
 
-    await query(
+    // スタッフを削除
+    const deleteResult = await client.query(
       `DELETE FROM staff WHERE staff_id = $1 AND tenant_id = $2`,
       [staffId, tenantId]
     );
 
-    return NextResponse.json({ message: 'スタッフを削除しました' });
+    if (deleteResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'スタッフが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({ 
+      message: 'スタッフを削除しました',
+      updatedReservations: updateResult.rowCount 
+    });
   } catch (error: any) {
+    await client.query('ROLLBACK');
     console.error('Error deleting staff:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
 
