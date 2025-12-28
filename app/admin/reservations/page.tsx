@@ -321,9 +321,9 @@ export default function ReservationManagement() {
     loadReservations();
   }, [filterDate, filterStatus]);
 
-  // スタッフ、メニュー、日付が選択されたら利用可能な時間を取得
+  // メニュー、日付が選択されたら利用可能な時間を取得（スタッフは任意）
   useEffect(() => {
-    if (formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date) {
+    if (formData.selectedMenuIds.length > 0 && formData.reservation_date) {
       loadAvailableTimes();
     } else {
       setAvailableTimes([]);
@@ -437,7 +437,7 @@ export default function ReservationManagement() {
   };
 
   const loadAvailableTimes = async () => {
-    if (!formData.staff_id || formData.selectedMenuIds.length === 0 || !formData.reservation_date) {
+    if (formData.selectedMenuIds.length === 0 || !formData.reservation_date) {
       setAvailableTimes([]);
       return;
     }
@@ -446,8 +446,10 @@ export default function ReservationManagement() {
     try {
       // 複数メニューの場合は最初のメニューIDを使用（合計時間はAPI側で計算）
       const menuIdsParam = formData.selectedMenuIds.join(',');
+      // スタッフが選択されている場合はstaff_idを渡す、そうでなければ渡さない
+      const staffParam = formData.staff_id ? `&staff_id=${formData.staff_id}` : '';
       const response = await fetch(
-        `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${menuIdsParam}&staff_id=${formData.staff_id}`
+        `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${menuIdsParam}${staffParam}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -1171,7 +1173,7 @@ export default function ReservationManagement() {
 
                       <div>
                         <label htmlFor="staff_id" className="block text-sm font-medium text-gray-700">
-                          スタッフ <span className="text-red-500">*</span>
+                          スタッフ
                         </label>
                         <select
                           id="staff_id"
@@ -1211,13 +1213,13 @@ export default function ReservationManagement() {
                       <div>
                         <label htmlFor="reservation_time" className="block text-sm font-medium text-gray-700">
                           予約時間 <span className="text-red-500">*</span>
-                          {formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date && (
+                          {formData.selectedMenuIds.length > 0 && formData.reservation_date && (
                             <span className="ml-2 text-xs text-gray-500">
                               {loadingTimes ? '(読み込み中...)' : `(${availableTimes.length}件の空き時間)`}
                             </span>
                           )}
                         </label>
-                        {formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date ? (
+                        {formData.selectedMenuIds.length > 0 && formData.reservation_date ? (
                           <select
                             id="reservation_time"
                             required
@@ -1243,8 +1245,8 @@ export default function ReservationManagement() {
                             value={formData.reservation_time}
                             onChange={(e) => setFormData({ ...formData, reservation_time: e.target.value })}
                             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                            placeholder="スタッフとメニューを選択してください"
-                            disabled={!formData.staff_id || formData.selectedMenuIds.length === 0}
+                            placeholder="メニューと日付を選択してください"
+                            disabled={formData.selectedMenuIds.length === 0 || !formData.reservation_date}
                           />
                         )}
                         {formData.staff_id && formData.selectedMenuIds.length > 0 && formData.reservation_date && availableTimes.length === 0 && !loadingTimes && (
