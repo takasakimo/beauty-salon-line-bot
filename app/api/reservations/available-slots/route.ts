@@ -169,16 +169,33 @@ export async function GET(request: NextRequest) {
       // 既存予約の終了時間も考慮（既存予約の終了時間の方が遅い場合はそれを使用）
       result.rows.forEach((row: any) => {
         const reservationDateStr = row.reservation_date;
-        let reservationDate: Date;
-        if (typeof reservationDateStr === 'string') {
-          const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0];
-          reservationDate = new Date(dateStr);
-        } else {
-          reservationDate = new Date(reservationDateStr);
-        }
         const reservationDuration = row.duration || 60;
-        const reservationHour = reservationDate.getHours();
-        const reservationMinute = reservationDate.getMinutes();
+        
+        // 文字列から直接時間を抽出
+        let reservationHour: number;
+        let reservationMinute: number;
+        
+        if (typeof reservationDateStr === 'string') {
+          const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+          if (timeMatch) {
+            reservationHour = parseInt(timeMatch[1], 10);
+            reservationMinute = parseInt(timeMatch[2], 10);
+            
+            // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+            if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+              reservationHour = (reservationHour + 9) % 24;
+            }
+          } else {
+            const dateObj = new Date(reservationDateStr);
+            reservationHour = dateObj.getHours();
+            reservationMinute = dateObj.getMinutes();
+          }
+        } else {
+          const dateObj = new Date(reservationDateStr);
+          reservationHour = dateObj.getHours();
+          reservationMinute = dateObj.getMinutes();
+        }
+        
         const reservationStartTime = reservationHour * 60 + reservationMinute;
         const reservationEndTime = reservationStartTime + reservationDuration;
         
@@ -214,24 +231,39 @@ export async function GET(request: NextRequest) {
         // このスロットから開始した場合、既存予約と重複するかチェック
         let hasConflict = false;
         result.rows.forEach((row: any) => {
-          // データベースから取得した日時を正しくパース（タイムゾーンの影響を回避）
+          // データベースから取得した日時から直接時間を抽出（タイムゾーンの影響を回避）
           const reservationDateStr = row.reservation_date;
-          let reservationDate: Date;
+          const reservationDuration = row.duration || 60;
           
-          // 文字列の場合は直接パース、Dateオブジェクトの場合はそのまま使用
+          // 文字列から直接時間を抽出（YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式）
+          let reservationHour: number;
+          let reservationMinute: number;
+          
           if (typeof reservationDateStr === 'string') {
-            // YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式を想定
-            const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0]; // ミリ秒を除去
-            reservationDate = new Date(dateStr);
+            // 文字列から時間を直接抽出
+            // 例: "2025-12-29 10:00:00" または "2025-12-29T10:00:00" または "2025-12-29T01:00:00.000Z"
+            const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+            if (timeMatch) {
+              reservationHour = parseInt(timeMatch[1], 10);
+              reservationMinute = parseInt(timeMatch[2], 10);
+              
+              // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+              if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+                reservationHour = (reservationHour + 9) % 24;
+              }
+            } else {
+              // フォールバック: Dateオブジェクトから取得
+              const dateObj = new Date(reservationDateStr);
+              reservationHour = dateObj.getHours();
+              reservationMinute = dateObj.getMinutes();
+            }
           } else {
-            reservationDate = new Date(reservationDateStr);
+            // Dateオブジェクトの場合
+            const dateObj = new Date(reservationDateStr);
+            reservationHour = dateObj.getHours();
+            reservationMinute = dateObj.getMinutes();
           }
           
-          // ローカル時間で時間を取得（タイムゾーンの影響を回避）
-          const reservationDuration = row.duration || 60;
-          // データベースに保存されている時刻をそのまま使用（JST時刻として保存されている想定）
-          const reservationHour = reservationDate.getHours();
-          const reservationMinute = reservationDate.getMinutes();
           const reservationStartTime = reservationHour * 60 + reservationMinute;
           const reservationEndTime = reservationStartTime + reservationDuration;
           
@@ -261,24 +293,39 @@ export async function GET(request: NextRequest) {
         // このスロットと時間帯が重複する予約をカウント
         let count = 0;
         result.rows.forEach((row: any) => {
-          // データベースから取得した日時を正しくパース（タイムゾーンの影響を回避）
+          // データベースから取得した日時から直接時間を抽出（タイムゾーンの影響を回避）
           const reservationDateStr = row.reservation_date;
-          let reservationDate: Date;
+          const reservationDuration = row.duration || 60;
           
-          // 文字列の場合は直接パース、Dateオブジェクトの場合はそのまま使用
+          // 文字列から直接時間を抽出（YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式）
+          let reservationHour: number;
+          let reservationMinute: number;
+          
           if (typeof reservationDateStr === 'string') {
-            // YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式を想定
-            const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0]; // ミリ秒を除去
-            reservationDate = new Date(dateStr);
+            // 文字列から時間を直接抽出
+            // 例: "2025-12-29 10:00:00" または "2025-12-29T10:00:00" または "2025-12-29T01:00:00.000Z"
+            const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+            if (timeMatch) {
+              reservationHour = parseInt(timeMatch[1], 10);
+              reservationMinute = parseInt(timeMatch[2], 10);
+              
+              // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+              if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+                reservationHour = (reservationHour + 9) % 24;
+              }
+            } else {
+              // フォールバック: Dateオブジェクトから取得
+              const dateObj = new Date(reservationDateStr);
+              reservationHour = dateObj.getHours();
+              reservationMinute = dateObj.getMinutes();
+            }
           } else {
-            reservationDate = new Date(reservationDateStr);
+            // Dateオブジェクトの場合
+            const dateObj = new Date(reservationDateStr);
+            reservationHour = dateObj.getHours();
+            reservationMinute = dateObj.getMinutes();
           }
           
-          // ローカル時間で時間を取得（タイムゾーンの影響を回避）
-          const reservationDuration = row.duration || 60;
-          // データベースに保存されている時刻をそのまま使用（JST時刻として保存されている想定）
-          const reservationHour = reservationDate.getHours();
-          const reservationMinute = reservationDate.getMinutes();
           const reservationStartTime = reservationHour * 60 + reservationMinute;
           const reservationEndTime = reservationStartTime + reservationDuration;
           
@@ -319,22 +366,44 @@ export async function GET(request: NextRequest) {
     // デバッグログ（問題特定のため本番環境でも出力）
     const existingReservationsDebug = result.rows.map((row: any) => {
       const reservationDateStr = row.reservation_date;
-      let reservationDate: Date;
+      const reservationDuration = row.duration || 60;
+      
+      // 文字列から直接時間を抽出
+      let hour: number;
+      let minute: number;
+      
       if (typeof reservationDateStr === 'string') {
-        const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0];
-        reservationDate = new Date(dateStr);
+        const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1], 10);
+          minute = parseInt(timeMatch[2], 10);
+          
+          // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+          if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+            hour = (hour + 9) % 24;
+          }
+        } else {
+          const dateObj = new Date(reservationDateStr);
+          hour = dateObj.getHours();
+          minute = dateObj.getMinutes();
+        }
       } else {
-        reservationDate = new Date(reservationDateStr);
+        const dateObj = new Date(reservationDateStr);
+        hour = dateObj.getHours();
+        minute = dateObj.getMinutes();
       }
-      const hour = reservationDate.getHours();
-      const minute = reservationDate.getMinutes();
+      
+      const endTimeInMinutes = hour * 60 + minute + reservationDuration;
+      const endHour = Math.floor(endTimeInMinutes / 60);
+      const endMinute = endTimeInMinutes % 60;
+      
       return {
         reservation_date: reservationDateStr,
         parsed_hour: hour,
         parsed_minute: minute,
-        duration: row.duration || 60,
+        duration: reservationDuration,
         start_time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
-        end_time: `${Math.floor((hour * 60 + minute + (row.duration || 60)) / 60).toString().padStart(2, '0')}:${((hour * 60 + minute + (row.duration || 60)) % 60).toString().padStart(2, '0')}`
+        end_time: `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
       };
     });
     
