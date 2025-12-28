@@ -360,7 +360,8 @@ export async function POST(request: NextRequest) {
       
       // 予約を作成（最初のメニューIDをmenu_idとして使用）
       // reservation_dateからタイムゾーン情報を除去して、ローカルタイムとして保存
-      const dateStrForDb = dateStr; // タイムゾーン情報を除去した日時文字列
+      // YYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DD HH:mm:ss形式に変換
+      const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
       const reservationResult = await client.query(
         `INSERT INTO reservations (
           tenant_id, 
@@ -373,14 +374,14 @@ export async function POST(request: NextRequest) {
           notes,
           created_date
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD HH24:MI:SS'), $6, $7, $8, CURRENT_TIMESTAMP)
         RETURNING *`,
         [
           tenantId,
           actualCustomerId,
           staff_id || null,
           firstMenuId,
-          dateStrForDb, // タイムゾーン情報を除去した日時文字列
+          dateStrForDb, // タイムゾーン情報を除去した日時文字列（YYYY-MM-DD HH:mm:ss形式）
           status,
           totalPrice,
           notes || null

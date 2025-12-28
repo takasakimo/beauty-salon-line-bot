@@ -256,13 +256,14 @@ export async function PUT(
       const updateStatus = status !== undefined ? status : 'confirmed';
       
       // reservation_dateからタイムゾーン情報を除去して、ローカルタイムとして保存
-      const dateStrForDb = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
+      // YYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DD HH:mm:ss形式に変換
+      const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
       const result = await client.query(
         `UPDATE reservations 
          SET 
            menu_id = $1,
            staff_id = $2,
-           reservation_date = $3,
+           reservation_date = TO_TIMESTAMP($3, 'YYYY-MM-DD HH24:MI:SS'),
            status = $4,
            price = $5,
            notes = $6
@@ -271,7 +272,7 @@ export async function PUT(
         [
           firstMenuId,
           staff_id || null,
-          dateStrForDb, // タイムゾーン情報を除去した日時文字列
+          dateStrForDb, // タイムゾーン情報を除去した日時文字列（YYYY-MM-DD HH:mm:ss形式）
           updateStatus,
           totalPrice,
           notes !== undefined ? notes : null,
