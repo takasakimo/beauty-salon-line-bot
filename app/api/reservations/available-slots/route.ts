@@ -109,6 +109,17 @@ export async function GET(request: NextRequest) {
     const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
     const today = `${jstNow.getUTCFullYear()}-${String(jstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(jstNow.getUTCDate()).padStart(2, '0')}`;
     
+    // デバッグログ：当日判定の確認
+    console.log('日付比較:', {
+      requestedDate: date,
+      today: today,
+      isToday: date === today,
+      utcNow: now.toISOString(),
+      jstNow: jstNow.toISOString(),
+      jstHour: jstNow.getUTCHours(),
+      jstMinute: jstNow.getUTCMinutes()
+    });
+    
     // 予約済みスロットを取得（当日の時間計算の前に取得）
     // スタッフが指定されている場合は、そのスタッフの予約のみをチェック
     let queryText = '';
@@ -169,6 +180,15 @@ export async function GET(request: NextRequest) {
       const bufferMinutes = 30; // バッファ時間（30分）
       minStartTime = currentTimeInMinutes + bufferMinutes;
       
+      console.log('当日の時間計算:', {
+        currentHour,
+        currentMinute,
+        currentTimeInMinutes,
+        bufferMinutes,
+        initialMinStartTime: minStartTime,
+        initialMinStartTimeFormatted: `${Math.floor(minStartTime / 60).toString().padStart(2, '0')}:${(minStartTime % 60).toString().padStart(2, '0')}`
+      });
+      
       // 既存予約の終了時間も考慮（既存予約の終了時間の方が遅い場合はそれを使用）
       result.rows.forEach((row: any) => {
         const reservationDateStr = row.reservation_date;
@@ -216,6 +236,14 @@ export async function GET(request: NextRequest) {
         const [hour, minute] = slot.split(':').map(Number);
         const slotTimeInMinutes = hour * 60 + minute;
         return slotTimeInMinutes >= minStartTime;
+      });
+      
+      console.log('当日のスロットフィルタリング:', {
+        beforeFilterCount: slots.length,
+        afterFilterCount: filteredSlots.length,
+        minStartTime,
+        minStartTimeFormatted: `${Math.floor(minStartTime / 60).toString().padStart(2, '0')}:${(minStartTime % 60).toString().padStart(2, '0')}`,
+        filteredSlots: filteredSlots.slice(0, 10)
       });
       
       // スロットを更新
