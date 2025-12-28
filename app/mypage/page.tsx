@@ -455,6 +455,31 @@ function MyPageContent() {
             </div>
           )}
 
+          <div className="flex items-center justify-between gap-4 mb-8 pt-6 border-t border-gray-200">
+            <div className="flex items-center gap-2 text-gray-700">
+              <BuildingStorefrontIcon className="h-5 w-5 text-pink-600" />
+              <span className="font-medium text-base">
+                {currentTenant?.salon_name || 
+                 (tenants.length > 0 ? tenants.find(t => t.tenant_code === tenantCode)?.salon_name : null) ||
+                 '店舗名'}
+              </span>
+            </div>
+            <div className="flex gap-4">
+              <button
+                onClick={() => router.push(`/reservation?tenant=${tenantCode}`)}
+                className="px-6 py-3 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-md hover:shadow-lg font-medium"
+              >
+                新規予約
+              </button>
+              <button
+                onClick={() => router.push(`/?tenant=${tenantCode}`)}
+                className="px-6 py-3 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all text-sm"
+              >
+                ホームに戻る
+              </button>
+            </div>
+          </div>
+
           <div className="mb-8">
             <h2 className="text-xl font-semibold mb-4 text-gray-800">予約履歴</h2>
             {reservations.length === 0 ? (
@@ -506,8 +531,6 @@ function MyPageContent() {
               </div>
             )}
           </div>
-
-          <div className="flex items-center justify-between gap-4 pt-6 mt-6 border-t border-gray-200">
             <div className="flex items-center gap-2 text-gray-700">
               <BuildingStorefrontIcon className="h-5 w-5 text-pink-600" />
               <span className="font-medium text-base">
