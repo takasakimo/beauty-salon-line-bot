@@ -92,9 +92,14 @@ export async function PUT(
     }
 
     // 予約日時を計算（合計時間を使用）
-    // reservation_dateはJST（+09:00）形式で送られてくるので、タイムゾーン情報を除去してローカルタイムとして解釈
-    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
-    const reservationDateTimeLocal = new Date(dateStr);
+    // reservation_dateはJST（+09:00）形式で送られてくるので、UTCに変換してから保存
+    const jstDate = new Date(reservation_date); // JST時刻として解釈
+    const utcDate = new Date(jstDate.getTime() - (9 * 60 * 60 * 1000)); // UTCに変換（9時間引く）
+    const reservationDateTimeUTC = utcDate;
+    const reservationEndTimeUTC = new Date(reservationDateTimeUTC.getTime() + totalDuration * 60000);
+    
+    // 表示用にJST時刻も計算（営業時間チェック用）
+    const reservationDateTimeLocal = jstDate;
     const reservationEndTime = new Date(reservationDateTimeLocal.getTime() + totalDuration * 60000);
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
@@ -144,9 +149,9 @@ export async function PUT(
            WHERE r.tenant_id = $1
            AND r.staff_id = $2
            AND r.status = 'confirmed'
-           AND DATE(r.reservation_date) = DATE($3)
+           AND DATE(r.reservation_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo') = DATE($3::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')
            AND r.reservation_id != $4`,
-          [tenantId, staff_id, dateStr, reservationId]
+          [tenantId, staff_id, reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', ''), reservationId]
         );
       } catch (error: any) {
         // reservation_menusテーブルが存在しない場合はフォールバック
@@ -158,9 +163,9 @@ export async function PUT(
              WHERE r.tenant_id = $1
              AND r.staff_id = $2
              AND r.status = 'confirmed'
-             AND DATE(r.reservation_date) = DATE($3)
+             AND DATE(r.reservation_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo') = DATE($3::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')
              AND r.reservation_id != $4`,
-            [tenantId, staff_id, dateStr, reservationId]
+            [tenantId, staff_id, reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', ''), reservationId]
           );
         } else {
           throw error;
@@ -199,9 +204,9 @@ export async function PUT(
            LEFT JOIN menus m ON r.menu_id = m.menu_id
            WHERE r.tenant_id = $1
            AND r.status = 'confirmed'
-           AND DATE(r.reservation_date) = DATE($2)
+           AND DATE(r.reservation_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo') = DATE($2::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')
            AND r.reservation_id != $3`,
-          [tenantId, dateStr, reservationId]
+          [tenantId, reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', ''), reservationId]
         );
       } catch (error: any) {
         // reservation_menusテーブルが存在しない場合はフォールバック
@@ -214,9 +219,9 @@ export async function PUT(
              LEFT JOIN menus m ON r.menu_id = m.menu_id
              WHERE r.tenant_id = $1
              AND r.status = 'confirmed'
-             AND DATE(r.reservation_date) = DATE($2)
+             AND DATE(r.reservation_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo') = DATE($2::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')
              AND r.reservation_id != $3`,
-            [tenantId, dateStr, reservationId]
+            [tenantId, reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', ''), reservationId]
           );
         } else {
           throw error;
@@ -255,15 +260,14 @@ export async function PUT(
       // statusが明示的に指定されている場合はそれを使用、そうでなければ既存のstatusを保持
       const updateStatus = status !== undefined ? status : 'confirmed';
       
-      // reservation_dateからタイムゾーン情報を除去して、ローカルタイムとして保存
-      // YYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DD HH:mm:ss形式に変換
-      const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
+      // UTC時刻をISO文字列形式で保存
+      const utcDateStr = reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', ''); // 2025-12-29 01:00:00
       const result = await client.query(
         `UPDATE reservations 
          SET 
            menu_id = $1,
            staff_id = $2,
-           reservation_date = TO_TIMESTAMP($3, 'YYYY-MM-DD HH24:MI:SS'),
+           reservation_date = $3::timestamp,
            status = $4,
            price = $5,
            notes = $6
@@ -272,7 +276,7 @@ export async function PUT(
         [
           firstMenuId,
           staff_id || null,
-          dateStrForDb, // タイムゾーン情報を除去した日時文字列（YYYY-MM-DD HH:mm:ss形式）
+          utcDateStr, // UTC時刻（YYYY-MM-DD HH:mm:ss形式）
           updateStatus,
           totalPrice,
           notes !== undefined ? notes : null,

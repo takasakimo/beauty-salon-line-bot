@@ -194,13 +194,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 予約日時を計算（合計時間を使用）
-    // reservation_dateはJST（+09:00）形式で送られてくるので、UTCに変換してから使用
-    const reservationDateTime = new Date(reservation_date);
-    // ローカルタイムとして解釈（タイムゾーン情報を無視して、指定された時刻をそのまま使用）
-    // 文字列からタイムゾーン情報を除去して、ローカルタイムとして解釈
-    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
-    const localDateTime = new Date(dateStr);
-    const reservationDateTimeLocal = localDateTime;
+    // reservation_dateはJST（+09:00）形式で送られてくるので、UTCに変換してから保存
+    // 例：2025-12-29T10:00:00+09:00 → 2025-12-29T01:00:00Z (UTC)
+    const jstDate = new Date(reservation_date); // JST時刻として解釈
+    const utcDate = new Date(jstDate.getTime() - (9 * 60 * 60 * 1000)); // UTCに変換（9時間引く）
+    const reservationDateTimeUTC = utcDate;
+    const reservationEndTimeUTC = new Date(reservationDateTimeUTC.getTime() + totalDuration * 60000);
+    
+    // 表示用にJST時刻も計算（営業時間チェック用）
+    const reservationDateTimeLocal = jstDate;
     const reservationEndTime = new Date(reservationDateTimeLocal.getTime() + totalDuration * 60000);
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
@@ -229,7 +231,7 @@ export async function POST(request: NextRequest) {
 
     // スタッフが指定されている場合、時間の重複チェック
     if (staff_id) {
-      // 同じスタッフの既存予約をチェック
+      // 同じスタッフの既存予約をチェック（UTC時刻で比較）
       const conflictCheck = await query(
         `SELECT reservation_id, reservation_date, m.duration
          FROM reservations r
@@ -237,19 +239,21 @@ export async function POST(request: NextRequest) {
          WHERE r.tenant_id = $1
          AND r.staff_id = $2
          AND r.status = 'confirmed'
-         AND DATE(r.reservation_date) = DATE($3)`,
-        [tenantId, staff_id, dateStr]
+         AND DATE(r.reservation_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo') = DATE($3::timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')`,
+        [tenantId, staff_id, reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', '')]
       );
 
       for (const existingReservation of conflictCheck.rows) {
-        const existingStart = new Date(existingReservation.reservation_date);
+        // データベースから取得したUTC時刻をJSTに変換して比較
+        const existingStartUTC = new Date(existingReservation.reservation_date);
+        const existingStartJST = new Date(existingStartUTC.getTime() + (9 * 60 * 60 * 1000)); // UTC→JST変換
         const existingDuration = existingReservation.duration || 60;
-        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+        const existingEndJST = new Date(existingStartJST.getTime() + existingDuration * 60000);
 
-        // 時間帯が重複しているかチェック
-        if (reservationDateTimeLocal < existingEnd && reservationEndTime > existingStart) {
+        // 時間帯が重複しているかチェック（JST時刻で比較）
+        if (reservationDateTimeLocal < existingEndJST && reservationEndTime > existingStartJST) {
           return NextResponse.json(
-            { error: `この時間帯は既に予約が入っています。既存予約: ${existingStart.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` },
+            { error: `この時間帯は既に予約が入っています。既存予約: ${existingStartJST.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` },
             { status: 400 }
           );
         }
@@ -302,8 +306,12 @@ export async function POST(request: NextRequest) {
         const existingDuration = parseFloat(row.duration) || 60;
         const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
         
-        // 時間帯が重複しているかチェック
-        if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+        // 時間帯が重複しているかチェック（JST時刻で比較）
+        // データベースから取得したUTC時刻をJSTに変換
+        const existingStartUTC = new Date(row.reservation_date);
+        const existingStartJST = new Date(existingStartUTC.getTime() + (9 * 60 * 60 * 1000));
+        const existingEndJST = new Date(existingStartJST.getTime() + existingDuration * 60000);
+        if (reservationDateTimeLocal < existingEndJST && reservationEndTime > existingStartJST) {
           concurrentCount++;
         }
       });
@@ -359,9 +367,8 @@ export async function POST(request: NextRequest) {
       await client.query('BEGIN');
       
       // 予約を作成（最初のメニューIDをmenu_idとして使用）
-      // reservation_dateからタイムゾーン情報を除去して、ローカルタイムとして保存
-      // YYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DD HH:mm:ss形式に変換
-      const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
+      // UTC時刻をISO文字列形式で保存（PostgreSQLのTIMESTAMP型はUTCとして解釈される）
+      const utcDateStr = reservationDateTimeUTC.toISOString().replace('T', ' ').replace('Z', ''); // 2025-12-29 01:00:00
       const reservationResult = await client.query(
         `INSERT INTO reservations (
           tenant_id, 
@@ -374,14 +381,14 @@ export async function POST(request: NextRequest) {
           notes,
           created_date
         )
-        VALUES ($1, $2, $3, $4, TO_TIMESTAMP($5, 'YYYY-MM-DD HH24:MI:SS'), $6, $7, $8, CURRENT_TIMESTAMP)
+        VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, $8, CURRENT_TIMESTAMP)
         RETURNING *`,
         [
           tenantId,
           actualCustomerId,
           staff_id || null,
           firstMenuId,
-          dateStrForDb, // タイムゾーン情報を除去した日時文字列（YYYY-MM-DD HH:mm:ss形式）
+          utcDateStr, // UTC時刻（YYYY-MM-DD HH:mm:ss形式）
           status,
           totalPrice,
           notes || null
