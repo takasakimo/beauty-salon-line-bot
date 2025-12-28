@@ -55,18 +55,46 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 最大同時予約数を取得
+    // 店舗情報を取得（最大同時予約数と営業時間）
     const tenantResult = await query(
-      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      'SELECT max_concurrent_reservations, business_hours FROM tenants WHERE tenant_id = $1',
       [tenantId]
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
-
-    // 営業時間のスロットを生成（10:00-19:00、30分間隔）
+    
+    // 営業時間を取得
+    let businessHours: any = {};
+    try {
+      if (tenantResult.rows[0]?.business_hours) {
+        businessHours = typeof tenantResult.rows[0].business_hours === 'string'
+          ? JSON.parse(tenantResult.rows[0].business_hours)
+          : tenantResult.rows[0].business_hours;
+      }
+    } catch (e) {
+      console.error('business_hoursのパースエラー:', e);
+    }
+    
+    // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay();
+    
+    // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
+    const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
+    const openTime = dayBusinessHours.open || '10:00';
+    const closeTime = dayBusinessHours.close || '19:00';
+    
+    // 開店時間と閉店時間を分単位に変換
+    const [openHour, openMinute] = openTime.split(':').map(Number);
+    const [closeHour, closeMinute] = closeTime.split(':').map(Number);
+    const openTimeInMinutes = openHour * 60 + openMinute;
+    const closeTimeInMinutes = closeHour * 60 + closeMinute;
+    
+    // 営業時間のスロットを生成（30分間隔）
     const slots: string[] = [];
-    for (let hour = 10; hour < 19; hour++) {
-      slots.push(`${hour.toString().padStart(2, '0')}:00`);
-      slots.push(`${hour.toString().padStart(2, '0')}:30`);
+    for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
+      const hour = Math.floor(time / 60);
+      const minute = time % 60;
+      slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
     }
 
     // 現在時刻を取得（サーバーのタイムゾーンを使用）
@@ -224,8 +252,25 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 空きスロットを返す
-    const availableSlots = slots.filter(slot => !unavailableSlots.has(slot));
+    // 空きスロットを返す（閉店時間を考慮）
+    const availableSlots = slots.filter(slot => {
+      // 既に予約済みのスロットは除外
+      if (unavailableSlots.has(slot)) {
+        return false;
+      }
+      
+      // 予約開始時間 + 作業時間が閉店時間を超えないかチェック
+      const [hour, minute] = slot.split(':').map(Number);
+      const slotTimeInMinutes = hour * 60 + minute;
+      const slotEndTimeInMinutes = slotTimeInMinutes + duration;
+      
+      // 閉店時間を超える場合は除外
+      if (slotEndTimeInMinutes > closeTimeInMinutes) {
+        return false;
+      }
+      
+      return true;
+    });
     
     return NextResponse.json(availableSlots);
   } catch (error: any) {
