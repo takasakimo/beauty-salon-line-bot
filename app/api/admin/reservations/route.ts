@@ -356,9 +356,10 @@ export async function POST(request: NextRequest) {
             const menu = menuResult.rows.find(m => m.menu_id === menuId);
             if (menu) {
               await client.query(
-                `INSERT INTO reservation_menus (reservation_id, menu_id, price)
-                 VALUES ($1, $2, $3)`,
-                [reservationId, menuId, menu.price]
+                `INSERT INTO reservation_menus (reservation_id, menu_id, tenant_id, price)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (reservation_id, menu_id) DO NOTHING`,
+                [reservationId, menuId, tenantId, menu.price]
               );
             }
           }
