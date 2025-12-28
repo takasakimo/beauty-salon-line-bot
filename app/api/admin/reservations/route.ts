@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     let queryText = `
       SELECT 
         r.reservation_id,
-        r.reservation_date,
+        (r.reservation_date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo')::text as reservation_date,
         r.status,
         r.price,
         r.notes,
