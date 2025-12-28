@@ -549,8 +549,9 @@ export default function ReservationManagement() {
     setError('');
 
     try {
-      // 日付と時間を結合
-      const reservationDateTime = `${formData.reservation_date}T${formData.reservation_time}:00`;
+      // 日付と時間を結合（JSTタイムゾーンを明示）
+      // YYYY-MM-DDTHH:mm:ss+09:00形式で送信（JSTを明示的に指定）
+      const reservationDateTime = `${formData.reservation_date}T${formData.reservation_time}:00+09:00`;
 
       const baseUrl = editingReservation 
         ? `/api/admin/reservations/${editingReservation.reservation_id}`

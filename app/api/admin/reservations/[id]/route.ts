@@ -72,16 +72,52 @@ export async function PUT(
     // 最初のメニューIDをmenu_idとして使用（後方互換性のため）
     const firstMenuId = menuIds[0];
 
-    // 最大同時予約数を取得
+    // 店舗情報を取得（最大同時予約数と営業時間）
     const tenantResult = await query(
-      'SELECT max_concurrent_reservations FROM tenants WHERE tenant_id = $1',
+      'SELECT max_concurrent_reservations, business_hours FROM tenants WHERE tenant_id = $1',
       [tenantId]
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
+    
+    // 営業時間を取得
+    let businessHours: any = {};
+    try {
+      if (tenantResult.rows[0]?.business_hours) {
+        businessHours = typeof tenantResult.rows[0].business_hours === 'string'
+          ? JSON.parse(tenantResult.rows[0].business_hours)
+          : tenantResult.rows[0].business_hours;
+      }
+    } catch (e) {
+      console.error('business_hoursのパースエラー:', e);
+    }
 
     // 予約日時を計算（合計時間を使用）
     const reservationDateTime = new Date(reservation_date);
     const reservationEndTime = new Date(reservationDateTime.getTime() + totalDuration * 60000);
+    
+    // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
+    const dayOfWeek = reservationDateTime.getDay();
+    
+    // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
+    const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
+    const closeTime = dayBusinessHours.close || '19:00';
+    
+    // 閉店時間を分単位に変換
+    const [closeHour, closeMinute] = closeTime.split(':').map(Number);
+    const closeTimeInMinutes = closeHour * 60 + closeMinute;
+    
+    // 予約終了時間を分単位に変換
+    const reservationEndHour = reservationEndTime.getHours();
+    const reservationEndMinute = reservationEndTime.getMinutes();
+    const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
+    
+    // 閉店時間を超える場合はエラー
+    if (reservationEndTimeInMinutes > closeTimeInMinutes) {
+      return NextResponse.json(
+        { error: `予約終了時間が閉店時間（${closeTime}）を超えています。作業時間を考慮して、${closeTime}より前に開始できる時間を選択してください。` },
+        { status: 400 }
+      );
+    }
 
     // スタッフが指定されている場合、時間の重複チェック（自分自身を除く）
     if (staff_id) {
