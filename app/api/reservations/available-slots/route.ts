@@ -56,8 +56,27 @@ export async function GET(request: NextRequest) {
     }
 
     // 店舗情報を取得（最大同時予約数と営業時間）
+    // カラムが存在するかチェック
+    let selectColumns = 'max_concurrent_reservations, business_hours';
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'tenants' AND column_name IN ('temporary_closed_days', 'special_business_hours')`
+      );
+      const columnNames = columnCheck.rows.map((row: any) => row.column_name);
+      if (columnNames.includes('temporary_closed_days')) {
+        selectColumns += ', temporary_closed_days';
+      }
+      if (columnNames.includes('special_business_hours')) {
+        selectColumns += ', special_business_hours';
+      }
+    } catch (checkError: any) {
+      console.error('カラムチェックエラー:', checkError);
+    }
+    
     const tenantResult = await query(
-      'SELECT max_concurrent_reservations, business_hours FROM tenants WHERE tenant_id = $1',
+      `SELECT ${selectColumns} FROM tenants WHERE tenant_id = $1`,
       [tenantId]
     );
     const maxConcurrent = tenantResult.rows[0]?.max_concurrent_reservations || 3;
@@ -74,13 +93,50 @@ export async function GET(request: NextRequest) {
       console.error('business_hoursのパースエラー:', e);
     }
     
+    // 臨時休業日を取得
+    let temporaryClosedDays: string[] = [];
+    try {
+      if (tenantResult.rows[0]?.temporary_closed_days) {
+        temporaryClosedDays = typeof tenantResult.rows[0].temporary_closed_days === 'string'
+          ? JSON.parse(tenantResult.rows[0].temporary_closed_days)
+          : tenantResult.rows[0].temporary_closed_days;
+      }
+    } catch (e) {
+      console.error('temporary_closed_daysのパースエラー:', e);
+    }
+    
+    // 特別営業時間を取得
+    let specialBusinessHours: Record<string, { open: string; close: string }> = {};
+    try {
+      if (tenantResult.rows[0]?.special_business_hours) {
+        specialBusinessHours = typeof tenantResult.rows[0].special_business_hours === 'string'
+          ? JSON.parse(tenantResult.rows[0].special_business_hours)
+          : tenantResult.rows[0].special_business_hours;
+      }
+    } catch (e) {
+      console.error('special_business_hoursのパースエラー:', e);
+    }
+    
+    // 臨時休業日の場合は空のスロットを返す
+    if (temporaryClosedDays.includes(date)) {
+      return NextResponse.json([]);
+    }
+    
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
     // 日付文字列を正しくパース（YYYY-MM-DD形式を想定）
     const dateObj = new Date(date + 'T00:00:00'); // タイムゾーン問題を回避
     const dayOfWeek = dateObj.getDay();
     
-    // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
-    const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
+    // 特別営業時間が設定されている場合はそれを使用、そうでなければ曜日の営業時間を使用
+    let dayBusinessHours: { open: string; close: string };
+    if (specialBusinessHours[date]) {
+      dayBusinessHours = specialBusinessHours[date];
+    } else {
+      // 曜日名のマッピング（0=日曜日、1=月曜日、...、6=土曜日）
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      dayBusinessHours = businessHours[dayNames[dayOfWeek]] || businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
+    }
+    
     const openTime = dayBusinessHours.open || '10:00';
     const closeTime = dayBusinessHours.close || '19:00';
     

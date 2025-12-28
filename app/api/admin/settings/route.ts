@@ -29,13 +29,20 @@ export async function GET(request: NextRequest) {
       const columnCheck = await query(
         `SELECT column_name 
          FROM information_schema.columns 
-         WHERE table_name = 'tenants' AND column_name = 'closed_days'`
+         WHERE table_name = 'tenants' AND column_name IN ('closed_days', 'temporary_closed_days', 'special_business_hours')`
       );
-      if (columnCheck.rows.length > 0) {
+      const columnNames = columnCheck.rows.map((row: any) => row.column_name);
+      if (columnNames.includes('closed_days')) {
         selectColumns += ', closed_days';
       }
+      if (columnNames.includes('temporary_closed_days')) {
+        selectColumns += ', temporary_closed_days';
+      }
+      if (columnNames.includes('special_business_hours')) {
+        selectColumns += ', special_business_hours';
+      }
     } catch (checkError: any) {
-      console.error('closed_daysカラムチェックエラー:', checkError);
+      console.error('カラムチェックエラー:', checkError);
     }
 
     const result = await query(
@@ -55,6 +62,8 @@ export async function GET(request: NextRequest) {
     // business_hoursとclosed_daysをパース
     let businessHours = {};
     let closedDays: number[] = [];
+    let temporaryClosedDays: string[] = [];
+    let specialBusinessHours: Record<string, { open: string; close: string }> = {};
     
     try {
       if (row.business_hours) {
@@ -75,11 +84,33 @@ export async function GET(request: NextRequest) {
     } catch (e) {
       console.error('closed_daysのパースエラー:', e);
     }
+    
+    try {
+      if (row.temporary_closed_days) {
+        temporaryClosedDays = typeof row.temporary_closed_days === 'string' 
+          ? JSON.parse(row.temporary_closed_days) 
+          : row.temporary_closed_days;
+      }
+    } catch (e) {
+      console.error('temporary_closed_daysのパースエラー:', e);
+    }
+    
+    try {
+      if (row.special_business_hours) {
+        specialBusinessHours = typeof row.special_business_hours === 'string' 
+          ? JSON.parse(row.special_business_hours) 
+          : row.special_business_hours;
+      }
+    } catch (e) {
+      console.error('special_business_hoursのパースエラー:', e);
+    }
 
     return NextResponse.json({
       max_concurrent_reservations: row.max_concurrent_reservations || 3,
       business_hours: businessHours,
-      closed_days: Array.isArray(closedDays) ? closedDays : (row.closed_days ? [] : [])
+      closed_days: Array.isArray(closedDays) ? closedDays : (row.closed_days ? [] : []),
+      temporary_closed_days: Array.isArray(temporaryClosedDays) ? temporaryClosedDays : [],
+      special_business_hours: typeof specialBusinessHours === 'object' ? specialBusinessHours : {}
     });
   } catch (error: any) {
     console.error('設定取得エラー:', error);
@@ -109,7 +140,7 @@ export async function PUT(request: NextRequest) {
       );
     }
     const body = await request.json();
-    const { max_concurrent_reservations, business_hours, closed_days } = body;
+    const { max_concurrent_reservations, business_hours, closed_days, temporary_closed_days, special_business_hours } = body;
 
     // 最大同時予約数のバリデーション
     if (max_concurrent_reservations !== undefined) {
@@ -121,17 +152,22 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // closed_daysカラムが存在するか事前にチェック
+    // カラムが存在するか事前にチェック
     let closedDaysColumnExists = false;
+    let temporaryClosedDaysColumnExists = false;
+    let specialBusinessHoursColumnExists = false;
     try {
       const columnCheck = await query(
         `SELECT column_name 
          FROM information_schema.columns 
-         WHERE table_name = 'tenants' AND column_name = 'closed_days'`
+         WHERE table_name = 'tenants' AND column_name IN ('closed_days', 'temporary_closed_days', 'special_business_hours')`
       );
-      closedDaysColumnExists = columnCheck.rows.length > 0;
+      const columnNames = columnCheck.rows.map((row: any) => row.column_name);
+      closedDaysColumnExists = columnNames.includes('closed_days');
+      temporaryClosedDaysColumnExists = columnNames.includes('temporary_closed_days');
+      specialBusinessHoursColumnExists = columnNames.includes('special_business_hours');
     } catch (checkError: any) {
-      console.error('closed_daysカラムチェックエラー:', checkError);
+      console.error('カラムチェックエラー:', checkError);
       // エラーが発生した場合は存在しないとみなす
     }
 
@@ -160,6 +196,24 @@ export async function PUT(request: NextRequest) {
     } else if (closed_days !== undefined && !closedDaysColumnExists) {
       console.log('closed_daysカラムが存在しないため、スキップします');
     }
+    
+    // temporary_closed_daysカラムが存在する場合のみ更新
+    if (temporary_closed_days !== undefined && temporaryClosedDaysColumnExists) {
+      updates.push(`temporary_closed_days = $${paramIndex}`);
+      values.push(JSON.stringify(temporary_closed_days));
+      paramIndex++;
+    } else if (temporary_closed_days !== undefined && !temporaryClosedDaysColumnExists) {
+      console.log('temporary_closed_daysカラムが存在しないため、スキップします');
+    }
+    
+    // special_business_hoursカラムが存在する場合のみ更新
+    if (special_business_hours !== undefined && specialBusinessHoursColumnExists) {
+      updates.push(`special_business_hours = $${paramIndex}`);
+      values.push(JSON.stringify(special_business_hours));
+      paramIndex++;
+    } else if (special_business_hours !== undefined && !specialBusinessHoursColumnExists) {
+      console.log('special_business_hoursカラムが存在しないため、スキップします');
+    }
 
     if (updates.length === 0) {
       return NextResponse.json(
@@ -174,6 +228,12 @@ export async function PUT(request: NextRequest) {
     let returnColumns = 'max_concurrent_reservations, business_hours';
     if (closedDaysColumnExists) {
       returnColumns += ', closed_days';
+    }
+    if (temporaryClosedDaysColumnExists) {
+      returnColumns += ', temporary_closed_days';
+    }
+    if (specialBusinessHoursColumnExists) {
+      returnColumns += ', special_business_hours';
     }
     
     const queryText = `
@@ -197,6 +257,8 @@ export async function PUT(request: NextRequest) {
     // business_hoursとclosed_daysをパース
     let businessHours = {};
     let closedDays: number[] = [];
+    let temporaryClosedDays: string[] = [];
+    let specialBusinessHours: Record<string, { open: string; close: string }> = {};
     
     try {
       if (row.business_hours) {
@@ -217,11 +279,33 @@ export async function PUT(request: NextRequest) {
     } catch (e) {
       console.error('closed_daysのパースエラー:', e);
     }
+    
+    try {
+      if (row.temporary_closed_days) {
+        temporaryClosedDays = typeof row.temporary_closed_days === 'string' 
+          ? JSON.parse(row.temporary_closed_days) 
+          : row.temporary_closed_days;
+      }
+    } catch (e) {
+      console.error('temporary_closed_daysのパースエラー:', e);
+    }
+    
+    try {
+      if (row.special_business_hours) {
+        specialBusinessHours = typeof row.special_business_hours === 'string' 
+          ? JSON.parse(row.special_business_hours) 
+          : row.special_business_hours;
+      }
+    } catch (e) {
+      console.error('special_business_hoursのパースエラー:', e);
+    }
 
     return NextResponse.json({
       max_concurrent_reservations: row.max_concurrent_reservations,
       business_hours: businessHours,
-      closed_days: Array.isArray(closedDays) ? closedDays : []
+      closed_days: Array.isArray(closedDays) ? closedDays : [],
+      temporary_closed_days: Array.isArray(temporaryClosedDays) ? temporaryClosedDays : [],
+      special_business_hours: typeof specialBusinessHours === 'object' ? specialBusinessHours : {}
     });
   } catch (error: any) {
     console.error('設定更新エラー:', error);
