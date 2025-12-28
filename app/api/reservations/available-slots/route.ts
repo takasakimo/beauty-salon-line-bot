@@ -185,6 +185,7 @@ export async function GET(request: NextRequest) {
 
     if (staffId) {
       // スタッフ指定の場合：既存予約の終了時間を考慮して、次の予約が取れる時間のみを表示
+      // 既存予約と重複する時間帯は完全に除外
       const newUnavailableSlots: Set<string> = new Set();
       slots.forEach(slot => {
         const [hour, minute] = slot.split(':').map(Number);
@@ -202,6 +203,7 @@ export async function GET(request: NextRequest) {
           // 時間帯が重複しているかチェック
           // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
           // つまり、slotTime < reservationEndTime && slotEndTime > reservationStartTime
+          // または、スロットの開始時間が既存予約の終了時間より前の場合は除外
           if (slotTime < reservationEndTime && slotEndTime > reservationStartTime) {
             hasConflict = true;
           }
@@ -216,6 +218,7 @@ export async function GET(request: NextRequest) {
     } else {
       // スタッフ未指定の場合：最大同時予約数を考慮し、既存予約の終了時間も考慮
       // 各スロットで、その時間帯の予約数をチェック
+      // 既存予約と重複する時間帯は完全に除外
       slots.forEach(slot => {
         const [hour, minute] = slot.split(':').map(Number);
         const slotTime = hour * 60 + minute; // 分単位
@@ -236,7 +239,7 @@ export async function GET(request: NextRequest) {
           }
         });
         
-        // 最大同時予約数を超えている場合は利用不可
+        // 最大同時予約数を超えている場合は利用不可（重複する時間帯は表示しない）
         if (count >= maxConcurrent) {
           unavailableSlots.add(slot);
         }
