@@ -135,27 +135,35 @@ export async function GET(
     }
 
     // メニュー配列をパース
-    const history = result.rows.map((row: any) => ({
-      reservation_id: row.reservation_id,
-      reservation_date: row.reservation_date,
-      status: row.status,
-      price: row.price,
-      notes: row.notes,
-      created_date: row.created_date,
-      menu_id: row.menu_id,
-      menu_name: row.menu_name,
-      menu_price: row.menu_price,
-      menu_duration: row.menu_duration,
-      staff_id: row.staff_id,
-      staff_name: row.staff_name,
-      menus: typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus,
-      total_price: Array.isArray(row.menus) 
-        ? (typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus).reduce((sum: number, m: any) => sum + (m.price || 0), 0)
-        : (row.price || 0),
-      total_duration: Array.isArray(row.menus)
-        ? (typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus).reduce((sum: number, m: any) => sum + (m.duration || 0), 0)
-        : (row.menu_duration || 0)
-    }));
+    const history = result.rows.map((row: any) => {
+      // reservation_dateに+09:00を付与してJSTとして明示的に返す
+      let reservationDate = row.reservation_date;
+      if (reservationDate && typeof reservationDate === 'string' && !reservationDate.includes('+') && !reservationDate.includes('Z')) {
+        // タイムゾーン情報がない場合は+09:00を付与
+        reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+      }
+      return {
+        reservation_id: row.reservation_id,
+        reservation_date: reservationDate,
+        status: row.status,
+        price: row.price,
+        notes: row.notes,
+        created_date: row.created_date,
+        menu_id: row.menu_id,
+        menu_name: row.menu_name,
+        menu_price: row.menu_price,
+        menu_duration: row.menu_duration,
+        staff_id: row.staff_id,
+        staff_name: row.staff_name,
+        menus: typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus,
+        total_price: Array.isArray(row.menus) 
+          ? (typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus).reduce((sum: number, m: any) => sum + (m.price || 0), 0)
+          : (row.price || 0),
+        total_duration: Array.isArray(row.menus)
+          ? (typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus).reduce((sum: number, m: any) => sum + (m.duration || 0), 0)
+          : (row.menu_duration || 0)
+      };
+    });
 
     return NextResponse.json(history);
   } catch (error: any) {

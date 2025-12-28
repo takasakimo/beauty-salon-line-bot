@@ -89,12 +89,21 @@ export async function GET(request: NextRequest) {
     const result = await query(queryText, params);
 
     // メニュー配列をパース
-    const reservations = result.rows.map((row: any) => ({
-      ...row,
-      menus: typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus,
-      total_price: Array.isArray(row.menus) ? row.menus.reduce((sum: number, m: any) => sum + (m.price || 0), 0) : (row.price || 0),
-      total_duration: Array.isArray(row.menus) ? row.menus.reduce((sum: number, m: any) => sum + (m.duration || 0), 0) : (row.menu_duration || 0)
-    }));
+    const reservations = result.rows.map((row: any) => {
+      // reservation_dateに+09:00を付与してJSTとして明示的に返す
+      let reservationDate = row.reservation_date;
+      if (reservationDate && typeof reservationDate === 'string' && !reservationDate.includes('+') && !reservationDate.includes('Z')) {
+        // タイムゾーン情報がない場合は+09:00を付与
+        reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+      }
+      return {
+        ...row,
+        reservation_date: reservationDate,
+        menus: typeof row.menus === 'string' ? JSON.parse(row.menus) : row.menus,
+        total_price: Array.isArray(row.menus) ? row.menus.reduce((sum: number, m: any) => sum + (m.price || 0), 0) : (row.price || 0),
+        total_duration: Array.isArray(row.menus) ? row.menus.reduce((sum: number, m: any) => sum + (m.duration || 0), 0) : (row.menu_duration || 0)
+      };
+    });
 
     return NextResponse.json(reservations);
   } catch (error: any) {

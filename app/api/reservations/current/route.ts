@@ -106,8 +106,16 @@ export async function GET(request: NextRequest) {
     const reservation = result.rows[0];
     const menus = typeof reservation.menus === 'string' ? JSON.parse(reservation.menus) : reservation.menus;
     
+    // reservation_dateに+09:00を付与してJSTとして明示的に返す
+    let reservationDate = reservation.reservation_date;
+    if (reservationDate && typeof reservationDate === 'string' && !reservationDate.includes('+') && !reservationDate.includes('Z')) {
+      // タイムゾーン情報がない場合は+09:00を付与
+      reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+    }
+    
     return NextResponse.json({
       ...reservation,
+      reservation_date: reservationDate,
       menus,
       total_price: Array.isArray(menus) ? menus.reduce((sum: number, m: any) => sum + (m.price || 0), 0) : (reservation.price || 0),
       total_duration: Array.isArray(menus) ? menus.reduce((sum: number, m: any) => sum + (m.duration || 0), 0) : (reservation.duration || 0)

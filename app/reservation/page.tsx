@@ -168,8 +168,7 @@ function ReservationPageContent() {
 
     setLoading(true);
     try {
-      // JST時刻として送信（+09:00形式）
-      const reservationDate = `${selectedDate}T${selectedTime}:00+09:00`;
+      const reservationDate = new Date(`${selectedDate}T${selectedTime}`);
       
       const response = await fetch('/api/reservations', {
         method: 'POST',
@@ -185,7 +184,7 @@ function ReservationPageContent() {
           phone_number: customer?.phone_number || customerInfo.phone,
           menu_ids: selectedMenus.map(m => m.menu_id),
           staff_id: selectedStaff ? selectedStaff.staff_id : null,
-          reservation_date: reservationDate
+          reservation_date: reservationDate.toISOString()
         })
       });
 
