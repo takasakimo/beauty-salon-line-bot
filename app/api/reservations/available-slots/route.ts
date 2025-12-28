@@ -103,9 +103,11 @@ export async function GET(request: NextRequest) {
       console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });
     }
 
-    // 現在時刻を取得（ローカル時間を使用）
+    // 現在時刻を取得（JST時間を使用）
     const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // JST時間を取得（UTC+9時間）
+    const jstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const today = `${jstNow.getUTCFullYear()}-${String(jstNow.getUTCMonth() + 1).padStart(2, '0')}-${String(jstNow.getUTCDate()).padStart(2, '0')}`;
     
     // 予約済みスロットを取得（当日の時間計算の前に取得）
     // スタッフが指定されている場合は、そのスタッフの予約のみをチェック
@@ -160,8 +162,9 @@ export async function GET(request: NextRequest) {
     // 当日の場合、現在時刻と既存予約の終了時間を考慮して最小開始時間を計算
     let minStartTime = 0; // 最小開始時間（分単位）
     if (date === today) {
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
+      // JST時間を取得（UTC+9時間）
+      const currentHour = jstNow.getUTCHours();
+      const currentMinute = jstNow.getUTCMinutes();
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
       const bufferMinutes = 30; // バッファ時間（30分）
       minStartTime = currentTimeInMinutes + bufferMinutes;
