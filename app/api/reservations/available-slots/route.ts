@@ -195,15 +195,30 @@ export async function GET(request: NextRequest) {
         // このスロットから開始した場合、既存予約と重複するかチェック
         let hasConflict = false;
         result.rows.forEach((row: any) => {
-          const reservationDate = new Date(row.reservation_date);
+          // データベースから取得した日時を正しくパース（タイムゾーンの影響を回避）
+          const reservationDateStr = row.reservation_date;
+          let reservationDate: Date;
+          
+          // 文字列の場合は直接パース、Dateオブジェクトの場合はそのまま使用
+          if (typeof reservationDateStr === 'string') {
+            // YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式を想定
+            const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0]; // ミリ秒を除去
+            reservationDate = new Date(dateStr);
+          } else {
+            reservationDate = new Date(reservationDateStr);
+          }
+          
+          // ローカル時間で時間を取得（タイムゾーンの影響を回避）
           const reservationDuration = row.duration || 60;
-          const reservationStartTime = reservationDate.getHours() * 60 + reservationDate.getMinutes();
+          // データベースに保存されている時刻をそのまま使用（JST時刻として保存されている想定）
+          const reservationHour = reservationDate.getHours();
+          const reservationMinute = reservationDate.getMinutes();
+          const reservationStartTime = reservationHour * 60 + reservationMinute;
           const reservationEndTime = reservationStartTime + reservationDuration;
           
           // 時間帯が重複しているかチェック
           // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
           // つまり、slotTime < reservationEndTime && slotEndTime > reservationStartTime
-          // または、スロットの開始時間が既存予約の終了時間より前の場合は除外
           if (slotTime < reservationEndTime && slotEndTime > reservationStartTime) {
             hasConflict = true;
           }
@@ -227,9 +242,25 @@ export async function GET(request: NextRequest) {
         // このスロットと時間帯が重複する予約をカウント
         let count = 0;
         result.rows.forEach((row: any) => {
-          const reservationDate = new Date(row.reservation_date);
+          // データベースから取得した日時を正しくパース（タイムゾーンの影響を回避）
+          const reservationDateStr = row.reservation_date;
+          let reservationDate: Date;
+          
+          // 文字列の場合は直接パース、Dateオブジェクトの場合はそのまま使用
+          if (typeof reservationDateStr === 'string') {
+            // YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式を想定
+            const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0]; // ミリ秒を除去
+            reservationDate = new Date(dateStr);
+          } else {
+            reservationDate = new Date(reservationDateStr);
+          }
+          
+          // ローカル時間で時間を取得（タイムゾーンの影響を回避）
           const reservationDuration = row.duration || 60;
-          const reservationStartTime = reservationDate.getHours() * 60 + reservationDate.getMinutes();
+          // データベースに保存されている時刻をそのまま使用（JST時刻として保存されている想定）
+          const reservationHour = reservationDate.getHours();
+          const reservationMinute = reservationDate.getMinutes();
+          const reservationStartTime = reservationHour * 60 + reservationMinute;
           const reservationEndTime = reservationStartTime + reservationDuration;
           
           // 時間帯が重複しているかチェック
@@ -267,6 +298,27 @@ export async function GET(request: NextRequest) {
     });
     
     // デバッグログ（問題特定のため本番環境でも出力）
+    const existingReservationsDebug = result.rows.map((row: any) => {
+      const reservationDateStr = row.reservation_date;
+      let reservationDate: Date;
+      if (typeof reservationDateStr === 'string') {
+        const dateStr = reservationDateStr.replace(' ', 'T').split('.')[0];
+        reservationDate = new Date(dateStr);
+      } else {
+        reservationDate = new Date(reservationDateStr);
+      }
+      const hour = reservationDate.getHours();
+      const minute = reservationDate.getMinutes();
+      return {
+        reservation_date: reservationDateStr,
+        parsed_hour: hour,
+        parsed_minute: minute,
+        duration: row.duration || 60,
+        start_time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
+        end_time: `${Math.floor((hour * 60 + minute + (row.duration || 60)) / 60).toString().padStart(2, '0')}:${((hour * 60 + minute + (row.duration || 60)) % 60).toString().padStart(2, '0')}`
+      };
+    });
+    
     console.log('空き時間計算結果:', {
       date,
       duration,
@@ -283,7 +335,8 @@ export async function GET(request: NextRequest) {
       dayBusinessHours: JSON.stringify(dayBusinessHours),
       slots: slots.slice(0, 10), // 最初の10個を表示
       availableSlots: availableSlots.slice(0, 10), // 最初の10個を表示
-      existingReservations: result.rows.length
+      existingReservations: result.rows.length,
+      existingReservationsDebug: existingReservationsDebug
     });
     
     // スロットが空の場合の警告
