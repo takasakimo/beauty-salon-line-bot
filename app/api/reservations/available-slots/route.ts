@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
       const currentHour = jstNow.getUTCHours();
       const currentMinute = jstNow.getUTCMinutes();
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
-      const bufferMinutes = 30; // バッファ時間（30分）
+      const bufferMinutes = 10; // バッファ時間（10分）
       minStartTime = currentTimeInMinutes + bufferMinutes;
       
       console.log('当日の時間計算:', {
