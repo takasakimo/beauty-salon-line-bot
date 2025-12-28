@@ -187,13 +187,16 @@ export async function GET(request: NextRequest) {
             }
           } else {
             const dateObj = new Date(reservationDateStr);
-            reservationHour = dateObj.getHours();
-            reservationMinute = dateObj.getMinutes();
+            // UTC時間として取得してJSTに変換
+            reservationHour = (dateObj.getUTCHours() + 9) % 24;
+            reservationMinute = dateObj.getUTCMinutes();
           }
         } else {
-          const dateObj = new Date(reservationDateStr);
-          reservationHour = dateObj.getHours();
-          reservationMinute = dateObj.getMinutes();
+          // Dateオブジェクトの場合（PostgreSQLから返される場合）
+          const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+          // UTC時間として取得してJSTに変換
+          reservationHour = (dateObj.getUTCHours() + 9) % 24;
+          reservationMinute = dateObj.getUTCMinutes();
         }
         
         const reservationStartTime = reservationHour * 60 + reservationMinute;
@@ -254,14 +257,16 @@ export async function GET(request: NextRequest) {
             } else {
               // フォールバック: Dateオブジェクトから取得
               const dateObj = new Date(reservationDateStr);
-              reservationHour = dateObj.getHours();
-              reservationMinute = dateObj.getMinutes();
+              // UTC時間として取得してJSTに変換
+              reservationHour = (dateObj.getUTCHours() + 9) % 24;
+              reservationMinute = dateObj.getUTCMinutes();
             }
           } else {
-            // Dateオブジェクトの場合
-            const dateObj = new Date(reservationDateStr);
-            reservationHour = dateObj.getHours();
-            reservationMinute = dateObj.getMinutes();
+            // Dateオブジェクトの場合（PostgreSQLから返される場合）
+            const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+            // UTC時間として取得してJSTに変換
+            reservationHour = (dateObj.getUTCHours() + 9) % 24;
+            reservationMinute = dateObj.getUTCMinutes();
           }
           
           const reservationStartTime = reservationHour * 60 + reservationMinute;
@@ -316,14 +321,16 @@ export async function GET(request: NextRequest) {
             } else {
               // フォールバック: Dateオブジェクトから取得
               const dateObj = new Date(reservationDateStr);
-              reservationHour = dateObj.getHours();
-              reservationMinute = dateObj.getMinutes();
+              // UTC時間として取得してJSTに変換
+              reservationHour = (dateObj.getUTCHours() + 9) % 24;
+              reservationMinute = dateObj.getUTCMinutes();
             }
           } else {
-            // Dateオブジェクトの場合
-            const dateObj = new Date(reservationDateStr);
-            reservationHour = dateObj.getHours();
-            reservationMinute = dateObj.getMinutes();
+            // Dateオブジェクトの場合（PostgreSQLから返される場合）
+            const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+            // UTC時間として取得してJSTに変換
+            reservationHour = (dateObj.getUTCHours() + 9) % 24;
+            reservationMinute = dateObj.getUTCMinutes();
           }
           
           const reservationStartTime = reservationHour * 60 + reservationMinute;
@@ -384,13 +391,16 @@ export async function GET(request: NextRequest) {
           }
         } else {
           const dateObj = new Date(reservationDateStr);
-          hour = dateObj.getHours();
-          minute = dateObj.getMinutes();
+          // UTC時間として取得してJSTに変換
+          hour = (dateObj.getUTCHours() + 9) % 24;
+          minute = dateObj.getUTCMinutes();
         }
       } else {
-        const dateObj = new Date(reservationDateStr);
-        hour = dateObj.getHours();
-        minute = dateObj.getMinutes();
+        // Dateオブジェクトの場合（PostgreSQLから返される場合）
+        const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+        // UTC時間として取得してJSTに変換
+        hour = (dateObj.getUTCHours() + 9) % 24;
+        minute = dateObj.getUTCMinutes();
       }
       
       const endTimeInMinutes = hour * 60 + minute + reservationDuration;
