@@ -169,7 +169,7 @@ export async function GET(request: NextRequest) {
       // 既存予約の終了時間も考慮（既存予約の終了時間の方が遅い場合はそれを使用）
       result.rows.forEach((row: any) => {
         const reservationDateStr = row.reservation_date;
-        const reservationDuration = row.duration || 60;
+        const reservationDuration = parseInt(row.duration) || 60;
         
         // 文字列から直接時間を抽出
         let reservationHour: number;
@@ -236,7 +236,7 @@ export async function GET(request: NextRequest) {
         result.rows.forEach((row: any) => {
           // データベースから取得した日時から直接時間を抽出（タイムゾーンの影響を回避）
           const reservationDateStr = row.reservation_date;
-          const reservationDuration = row.duration || 60;
+          const reservationDuration = parseInt(row.duration) || 60;
           
           // 文字列から直接時間を抽出（YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式）
           let reservationHour: number;
@@ -300,7 +300,7 @@ export async function GET(request: NextRequest) {
         result.rows.forEach((row: any) => {
           // データベースから取得した日時から直接時間を抽出（タイムゾーンの影響を回避）
           const reservationDateStr = row.reservation_date;
-          const reservationDuration = row.duration || 60;
+          const reservationDuration = parseInt(row.duration) || 60;
           
           // 文字列から直接時間を抽出（YYYY-MM-DD HH:mm:ss または YYYY-MM-DDTHH:mm:ss 形式）
           let reservationHour: number;
@@ -373,7 +373,7 @@ export async function GET(request: NextRequest) {
     // デバッグログ（問題特定のため本番環境でも出力）
     const existingReservationsDebug = result.rows.map((row: any) => {
       const reservationDateStr = row.reservation_date;
-      const reservationDuration = row.duration || 60;
+      const reservationDuration = parseInt(row.duration) || 60;
       
       // 文字列から直接時間を抽出
       let hour: number;
@@ -403,7 +403,9 @@ export async function GET(request: NextRequest) {
         minute = dateObj.getUTCMinutes();
       }
       
-      const endTimeInMinutes = hour * 60 + minute + reservationDuration;
+      // 数値として確実に扱う
+      const durationNum = typeof reservationDuration === 'number' ? reservationDuration : parseInt(String(reservationDuration)) || 60;
+      const endTimeInMinutes = hour * 60 + minute + durationNum;
       const endHour = Math.floor(endTimeInMinutes / 60);
       const endMinute = endTimeInMinutes % 60;
       
@@ -411,7 +413,7 @@ export async function GET(request: NextRequest) {
         reservation_date: reservationDateStr,
         parsed_hour: hour,
         parsed_minute: minute,
-        duration: reservationDuration,
+        duration: String(durationNum),
         start_time: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
         end_time: `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`
       };
