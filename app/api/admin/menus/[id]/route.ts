@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { query, getPool } from '@/lib/db';
 import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -76,6 +76,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const pool = getPool();
+  const client = await pool.connect();
+  
   try {
     const session = await getAuthFromRequest(request);
     if (!session) {
@@ -94,36 +97,64 @@ export async function DELETE(
     }
     const menuId = parseInt(params.id);
 
-    // 予約に使用されているメニューは削除できない（is_activeをfalseにする）
-    const reservationCheck = await query(
-      `SELECT COUNT(*) as count 
-       FROM reservations 
-       WHERE menu_id = $1 AND tenant_id = $2 AND status != 'cancelled'`,
-      [menuId, tenantId]
-    );
+    // トランザクション開始
+    await client.query('BEGIN');
 
-    if (parseInt(reservationCheck.rows[0].count) > 0) {
-      // 予約がある場合は無効化のみ
-      await query(
-        `UPDATE menus SET is_active = false 
+    // reservation_menusテーブルから該当メニューのレコードを削除（テーブルが存在する場合）
+    try {
+      const deleteReservationMenusResult = await client.query(
+        `DELETE FROM reservation_menus 
          WHERE menu_id = $1 AND tenant_id = $2`,
         [menuId, tenantId]
       );
-      return NextResponse.json({ message: 'メニューを無効化しました' });
-    } else {
-      // 予約がない場合は削除
-      await query(
-        `DELETE FROM menus WHERE menu_id = $1 AND tenant_id = $2`,
-        [menuId, tenantId]
-      );
-      return NextResponse.json({ message: 'メニューを削除しました' });
+      console.log(`メニューID ${menuId} のreservation_menus ${deleteReservationMenusResult.rowCount} 件を削除しました`);
+    } catch (error: any) {
+      // reservation_menusテーブルが存在しない場合はスキップ
+      if (error.message && error.message.includes('reservation_menus')) {
+        console.log('reservation_menusテーブルが存在しないため、スキップします');
+      } else {
+        throw error;
+      }
     }
+
+    // reservationsテーブルのmenu_idをNULLに更新（該当メニューが設定されている場合）
+    const updateReservationsResult = await client.query(
+      `UPDATE reservations 
+       SET menu_id = NULL
+       WHERE menu_id = $1 AND tenant_id = $2`,
+      [menuId, tenantId]
+    );
+    console.log(`メニューID ${menuId} の予約 ${updateReservationsResult.rowCount} 件のmenu_idをNULLに更新しました`);
+
+    // メニューを削除
+    const deleteResult = await client.query(
+      `DELETE FROM menus WHERE menu_id = $1 AND tenant_id = $2`,
+      [menuId, tenantId]
+    );
+
+    if (deleteResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'メニューが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return NextResponse.json({ 
+      message: 'メニューを削除しました',
+      updatedReservations: updateReservationsResult.rowCount 
+    });
   } catch (error: any) {
+    await client.query('ROLLBACK');
     console.error('Error deleting menu:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }
 
