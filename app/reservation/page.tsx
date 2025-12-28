@@ -78,10 +78,10 @@ function ReservationPageContent() {
   };
 
   useEffect(() => {
-    if (selectedMenus.length > 0 && selectedDate) {
+    if (selectedMenus.length > 0 && selectedDate && selectedStaff !== undefined) {
       loadAvailableSlots();
     }
-  }, [selectedMenus, selectedDate]);
+  }, [selectedMenus, selectedDate, selectedStaff]);
 
   const loadMenus = async () => {
     try {
@@ -111,12 +111,16 @@ function ReservationPageContent() {
     if (selectedMenus.length === 0 || !selectedDate) return;
     
     try {
-      // 最長のメニュー時間を使用して空き時間を取得
-      const maxDuration = Math.max(...selectedMenus.map(m => m.duration));
-      const longestMenu = selectedMenus.find(m => m.duration === maxDuration);
+      // 複数メニューの合計時間を計算
+      const totalDuration = selectedMenus.reduce((sum, m) => sum + m.duration, 0);
+      // 複数メニューIDをカンマ区切りで渡す
+      const menuIds = selectedMenus.map(m => m.menu_id).join(',');
+      
+      // staff_idパラメータを追加（スタッフが選択されている場合）
+      const staffParam = selectedStaff ? `&staff_id=${selectedStaff.staff_id}` : '';
       
       const response = await fetch(
-        `/api/reservations/available-slots?tenant=${tenantCode}&date=${selectedDate}&menu_id=${longestMenu?.menu_id}&duration=${maxDuration}`
+        `/api/reservations/available-slots?tenant=${tenantCode}&date=${selectedDate}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`
       );
       const data = await response.json();
       setAvailableSlots(data);

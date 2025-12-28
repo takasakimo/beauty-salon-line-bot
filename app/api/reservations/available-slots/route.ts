@@ -69,17 +69,49 @@ export async function GET(request: NextRequest) {
       slots.push(`${hour.toString().padStart(2, '0')}:30`);
     }
 
+    // 現在時刻を取得（サーバーのタイムゾーンを使用）
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    
+    // 選択された日付が今日の場合、現在時刻より前の時間を除外
+    if (date === today) {
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTimeInMinutes = currentHour * 60 + currentMinute;
+      
+      // 現在時刻より前のスロットを除外（作業時間を考慮して、現在時刻 + 作業時間より前のスロットも除外）
+      // 例：現在が14:00で作業時間が60分の場合、15:00以降のスロットのみ表示
+      const minStartTime = currentTimeInMinutes + duration; // 作業時間を加味
+      
+      const filteredSlots = slots.filter(slot => {
+        const [hour, minute] = slot.split(':').map(Number);
+        const slotTimeInMinutes = hour * 60 + minute;
+        return slotTimeInMinutes >= minStartTime;
+      });
+      
+      // スロットを更新
+      slots.length = 0;
+      slots.push(...filteredSlots);
+    }
+
     // 予約済みスロットを取得
     // スタッフが指定されている場合は、そのスタッフの予約のみをチェック
     let queryText = '';
     let queryParams: any[] = [];
     
     if (staffId) {
-      // スタッフ指定の場合：そのスタッフの予約と、メニューの所要時間を考慮
+      // スタッフ指定の場合：そのスタッフの予約と、メニューの所要時間を考慮（複数メニュー対応）
       queryText = `
         SELECT 
           r.reservation_date,
-          m.duration
+          COALESCE(
+            (SELECT SUM(m2.duration) 
+             FROM reservation_menus rm2
+             JOIN menus m2 ON rm2.menu_id = m2.menu_id
+             WHERE rm2.reservation_id = r.reservation_id),
+            m.duration,
+            60
+          ) as duration
         FROM reservations r
         LEFT JOIN menus m ON r.menu_id = m.menu_id
         WHERE DATE(r.reservation_date) = $1
@@ -89,11 +121,18 @@ export async function GET(request: NextRequest) {
       `;
       queryParams = [date, tenantId, staffId];
     } else {
-      // スタッフ未指定の場合：全予約をチェック（メニューの所要時間も取得）
+      // スタッフ未指定の場合：全予約をチェック（メニューの所要時間も取得、複数メニュー対応）
       queryText = `
         SELECT 
           r.reservation_date,
-          m.duration
+          COALESCE(
+            (SELECT SUM(m2.duration) 
+             FROM reservation_menus rm2
+             JOIN menus m2 ON rm2.menu_id = m2.menu_id
+             WHERE rm2.reservation_id = r.reservation_id),
+            m.duration,
+            60
+          ) as duration
         FROM reservations r
         LEFT JOIN menus m ON r.menu_id = m.menu_id
         WHERE DATE(r.reservation_date) = $1
