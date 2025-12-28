@@ -206,7 +206,7 @@ function ReservationPageContent() {
   // 日付選択用の日付リスト（今日から7日後まで）
   const getDateOptions = () => {
     const dates = [];
-    for (let i = 1; i <= 7; i++) {
+    for (let i = 0; i <= 6; i++) {
       const date = new Date();
       date.setDate(date.getDate() + i);
       dates.push(date.toISOString().split('T')[0]);
