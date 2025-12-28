@@ -21,14 +21,15 @@ function ReservationPageContent() {
   const router = useRouter();
   const tenantCode = searchParams.get('tenant') || 'beauty-salon-001';
 
-  const [step, setStep] = useState<'menu' | 'staff' | 'date' | 'time' | 'confirm' | 'complete'>('menu');
+  const [step, setStep] = useState<'menu' | 'staff' | 'datetime' | 'confirm' | 'complete'>('menu');
   const [menus, setMenus] = useState<Menu[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [selectedMenus, setSelectedMenus] = useState<Menu[]>([]);
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [availableSlotsByDate, setAvailableSlotsByDate] = useState<Record<string, string[]>>({});
   const [selectedTime, setSelectedTime] = useState<string>('');
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
@@ -78,10 +79,10 @@ function ReservationPageContent() {
   };
 
   useEffect(() => {
-    if (selectedMenus.length > 0 && selectedDate && selectedStaff !== undefined) {
-      loadAvailableSlots();
+    if (selectedMenus.length > 0 && selectedStaff !== undefined) {
+      loadAvailableSlotsForAllDates();
     }
-  }, [selectedMenus, selectedDate, selectedStaff]);
+  }, [selectedMenus, selectedStaff]);
 
   const loadMenus = async () => {
     try {
@@ -107,9 +108,10 @@ function ReservationPageContent() {
     }
   };
 
-  const loadAvailableSlots = async () => {
-    if (selectedMenus.length === 0 || !selectedDate) return;
+  const loadAvailableSlotsForAllDates = async () => {
+    if (selectedMenus.length === 0) return;
     
+    setLoadingSlots(true);
     try {
       // 複数メニューの合計時間を計算
       const totalDuration = selectedMenus.reduce((sum, m) => sum + m.duration, 0);
@@ -119,13 +121,32 @@ function ReservationPageContent() {
       // staff_idパラメータを追加（スタッフが選択されている場合）
       const staffParam = selectedStaff ? `&staff_id=${selectedStaff.staff_id}` : '';
       
-      const response = await fetch(
-        `/api/reservations/available-slots?tenant=${tenantCode}&date=${selectedDate}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`
+      // すべての日付の空き時間を取得
+      const dates = getDateOptions();
+      const slotsByDate: Record<string, string[]> = {};
+      
+      await Promise.all(
+        dates.map(async (date) => {
+          try {
+            const response = await fetch(
+              `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`
+            );
+            if (response.ok) {
+              const data = await response.json();
+              slotsByDate[date] = data;
+            }
+          } catch (error) {
+            console.error(`空き時間取得エラー (${date}):`, error);
+            slotsByDate[date] = [];
+          }
+        })
       );
-      const data = await response.json();
-      setAvailableSlots(data);
+      
+      setAvailableSlotsByDate(slotsByDate);
     } catch (error) {
       console.error('空き時間取得エラー:', error);
+    } finally {
+      setLoadingSlots(false);
     }
   };
 
@@ -150,15 +171,11 @@ function ReservationPageContent() {
 
   const handleStaffSelect = (staffMember: Staff | null) => {
     setSelectedStaff(staffMember);
-    setStep('date');
+    setStep('datetime');
   };
 
-  const handleDateSelect = (date: string) => {
+  const handleDateTimeSelect = (date: string, time: string) => {
     setSelectedDate(date);
-    setStep('time');
-  };
-
-  const handleTimeSelect = (time: string) => {
     setSelectedTime(time);
     setStep('confirm');
   };
@@ -350,64 +367,104 @@ function ReservationPageContent() {
             </div>
           )}
 
-          {step === 'date' && (
+          {step === 'datetime' && (
             <div>
-              <h2 className="text-xl font-semibold mb-6 text-gray-800">日付を選択</h2>
-              <div className="grid grid-cols-2 gap-4">
-                {getDateOptions().map((date) => {
-                  const dateObj = new Date(date);
-                  const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-                  return (
-                    <button
-                      key={date}
-                      onClick={() => handleDateSelect(date)}
-                      className="p-4 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all shadow-sm hover:shadow-md"
-                    >
-                      {dateObj.getMonth() + 1}/{dateObj.getDate()}({dayName})
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={() => setStep('staff')}
-                className="mt-4 text-gray-600 hover:text-gray-900 transition-colors flex items-center"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                戻る
-              </button>
-            </div>
-          )}
-
-          {step === 'time' && (
-            <div>
-              <h2 className="text-xl font-semibold mb-6 text-gray-800">時間を選択</h2>
-              <div className="grid grid-cols-3 gap-4">
-                {availableSlots.map((slot) => (
-                  <button
-                    key={slot}
-                    onClick={() => handleTimeSelect(slot)}
-                    className="p-4 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 transition-all shadow-sm hover:shadow-md"
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-              {availableSlots.length === 0 && (
-                <p className="text-gray-600 text-center py-8">
-                  この日の空き時間がありません
-                </p>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">日時を選択</h2>
+              
+              {loadingSlots ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">空き時間を取得中...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300 text-sm">
+                    <thead>
+                      <tr>
+                        <th className="border border-gray-300 bg-gray-50 p-2 text-left font-semibold">時間</th>
+                        {getDateOptions().map((date) => {
+                          const dateObj = new Date(date);
+                          const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+                          const isHoliday = dayName === '日' || dayName === '土';
+                          const isNewYear = dateObj.getMonth() === 0 && dateObj.getDate() <= 3;
+                          return (
+                            <th
+                              key={date}
+                              className={`border border-gray-300 bg-gray-50 p-2 text-center font-semibold ${
+                                isHoliday || isNewYear ? 'text-red-600' : ''
+                              }`}
+                            >
+                              <div>{dateObj.getMonth() + 1}/{dateObj.getDate()}</div>
+                              <div className="text-xs">({dayName}{isNewYear ? '祝' : ''})</div>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        // 時間スロットを生成（9:00から19:00まで30分間隔）
+                        const timeSlots: string[] = [];
+                        for (let hour = 9; hour < 19; hour++) {
+                          timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
+                          timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
+                        }
+                        
+                        return timeSlots.map((time) => (
+                          <tr key={time}>
+                            <td className="border border-gray-300 bg-gray-50 p-2 text-center font-medium">
+                              {time}
+                            </td>
+                            {getDateOptions().map((date) => {
+                              const availableSlots = availableSlotsByDate[date] || [];
+                              const isAvailable = availableSlots.includes(time);
+                              const isSelected = selectedDate === date && selectedTime === time;
+                              
+                              return (
+                                <td
+                                  key={`${date}-${time}`}
+                                  className={`border border-gray-300 p-2 text-center ${
+                                    isSelected
+                                      ? 'bg-pink-200'
+                                      : isAvailable
+                                      ? 'bg-white cursor-pointer hover:bg-pink-50'
+                                      : 'bg-gray-100'
+                                  }`}
+                                  onClick={() => {
+                                    if (isAvailable) {
+                                      handleDateTimeSelect(date, time);
+                                    }
+                                  }}
+                                >
+                                  {isAvailable ? (
+                                    <span className="text-red-600 text-lg">◎</span>
+                                  ) : (
+                                    <span className="text-gray-400">×</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
               )}
-              <button
-                onClick={() => setStep('date')}
-                className="mt-4 text-gray-600 hover:text-gray-900 transition-colors flex items-center"
-              >
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                戻る
-              </button>
+              
+              <div className="mt-4 flex items-center justify-between">
+                <button
+                  onClick={() => setStep('staff')}
+                  className="text-gray-600 hover:text-gray-900 transition-colors flex items-center"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  戻る
+                </button>
+                <div className="text-xs text-gray-600">
+                  <span className="text-red-600">◎</span> 予約可能 / <span className="text-gray-400">×</span> 予約不可
+                </div>
+              </div>
             </div>
           )}
 
@@ -464,7 +521,7 @@ function ReservationPageContent() {
 
               <div className="flex gap-4">
                 <button
-                  onClick={() => setStep('time')}
+                  onClick={() => setStep('datetime')}
                   className="flex-1 px-6 py-3 border-2 border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all"
                 >
                   戻る
