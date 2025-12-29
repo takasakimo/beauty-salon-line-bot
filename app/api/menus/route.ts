@@ -17,18 +17,7 @@ export async function GET(request: NextRequest) {
     const staffId = searchParams.get('staff_id');
 
     let queryText = `
-      SELECT m.menu_id, m.name, m.price, m.duration, m.description,
-             CASE 
-               WHEN m.name LIKE '%カット%' AND m.name LIKE '%カラー%' THEN 'set'
-               WHEN m.name LIKE '%カット%' AND m.name LIKE '%パーマ%' THEN 'set'
-               WHEN m.name LIKE '%フルコース%' THEN 'special'
-               WHEN m.name LIKE '%カット%' THEN 'cut'
-               WHEN m.name LIKE '%カラー%' THEN 'color'
-               WHEN m.name LIKE '%パーマ%' THEN 'perm'
-               WHEN m.name LIKE '%トリートメント%' THEN 'treatment'
-               WHEN m.name LIKE '%ヘッドスパ%' THEN 'spa'
-               ELSE 'other'
-             END as category
+      SELECT m.menu_id, m.name, m.price, m.duration, m.description, m.category
       FROM menus m
       WHERE m.tenant_id = $1 AND m.is_active = true
     `;

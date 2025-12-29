@@ -39,6 +39,7 @@ function ReservationPageContent() {
   const [loading, setLoading] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [customer, setCustomer] = useState<any>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
 
   useEffect(() => {
     checkAuth();
@@ -96,8 +97,16 @@ function ReservationPageContent() {
     }
   };
 
+  // カテゴリーでフィルタリングされたメニュー
+  const filteredMenus = selectedCategory
+    ? menus.filter(menu => {
+        const category = menu.category || 'カテゴリなし';
+        return category === selectedCategory;
+      })
+    : menus;
+
   // メニューをカテゴリごとにグループ化
-  const groupedMenus = menus.reduce((acc, menu) => {
+  const groupedMenus = filteredMenus.reduce((acc, menu) => {
     const category = menu.category || 'カテゴリなし';
     if (!acc[category]) {
       acc[category] = [];
@@ -108,6 +117,15 @@ function ReservationPageContent() {
 
   // カテゴリをソート（カテゴリなしを最後に）
   const sortedCategories = Object.keys(groupedMenus).sort((a, b) => {
+    if (a === 'カテゴリなし') return 1;
+    if (b === 'カテゴリなし') return -1;
+    return a.localeCompare(b);
+  });
+
+  // 利用可能なカテゴリー一覧（重複を除去）
+  const availableCategories = Array.from(
+    new Set(menus.map(menu => menu.category || 'カテゴリなし').filter(Boolean))
+  ).sort((a, b) => {
     if (a === 'カテゴリなし') return 1;
     if (b === 'カテゴリなし') return -1;
     return a.localeCompare(b);
@@ -268,9 +286,42 @@ function ReservationPageContent() {
               <p className="text-sm text-gray-600 mb-4">
                 複数のメニューを選択できます
               </p>
+              
+              {/* カテゴリー検索プルダウン */}
+              {availableCategories.length > 0 && (
+                <div className="mb-6">
+                  <label htmlFor="category-filter" className="block text-sm font-medium text-gray-700 mb-2">
+                    カテゴリーで絞り込み
+                  </label>
+                  <select
+                    id="category-filter"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500 bg-white"
+                  >
+                    <option value="">すべてのカテゴリー</option>
+                    {availableCategories.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {menus.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-gray-600">メニューが登録されていません</p>
+                </div>
+              ) : filteredMenus.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">選択したカテゴリーにメニューがありません</p>
+                  <button
+                    onClick={() => setSelectedCategory('')}
+                    className="mt-4 text-pink-600 hover:text-pink-700 underline"
+                  >
+                    すべてのカテゴリーを表示
+                  </button>
                 </div>
               ) : (
                 <>
