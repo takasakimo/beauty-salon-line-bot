@@ -9,6 +9,7 @@ interface Menu {
   price: number;
   duration: number;
   category?: string;
+  is_active?: boolean;
 }
 
 interface Staff {
@@ -88,11 +89,29 @@ function ReservationPageContent() {
     try {
       const response = await fetch(`/api/menus?tenant=${tenantCode}`);
       const data = await response.json();
-      setMenus(data);
+      // 有効なメニューのみをフィルタリング（is_activeがfalseでないもの）
+      setMenus(data.filter((menu: Menu) => menu.is_active !== false));
     } catch (error) {
       console.error('メニュー取得エラー:', error);
     }
   };
+
+  // メニューをカテゴリごとにグループ化
+  const groupedMenus = menus.reduce((acc, menu) => {
+    const category = menu.category || 'カテゴリなし';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(menu);
+    return acc;
+  }, {} as Record<string, Menu[]>);
+
+  // カテゴリをソート（カテゴリなしを最後に）
+  const sortedCategories = Object.keys(groupedMenus).sort((a, b) => {
+    if (a === 'カテゴリなし') return 1;
+    if (b === 'カテゴリなし') return -1;
+    return a.localeCompare(b);
+  });
 
   const loadStaff = async () => {
     try {
@@ -128,11 +147,11 @@ function ReservationPageContent() {
       await Promise.all(
         dates.map(async (date) => {
           try {
-            const response = await fetch(
+      const response = await fetch(
               `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`
-            );
+      );
             if (response.ok) {
-              const data = await response.json();
+      const data = await response.json();
               slotsByDate[date] = data;
             }
           } catch (error) {
@@ -255,33 +274,47 @@ function ReservationPageContent() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-1 gap-3 mb-6">
-                    {menus.map((menu) => {
-                      const isSelected = selectedMenus.some(m => m.menu_id === menu.menu_id);
-                      return (
-                        <label
-                          key={menu.menu_id}
-                          className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-pink-500 bg-pink-50 shadow-md'
-                              : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleMenuToggle(menu)}
-                            className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded mr-4 flex-shrink-0"
-                          />
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-gray-900">{menu.name}</h3>
-                            <p className="text-gray-600 text-sm">
-                              ¥{menu.price.toLocaleString()} / {menu.duration}分
-                            </p>
-                          </div>
-                        </label>
-                      );
-                    })}
+                  <div className="space-y-6 mb-6">
+                    {sortedCategories.map((category) => (
+                      <div key={category} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="bg-pink-100 px-4 py-2 border-b border-gray-200">
+                          <h3 className="text-md font-semibold text-gray-800">
+                            {category}
+                            <span className="ml-2 text-sm font-normal text-gray-600">
+                              ({groupedMenus[category].length}件)
+                            </span>
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 p-4">
+                          {groupedMenus[category].map((menu) => {
+                            const isSelected = selectedMenus.some(m => m.menu_id === menu.menu_id);
+                            return (
+                              <label
+                                key={menu.menu_id}
+                                className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                                  isSelected
+                                    ? 'border-pink-500 bg-pink-50 shadow-md'
+                                    : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleMenuToggle(menu)}
+                                  className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded mr-4 flex-shrink-0"
+                                />
+                                <div className="flex-1">
+                                  <h3 className="text-lg font-semibold text-gray-900">{menu.name}</h3>
+                                  <p className="text-gray-600 text-sm">
+                                    ¥{menu.price.toLocaleString()} / {menu.duration}分
+                                  </p>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                   {selectedMenus.length > 0 && (
                     <div className="bg-pink-50 border-2 border-pink-200 rounded-lg p-4 mb-4">
@@ -381,14 +414,14 @@ function ReservationPageContent() {
                     <thead>
                       <tr>
                         <th className="border border-gray-300 bg-gray-50 p-2 text-left font-semibold">時間</th>
-                        {getDateOptions().map((date) => {
-                          const dateObj = new Date(date);
-                          const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+                {getDateOptions().map((date) => {
+                  const dateObj = new Date(date);
+                  const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
                           const isHoliday = dayName === '日' || dayName === '土';
                           const isNewYear = dateObj.getMonth() === 0 && dateObj.getDate() <= 3;
-                          return (
+                  return (
                             <th
-                              key={date}
+                      key={date}
                               className={`border border-gray-300 bg-gray-50 p-2 text-center font-semibold ${
                                 isHoliday || isNewYear ? 'text-red-600' : ''
                               }`}
@@ -434,36 +467,36 @@ function ReservationPageContent() {
                                       handleDateTimeSelect(date, time);
                                     }
                                   }}
-                                >
+                    >
                                   {isAvailable ? (
                                     <span className="text-red-600 text-lg">◎</span>
                                   ) : (
                                     <span className="text-gray-400">×</span>
                                   )}
                                 </td>
-                              );
-                            })}
+                  );
+                })}
                           </tr>
                         ));
                       })()}
                     </tbody>
                   </table>
-                </div>
+              </div>
               )}
               
               <div className="mt-4 flex items-center justify-between">
-                <button
-                  onClick={() => setStep('staff')}
+              <button
+                onClick={() => setStep('staff')}
                   className="text-gray-600 hover:text-gray-900 transition-colors flex items-center"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                  戻る
-                </button>
+              >
+                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                戻る
+              </button>
                 <div className="text-xs text-gray-600">
                   <span className="text-red-600">◎</span> 予約可能 / <span className="text-gray-400">×</span> 予約不可
-                </div>
+            </div>
               </div>
             </div>
           )}
