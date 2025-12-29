@@ -347,11 +347,11 @@ export default function MenuManagement() {
     return acc;
   }, {} as Record<string, Menu[]>);
 
-  // カテゴリをソート（その他とカテゴリなしを最後に）
+  // カテゴリをソート（その他系とカテゴリなしを最後に）
   const sortedCategories = Object.keys(groupedMenus).sort((a, b) => {
-    // 「その他」を最後に
-    if (a === 'その他') return 1;
-    if (b === 'その他') return -1;
+    // 「その他」で始まるカテゴリを最後に
+    if (a.startsWith('その他')) return 1;
+    if (b.startsWith('その他')) return -1;
     // 「カテゴリなし」を「その他」の前（最後から2番目）に
     if (a === 'カテゴリなし') return 1;
     if (b === 'カテゴリなし') return -1;
