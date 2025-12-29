@@ -349,14 +349,13 @@ export default function MenuManagement() {
 
   // カテゴリをソート（その他とカテゴリなしを最後に）
   const sortedCategories = Object.keys(groupedMenus).sort((a, b) => {
-    // 「その他」と「カテゴリなし」を最後に配置
-    if (a === 'その他' && b !== 'その他' && b !== 'カテゴリなし') return 1;
-    if (b === 'その他' && a !== 'その他' && a !== 'カテゴリなし') return -1;
+    // 「その他」を最後に
+    if (a === 'その他') return 1;
+    if (b === 'その他') return -1;
+    // 「カテゴリなし」を「その他」の前（最後から2番目）に
     if (a === 'カテゴリなし') return 1;
     if (b === 'カテゴリなし') return -1;
-    // 「その他」と「カテゴリなし」の順序（その他が先）
-    if (a === 'その他' && b === 'カテゴリなし') return -1;
-    if (a === 'カテゴリなし' && b === 'その他') return 1;
+    // その他のカテゴリはアルファベット順
     return a.localeCompare(b);
   });
 
