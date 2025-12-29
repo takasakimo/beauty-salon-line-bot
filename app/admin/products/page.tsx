@@ -76,6 +76,29 @@ export default function ProductManagement() {
     notes: ''
   });
   const [saleError, setSaleError] = useState('');
+  const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+  const [showBulkSaleModal, setShowBulkSaleModal] = useState(false);
+  const [bulkSaleFormData, setBulkSaleFormData] = useState<{
+    customer_id: string;
+    staff_id: string;
+    purchase_date: string;
+    purchase_time: string;
+    notes: string;
+    products: Array<{
+      product_id: number;
+      product_name: string;
+      quantity: string;
+      unit_price: string;
+    }>;
+  }>({
+    customer_id: '',
+    staff_id: '',
+    purchase_date: '',
+    purchase_time: '',
+    notes: '',
+    products: []
+  });
+  const [bulkSaleError, setBulkSaleError] = useState('');
 
   useEffect(() => {
     loadProducts();
@@ -480,6 +503,140 @@ export default function ProductManagement() {
     }
   };
 
+  const handleProductToggle = (productId: number) => {
+    setSelectedProducts(prev => 
+      prev.includes(productId)
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    const activeProducts = products.filter(p => p.is_active);
+    if (selectedProducts.length === activeProducts.length) {
+      setSelectedProducts([]);
+    } else {
+      setSelectedProducts(activeProducts.map(p => p.product_id));
+    }
+  };
+
+  const handleOpenBulkSaleModal = () => {
+    if (selectedProducts.length === 0) {
+      alert('販売する商品を選択してください');
+      return;
+    }
+
+    const now = new Date();
+    const selectedProductsData = products
+      .filter(p => selectedProducts.includes(p.product_id))
+      .map(p => ({
+        product_id: p.product_id,
+        product_name: p.product_name,
+        quantity: '1',
+        unit_price: p.unit_price.toString()
+      }));
+
+    setBulkSaleFormData({
+      customer_id: '',
+      staff_id: '',
+      purchase_date: now.toISOString().split('T')[0],
+      purchase_time: now.toTimeString().slice(0, 5),
+      notes: '',
+      products: selectedProductsData
+    });
+    setBulkSaleError('');
+    setShowBulkSaleModal(true);
+  };
+
+  const handleCloseBulkSaleModal = () => {
+    setShowBulkSaleModal(false);
+    setBulkSaleFormData({
+      customer_id: '',
+      staff_id: '',
+      purchase_date: '',
+      purchase_time: '',
+      notes: '',
+      products: []
+    });
+    setBulkSaleError('');
+    setSelectedProducts([]);
+  };
+
+  const handleBulkSaleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkSaleError('');
+
+    if (!bulkSaleFormData.customer_id) {
+      setBulkSaleError('顧客を選択してください');
+      return;
+    }
+
+    // 各商品の数量と価格をチェック
+    for (const product of bulkSaleFormData.products) {
+      if (!product.quantity || parseInt(product.quantity) <= 0) {
+        setBulkSaleError(`${product.product_name}の数量を正しく入力してください`);
+        return;
+      }
+      if (!product.unit_price || parseFloat(product.unit_price) < 0) {
+        setBulkSaleError(`${product.product_name}の価格を正しく入力してください`);
+        return;
+      }
+    }
+
+    try {
+      const purchaseDateTime = new Date(`${bulkSaleFormData.purchase_date}T${bulkSaleFormData.purchase_time}`);
+      
+      // 各商品を順番に販売登録
+      const promises = bulkSaleFormData.products.map(product => {
+        const quantity = parseInt(product.quantity);
+        const unitPrice = parseFloat(product.unit_price);
+        const totalPrice = quantity * unitPrice;
+        const productData = products.find(p => p.product_id === product.product_id);
+
+        return fetch(getApiUrlWithTenantId('/api/admin/product-purchases'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            customer_id: parseInt(bulkSaleFormData.customer_id),
+            product_id: product.product_id,
+            product_name: product.product_name,
+            product_category: productData?.product_category || null,
+            quantity: quantity,
+            unit_price: unitPrice,
+            total_price: totalPrice,
+            purchase_date: purchaseDateTime.toISOString(),
+            staff_id: bulkSaleFormData.staff_id ? parseInt(bulkSaleFormData.staff_id) : null,
+            notes: bulkSaleFormData.notes || null
+          }),
+        });
+      });
+
+      const responses = await Promise.all(promises);
+      const errors = [];
+      
+      for (let i = 0; i < responses.length; i++) {
+        if (!responses[i].ok) {
+          const errorData = await responses[i].json();
+          errors.push(`${bulkSaleFormData.products[i].product_name}: ${errorData.error || '販売に失敗しました'}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        setBulkSaleError(errors.join('\n'));
+      } else {
+        alert(`${bulkSaleFormData.products.length}件の商品を販売しました`);
+        handleCloseBulkSaleModal();
+        loadProducts(); // 在庫数を更新するため
+      }
+    } catch (error) {
+      console.error('一括商品販売エラー:', error);
+      setBulkSaleError('販売に失敗しました');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -577,6 +734,15 @@ export default function ProductManagement() {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">商品管理</h2>
             <div className="flex space-x-3">
+              {selectedProducts.length > 0 && (
+                <button
+                  onClick={handleOpenBulkSaleModal}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
+                  <ShoppingBagIcon className="h-5 w-5 mr-2" />
+                  販売登録 ({selectedProducts.length})
+                </button>
+              )}
               <button
                 onClick={() => handleOpenCategoryModal()}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
@@ -675,10 +841,36 @@ export default function ProductManagement() {
                     商品が登録されていません
                   </li>
                 ) : (
-                  products.map((product) => (
-                    <li key={product.product_id} className="px-6 py-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
+                  <>
+                    {products.length > 0 && (
+                      <li className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                        <label className="flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedProducts.length === products.filter(p => p.is_active).length && products.filter(p => p.is_active).length > 0}
+                            onChange={handleSelectAll}
+                            className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">すべて選択</span>
+                          <span className="ml-2 text-sm text-gray-500">
+                            ({selectedProducts.length}件選択中)
+                          </span>
+                        </label>
+                      </li>
+                    )}
+                    {products.map((product) => (
+                      <li key={product.product_id} className="px-6 py-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3 flex-1">
+                            {product.is_active && (
+                              <input
+                                type="checkbox"
+                                checked={selectedProducts.includes(product.product_id)}
+                                onChange={() => handleProductToggle(product.product_id)}
+                                className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                              />
+                            )}
+                            <div className="flex-1">
                           <div className="flex items-center">
                             <h3 className="text-lg font-medium text-gray-900">
                               {product.product_name}
@@ -689,23 +881,24 @@ export default function ProductManagement() {
                               </span>
                             )}
                           </div>
-                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
-                            {product.product_category && (
-                              <div>カテゴリ: {product.product_category}</div>
-                            )}
-                            {product.manufacturer && (
-                              <div>メーカー: {product.manufacturer}</div>
-                            )}
-                            {product.jan_code && (
-                              <div>JANコード: {product.jan_code}</div>
-                            )}
-                            <div>単価: ¥{product.unit_price.toLocaleString()}</div>
-                            <div>在庫数: {product.stock_quantity || 0}個</div>
-                            {product.description && (
-                              <div className="md:col-span-2">説明: {product.description}</div>
-                            )}
+                              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
+                                {product.product_category && (
+                                  <div>カテゴリ: {product.product_category}</div>
+                                )}
+                                {product.manufacturer && (
+                                  <div>メーカー: {product.manufacturer}</div>
+                                )}
+                                {product.jan_code && (
+                                  <div>JANコード: {product.jan_code}</div>
+                                )}
+                                <div>単価: ¥{product.unit_price.toLocaleString()}</div>
+                                <div>在庫数: {product.stock_quantity || 0}個</div>
+                                {product.description && (
+                                  <div className="md:col-span-2">説明: {product.description}</div>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        </div>
                         <div className="flex items-center space-x-2">
                           <button
                             onClick={() => handleOpenSaleModal(product)}
@@ -967,6 +1160,227 @@ export default function ProductManagement() {
                       className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                     >
                       {editingCategory ? '更新' : '追加'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 一括販売モーダル */}
+      {showBulkSaleModal && (
+        <div className="fixed z-20 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseBulkSaleModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    商品を一括販売 ({bulkSaleFormData.products.length}件)
+                  </h3>
+                  <button
+                    onClick={handleCloseBulkSaleModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                {bulkSaleError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded whitespace-pre-line">
+                    {bulkSaleError}
+                  </div>
+                )}
+
+                <form onSubmit={handleBulkSaleSubmit}>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="bulk_customer_id" className="block text-sm font-medium text-gray-700">
+                          顧客 <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          id="bulk_customer_id"
+                          required
+                          value={bulkSaleFormData.customer_id}
+                          onChange={(e) => setBulkSaleFormData({ ...bulkSaleFormData, customer_id: e.target.value })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        >
+                          <option value="">選択してください</option>
+                          {customers.map((customer) => (
+                            <option key={customer.customer_id} value={customer.customer_id}>
+                              {customer.real_name || customer.email || customer.phone_number}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label htmlFor="bulk_staff_id" className="block text-sm font-medium text-gray-700">
+                          担当スタッフ
+                        </label>
+                        <select
+                          id="bulk_staff_id"
+                          value={bulkSaleFormData.staff_id}
+                          onChange={(e) => setBulkSaleFormData({ ...bulkSaleFormData, staff_id: e.target.value })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        >
+                          <option value="">選択してください</option>
+                          {staffList.map((staff) => (
+                            <option key={staff.staff_id} value={staff.staff_id}>
+                              {staff.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="bulk_purchase_date" className="block text-sm font-medium text-gray-700">
+                          販売日 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          id="bulk_purchase_date"
+                          required
+                          value={bulkSaleFormData.purchase_date}
+                          onChange={(e) => setBulkSaleFormData({ ...bulkSaleFormData, purchase_date: e.target.value })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="bulk_purchase_time" className="block text-sm font-medium text-gray-700">
+                          販売時間 <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="time"
+                          id="bulk_purchase_time"
+                          required
+                          value={bulkSaleFormData.purchase_time}
+                          onChange={(e) => setBulkSaleFormData({ ...bulkSaleFormData, purchase_time: e.target.value })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        商品一覧
+                      </label>
+                      <div className="border border-gray-300 rounded-md divide-y divide-gray-200 max-h-96 overflow-y-auto">
+                        {bulkSaleFormData.products.map((product, index) => {
+                          const productData = products.find(p => p.product_id === product.product_id);
+                          const quantity = parseInt(product.quantity) || 0;
+                          const unitPrice = parseFloat(product.unit_price) || 0;
+                          const totalPrice = quantity * unitPrice;
+                          
+                          return (
+                            <div key={product.product_id} className="p-4 bg-white">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex-1">
+                                  <h4 className="text-sm font-medium text-gray-900">{product.product_name}</h4>
+                                  {productData && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      在庫: {productData.stock_quantity || 0}個 / 標準単価: ¥{productData.unit_price.toLocaleString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    数量 <span className="text-red-500">*</span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    required
+                                    value={product.quantity}
+                                    onChange={(e) => {
+                                      const newProducts = [...bulkSaleFormData.products];
+                                      newProducts[index].quantity = e.target.value;
+                                      setBulkSaleFormData({ ...bulkSaleFormData, products: newProducts });
+                                    }}
+                                    className="block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    売価（円） <span className="text-red-500">*</span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    required
+                                    value={product.unit_price}
+                                    onChange={(e) => {
+                                      const newProducts = [...bulkSaleFormData.products];
+                                      newProducts[index].unit_price = e.target.value;
+                                      setBulkSaleFormData({ ...bulkSaleFormData, products: newProducts });
+                                    }}
+                                    className="block w-full px-2 py-1 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    小計
+                                  </label>
+                                  <div className="px-2 py-1 text-sm font-medium text-gray-900 bg-gray-50 border border-gray-300 rounded-md">
+                                    ¥{totalPrice.toLocaleString()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <div className="text-sm">
+                          <span className="text-gray-600">合計: </span>
+                          <span className="text-lg font-bold text-gray-900">
+                            ¥{bulkSaleFormData.products.reduce((sum, p) => {
+                              const qty = parseInt(p.quantity) || 0;
+                              const price = parseFloat(p.unit_price) || 0;
+                              return sum + (qty * price);
+                            }, 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="bulk_notes" className="block text-sm font-medium text-gray-700">
+                        備考
+                      </label>
+                      <textarea
+                        id="bulk_notes"
+                        rows={3}
+                        value={bulkSaleFormData.notes}
+                        onChange={(e) => setBulkSaleFormData({ ...bulkSaleFormData, notes: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={handleCloseBulkSaleModal}
+                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                    >
+                      販売登録
                     </button>
                   </div>
                 </form>
