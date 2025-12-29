@@ -637,6 +637,23 @@ export default function ProductManagement() {
     }
   };
 
+  // 商品をカテゴリごとにグループ化
+  const groupedProducts = products.reduce((acc, product) => {
+    const category = product.product_category || 'カテゴリなし';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(product);
+    return acc;
+  }, {} as Record<string, Product[]>);
+
+  // カテゴリをソート（カテゴリなしを最後に）
+  const sortedProductCategories = Object.keys(groupedProducts).sort((a, b) => {
+    if (a === 'カテゴリなし') return 1;
+    if (b === 'カテゴリなし') return -1;
+    return a.localeCompare(b);
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -835,15 +852,15 @@ export default function ProductManagement() {
               )}
             </div>
             {isProductsExpanded && (
-              <ul className="divide-y divide-gray-200">
+              <div>
                 {products.length === 0 ? (
-                  <li className="px-6 py-4 text-center text-gray-500">
+                  <div className="px-6 py-4 text-center text-gray-500">
                     商品が登録されていません
-                  </li>
+                  </div>
                 ) : (
                   <Fragment>
                     {products.length > 0 && (
-                      <li className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                      <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
                         <label className="flex items-center cursor-pointer">
                           <input
                             type="checkbox"
@@ -856,76 +873,87 @@ export default function ProductManagement() {
                             ({selectedProducts.length}件選択中)
                           </span>
                         </label>
-                      </li>
+                      </div>
                     )}
-                    {products.map((product) => (
-                      <li key={product.product_id} className="px-6 py-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3 flex-1">
-                            {product.is_active && (
-                              <input
-                                type="checkbox"
-                                checked={selectedProducts.includes(product.product_id)}
-                                onChange={() => handleProductToggle(product.product_id)}
-                                className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                              />
-                            )}
-                            <div className="flex-1">
-                              <div className="flex items-center">
-                                <h3 className="text-lg font-medium text-gray-900">
-                                  {product.product_name}
-                                </h3>
-                                {!product.is_active && (
-                                  <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
-                                    無効
-                                  </span>
-                                )}
-                              </div>
-                              <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
-                                {product.product_category && (
-                                  <div>カテゴリ: {product.product_category}</div>
-                                )}
-                                {product.manufacturer && (
-                                  <div>メーカー: {product.manufacturer}</div>
-                                )}
-                                {product.jan_code && (
-                                  <div>JANコード: {product.jan_code}</div>
-                                )}
-                                <div>単価: ¥{product.unit_price.toLocaleString()}</div>
-                                <div>在庫数: {product.stock_quantity || 0}個</div>
-                                {product.description && (
-                                  <div className="md:col-span-2">説明: {product.description}</div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => handleOpenSaleModal(product)}
-                              className="p-2 text-green-600 hover:text-green-700"
-                              title="販売"
-                            >
-                              <ShoppingBagIcon className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenModal(product)}
-                              className="p-2 text-gray-400 hover:text-gray-600"
-                            >
-                              <PencilIcon className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(product.product_id)}
-                              className="p-2 text-gray-400 hover:text-red-600"
-                            >
-                              <TrashIcon className="h-5 w-5" />
-                            </button>
-                          </div>
+                    {sortedProductCategories.map((category) => (
+                      <div key={category} className="border-b border-gray-200 last:border-b-0">
+                        <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                          <h4 className="text-md font-semibold text-gray-700">
+                            {category}
+                            <span className="ml-2 text-sm font-normal text-gray-500">
+                              ({groupedProducts[category].length}件)
+                            </span>
+                          </h4>
                         </div>
-                      </li>
+                        <ul className="divide-y divide-gray-200">
+                          {groupedProducts[category].map((product) => (
+                            <li key={product.product_id} className="px-6 py-4">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3 flex-1">
+                                  {product.is_active && (
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedProducts.includes(product.product_id)}
+                                      onChange={() => handleProductToggle(product.product_id)}
+                                      className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                                    />
+                                  )}
+                                  <div className="flex-1">
+                                    <div className="flex items-center">
+                                      <h3 className="text-lg font-medium text-gray-900">
+                                        {product.product_name}
+                                      </h3>
+                                      {!product.is_active && (
+                                        <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                                          無効
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
+                                      {product.manufacturer && (
+                                        <div>メーカー: {product.manufacturer}</div>
+                                      )}
+                                      {product.jan_code && (
+                                        <div>JANコード: {product.jan_code}</div>
+                                      )}
+                                      <div>単価: ¥{product.unit_price.toLocaleString()}</div>
+                                      <div>在庫数: {product.stock_quantity || 0}個</div>
+                                      {product.description && (
+                                        <div className="md:col-span-2">説明: {product.description}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => handleOpenSaleModal(product)}
+                                    className="p-2 text-green-600 hover:text-green-700"
+                                    title="販売"
+                                  >
+                                    <ShoppingBagIcon className="h-5 w-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenModal(product)}
+                                    className="p-2 text-gray-400 hover:text-gray-600"
+                                  >
+                                    <PencilIcon className="h-5 w-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(product.product_id)}
+                                    className="p-2 text-gray-400 hover:text-red-600"
+                                  >
+                                    <TrashIcon className="h-5 w-5" />
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ))}
                   </Fragment>
                 )}
-              </ul>
+              </div>
             )}
           </div>
         </div>

@@ -337,6 +337,23 @@ export default function MenuManagement() {
     }
   };
 
+  // メニューをカテゴリごとにグループ化
+  const groupedMenus = menus.reduce((acc, menu) => {
+    const category = menu.category || 'カテゴリなし';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(menu);
+    return acc;
+  }, {} as Record<string, Menu[]>);
+
+  // カテゴリをソート（カテゴリなしを最後に）
+  const sortedCategories = Object.keys(groupedMenus).sort((a, b) => {
+    if (a === 'カテゴリなし') return 1;
+    if (b === 'カテゴリなし') return -1;
+    return a.localeCompare(b);
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -527,70 +544,75 @@ export default function MenuManagement() {
               )}
             </div>
             {isMenusExpanded && (
-              <ul className="divide-y divide-gray-200">
-                {loading ? (
-                  <li className="px-6 py-4 text-center text-gray-500">
-                    読み込み中...
-                  </li>
-                ) : menus.length === 0 ? (
-                  <li className="px-6 py-4 text-center text-gray-500">
+              <div>
+                {menus.length === 0 ? (
+                  <div className="px-6 py-4 text-center text-gray-500">
                     メニューが登録されていません
-                  </li>
+                  </div>
                 ) : (
-                  menus.map((menu) => (
-                  <li key={menu.menu_id} className="px-6 py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center">
-                          <h3 className={`text-lg font-medium ${!menu.is_active ? 'text-gray-400' : 'text-gray-900'}`}>
-                            {menu.name}
-                            {!menu.is_active && (
-                              <span className="ml-2 text-sm text-gray-500">(無効)</span>
-                            )}
-                          </h3>
-                        </div>
-                        <div className="mt-2 flex items-center text-sm text-gray-500">
-                          <span className="mr-4">¥{menu.price.toLocaleString()}</span>
-                          <span>{menu.duration}分</span>
-                          {menu.category && (
-                            <span className="ml-4 px-2 py-1 text-xs bg-pink-100 text-pink-800 rounded">
-                              {menu.category}
-                            </span>
-                          )}
-                          {menu.description && (
-                            <span className="ml-4 text-gray-400">{menu.description}</span>
-                          )}
-                        </div>
+                  sortedCategories.map((category) => (
+                    <div key={category} className="border-b border-gray-200 last:border-b-0">
+                      <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+                        <h4 className="text-md font-semibold text-gray-700">
+                          {category}
+                          <span className="ml-2 text-sm font-normal text-gray-500">
+                            ({groupedMenus[category].length}件)
+                          </span>
+                        </h4>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleToggleActive(menu)}
-                          className={`px-3 py-1 text-xs rounded ${
-                            menu.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          {menu.is_active ? '有効' : '無効'}
-                        </button>
-                        <button
-                          onClick={() => handleOpenModal(menu)}
-                          className="p-2 text-gray-400 hover:text-gray-600"
-                        >
-                          <PencilIcon className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(menu.menu_id)}
-                          className="p-2 text-gray-400 hover:text-red-600"
-                        >
-                          <TrashIcon className="h-5 w-5" />
-                        </button>
-                      </div>
+                      <ul className="divide-y divide-gray-200">
+                        {groupedMenus[category].map((menu) => (
+                          <li key={menu.menu_id} className="px-6 py-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center">
+                                  <h3 className={`text-lg font-medium ${!menu.is_active ? 'text-gray-400' : 'text-gray-900'}`}>
+                                    {menu.name}
+                                    {!menu.is_active && (
+                                      <span className="ml-2 text-sm text-gray-500">(無効)</span>
+                                    )}
+                                  </h3>
+                                </div>
+                                <div className="mt-2 flex items-center text-sm text-gray-500">
+                                  <span className="mr-4">¥{menu.price.toLocaleString()}</span>
+                                  <span>{menu.duration}分</span>
+                                  {menu.description && (
+                                    <span className="ml-4 text-gray-400">{menu.description}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleToggleActive(menu)}
+                                  className={`px-3 py-1 text-xs rounded ${
+                                    menu.is_active
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-gray-100 text-gray-800'
+                                  }`}
+                                >
+                                  {menu.is_active ? '有効' : '無効'}
+                                </button>
+                                <button
+                                  onClick={() => handleOpenModal(menu)}
+                                  className="p-2 text-gray-400 hover:text-gray-600"
+                                >
+                                  <PencilIcon className="h-5 w-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(menu.menu_id)}
+                                  className="p-2 text-gray-400 hover:text-red-600"
+                                >
+                                  <TrashIcon className="h-5 w-5" />
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                  </li>
                   ))
                 )}
-              </ul>
+              </div>
             )}
           </div>
         </div>
