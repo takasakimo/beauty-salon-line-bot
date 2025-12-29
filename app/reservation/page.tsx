@@ -115,10 +115,16 @@ function ReservationPageContent() {
     return acc;
   }, {} as Record<string, Menu[]>);
 
-  // カテゴリをソート（カテゴリなしを最後に）
+  // カテゴリをソート（その他とカテゴリなしを最後に）
   const sortedCategories = Object.keys(groupedMenus).sort((a, b) => {
+    // 「その他」と「カテゴリなし」を最後に配置
+    if (a === 'その他' && b !== 'その他' && b !== 'カテゴリなし') return 1;
+    if (b === 'その他' && a !== 'その他' && a !== 'カテゴリなし') return -1;
     if (a === 'カテゴリなし') return 1;
     if (b === 'カテゴリなし') return -1;
+    // 「その他」と「カテゴリなし」の順序（その他が先）
+    if (a === 'その他' && b === 'カテゴリなし') return -1;
+    if (a === 'カテゴリなし' && b === 'その他') return 1;
     return a.localeCompare(b);
   });
 
@@ -126,8 +132,14 @@ function ReservationPageContent() {
   const availableCategories = Array.from(
     new Set(menus.map(menu => menu.category || 'カテゴリなし').filter(Boolean))
   ).sort((a, b) => {
+    // 「その他」と「カテゴリなし」を最後に配置
+    if (a === 'その他' && b !== 'その他' && b !== 'カテゴリなし') return 1;
+    if (b === 'その他' && a !== 'その他' && a !== 'カテゴリなし') return -1;
     if (a === 'カテゴリなし') return 1;
     if (b === 'カテゴリなし') return -1;
+    // 「その他」と「カテゴリなし」の順序（その他が先）
+    if (a === 'その他' && b === 'カテゴリなし') return -1;
+    if (a === 'カテゴリなし' && b === 'その他') return 1;
     return a.localeCompare(b);
   });
 
