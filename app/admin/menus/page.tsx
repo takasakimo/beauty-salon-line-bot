@@ -209,9 +209,9 @@ export default function MenuManagement() {
 
       if (response.ok) {
         handleCloseCategoryModal();
-        loadCategories();
-        // メニューフォームのカテゴリ選択も更新
-        if (!editingCategory) {
+        await loadCategories();
+        // メニューフォームのカテゴリ選択も更新（メニューモーダルが開いている場合）
+        if (!editingCategory && showModal) {
           setFormData({ ...formData, category: categoryFormData.category_name });
         }
       } else {
@@ -269,6 +269,7 @@ export default function MenuManagement() {
           price: parseInt(formData.price),
           duration: parseInt(formData.duration),
           description: formData.description || null,
+          category: formData.category || null,
           is_active: editingMenu ? editingMenu.is_active : true
         }),
       });
@@ -551,6 +552,11 @@ export default function MenuManagement() {
                         <div className="mt-2 flex items-center text-sm text-gray-500">
                           <span className="mr-4">¥{menu.price.toLocaleString()}</span>
                           <span>{menu.duration}分</span>
+                          {menu.category && (
+                            <span className="ml-4 px-2 py-1 text-xs bg-pink-100 text-pink-800 rounded">
+                              {menu.category}
+                            </span>
+                          )}
                           {menu.description && (
                             <span className="ml-4 text-gray-400">{menu.description}</span>
                           )}
@@ -662,6 +668,37 @@ export default function MenuManagement() {
                           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                         />
                       </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+                          カテゴリ
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleCloseModal();
+                            handleOpenCategoryModal();
+                          }}
+                          className="text-xs text-pink-600 hover:text-pink-700"
+                        >
+                          + カテゴリ追加
+                        </button>
+                      </div>
+                      <select
+                        id="category"
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      >
+                        <option value="">選択してください</option>
+                        {categories.filter((c) => c.is_active).map((category) => (
+                          <option key={category.category_id} value={category.category_name}>
+                            {category.category_name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
