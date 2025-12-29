@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
@@ -841,7 +841,7 @@ export default function ProductManagement() {
                     商品が登録されていません
                   </li>
                 ) : (
-                  <>
+                  <Fragment>
                     {products.length > 0 && (
                       <li className="px-6 py-3 bg-gray-50 border-b border-gray-200">
                         <label className="flex items-center cursor-pointer">
@@ -871,16 +871,16 @@ export default function ProductManagement() {
                               />
                             )}
                             <div className="flex-1">
-                          <div className="flex items-center">
-                            <h3 className="text-lg font-medium text-gray-900">
-                              {product.product_name}
-                            </h3>
-                            {!product.is_active && (
-                              <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
-                                無効
-                              </span>
-                            )}
-                          </div>
+                              <div className="flex items-center">
+                                <h3 className="text-lg font-medium text-gray-900">
+                                  {product.product_name}
+                                </h3>
+                                {!product.is_active && (
+                                  <span className="ml-2 px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                                    無効
+                                  </span>
+                                )}
+                              </div>
                               <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-500">
                                 {product.product_category && (
                                   <div>カテゴリ: {product.product_category}</div>
@@ -899,30 +899,31 @@ export default function ProductManagement() {
                               </div>
                             </div>
                           </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleOpenSaleModal(product)}
-                            className="p-2 text-green-600 hover:text-green-700"
-                            title="販売"
-                          >
-                            <ShoppingBagIcon className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenModal(product)}
-                            className="p-2 text-gray-400 hover:text-gray-600"
-                          >
-                            <PencilIcon className="h-5 w-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(product.product_id)}
-                            className="p-2 text-gray-400 hover:text-red-600"
-                          >
-                            <TrashIcon className="h-5 w-5" />
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleOpenSaleModal(product)}
+                              className="p-2 text-green-600 hover:text-green-700"
+                              title="販売"
+                            >
+                              <ShoppingBagIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleOpenModal(product)}
+                              className="p-2 text-gray-400 hover:text-gray-600"
+                            >
+                              <PencilIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(product.product_id)}
+                              className="p-2 text-gray-400 hover:text-red-600"
+                            >
+                              <TrashIcon className="h-5 w-5" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  ))
+                      </li>
+                    ))}
+                  </Fragment>
                 )}
               </ul>
             )}
