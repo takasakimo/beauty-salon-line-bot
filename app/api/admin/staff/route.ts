@@ -176,32 +176,88 @@ export async function POST(request: NextRequest) {
       // スタッフ情報と対応可能メニューを取得
       let staffResult;
       try {
-        staffResult = await query(
-          `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date,
-                  COALESCE(
-                    json_agg(
-                      json_build_object('menu_id', m.menu_id, 'name', m.name)
-                    ) FILTER (WHERE m.menu_id IS NOT NULL),
-                    '[]'::json
-                  ) as available_menus
-           FROM staff s
-           LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
-           LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
-           WHERE s.staff_id = $1
-           GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date`,
-          [staffId]
+        // image_urlカラムが存在するかチェック
+        const columnCheck = await query(
+          `SELECT column_name 
+           FROM information_schema.columns 
+           WHERE table_name = 'staff' AND column_name = 'image_url'`
         );
+        const hasImageUrl = columnCheck.rows.length > 0;
+        
+        if (hasImageUrl) {
+          staffResult = await query(
+            `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date,
+                    COALESCE(
+                      json_agg(
+                        json_build_object('menu_id', m.menu_id, 'name', m.name)
+                      ) FILTER (WHERE m.menu_id IS NOT NULL),
+                      '[]'::json
+                    ) as available_menus
+             FROM staff s
+             LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
+             LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
+             WHERE s.staff_id = $1
+             GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date`,
+            [staffId]
+          );
+        } else {
+          // image_urlカラムが存在しない場合は、image_urlを除外
+          staffResult = await query(
+            `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, NULL as image_url, s.created_date,
+                    COALESCE(
+                      json_agg(
+                        json_build_object('menu_id', m.menu_id, 'name', m.name)
+                      ) FILTER (WHERE m.menu_id IS NOT NULL),
+                      '[]'::json
+                    ) as available_menus
+             FROM staff s
+             LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
+             LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
+             WHERE s.staff_id = $1
+             GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date`,
+            [staffId]
+          );
+        }
       } catch (joinError: any) {
         // staff_menusテーブルが存在しない場合は、シンプルなクエリを使用
         if (joinError.message && joinError.message.includes('staff_menus')) {
           console.log('staff_menusテーブルが存在しないため、シンプルなクエリを使用します');
-          staffResult = await query(
-            `SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date,
-                    '[]'::json as available_menus
-             FROM staff
-             WHERE staff_id = $1`,
-            [staffId]
-          );
+          // image_urlカラムの存在チェック
+          try {
+            const columnCheck = await query(
+              `SELECT column_name 
+               FROM information_schema.columns 
+               WHERE table_name = 'staff' AND column_name = 'image_url'`
+            );
+            const hasImageUrl = columnCheck.rows.length > 0;
+            
+            if (hasImageUrl) {
+              staffResult = await query(
+                `SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date,
+                        '[]'::json as available_menus
+                 FROM staff
+                 WHERE staff_id = $1`,
+                [staffId]
+              );
+            } else {
+              staffResult = await query(
+                `SELECT staff_id, name, email, phone_number, working_hours, NULL as image_url, created_date,
+                        '[]'::json as available_menus
+                 FROM staff
+                 WHERE staff_id = $1`,
+                [staffId]
+              );
+            }
+          } catch (checkError: any) {
+            // チェックエラーが発生した場合は、image_urlなしで取得
+            staffResult = await query(
+              `SELECT staff_id, name, email, phone_number, working_hours, NULL as image_url, created_date,
+                      '[]'::json as available_menus
+               FROM staff
+               WHERE staff_id = $1`,
+              [staffId]
+            );
+          }
         } else {
           throw joinError;
         }
