@@ -155,8 +155,26 @@ export async function POST(request: NextRequest) {
     const dayOfWeek = reservationDateTime.getDay();
     
     // 予約開始時間と終了時間を取得（分単位）
-    const reservationStartHour = reservationDateTime.getHours();
-    const reservationStartMinute = reservationDateTime.getMinutes();
+    // reservation_dateから直接時間を抽出（JSTとして扱う）
+    let reservationStartHour: number;
+    let reservationStartMinute: number;
+    
+    // 文字列から直接時間を抽出（YYYY-MM-DDTHH:mm:ss+09:00 または YYYY-MM-DDTHH:mm:ss形式）
+    if (typeof reservation_date === 'string') {
+      const timeMatch = reservation_date.match(/T(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        reservationStartHour = parseInt(timeMatch[1], 10);
+        reservationStartMinute = parseInt(timeMatch[2], 10);
+      } else {
+        // フォールバック: Dateオブジェクトから取得（ローカル時間として）
+        reservationStartHour = reservationDateTime.getHours();
+        reservationStartMinute = reservationDateTime.getMinutes();
+      }
+    } else {
+      reservationStartHour = reservationDateTime.getHours();
+      reservationStartMinute = reservationDateTime.getMinutes();
+    }
+    
     const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
     const reservationEndTimeInMinutes = reservationStartTimeInMinutes + totalDuration;
     

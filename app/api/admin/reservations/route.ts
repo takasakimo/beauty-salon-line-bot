@@ -297,8 +297,21 @@ export async function POST(request: NextRequest) {
     }
 
     // 予約開始時間を取得（分単位）
-    const reservationStartHour = reservationDateTimeLocal.getHours();
-    const reservationStartMinute = reservationDateTimeLocal.getMinutes();
+    // dateStrから直接時間を抽出（JSTとして扱う）
+    let reservationStartHour: number;
+    let reservationStartMinute: number;
+    
+    // 文字列から直接時間を抽出（YYYY-MM-DDTHH:mm:ss形式）
+    const timeMatch = dateStr.match(/T(\d{2}):(\d{2})/);
+    if (timeMatch) {
+      reservationStartHour = parseInt(timeMatch[1], 10);
+      reservationStartMinute = parseInt(timeMatch[2], 10);
+    } else {
+      // フォールバック: Dateオブジェクトから取得（ローカル時間として）
+      reservationStartHour = reservationDateTimeLocal.getHours();
+      reservationStartMinute = reservationDateTimeLocal.getMinutes();
+    }
+    
     const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
     // reservationEndTimeInMinutesは既に289行目で定義済み
     
