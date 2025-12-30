@@ -296,11 +296,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 予約開始時間と終了時間を取得（分単位）
+    // 予約開始時間を取得（分単位）
     const reservationStartHour = reservationDateTimeLocal.getHours();
     const reservationStartMinute = reservationDateTimeLocal.getMinutes();
     const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
-    const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
+    // reservationEndTimeInMinutesは既に289行目で定義済み
     
     // スタッフが指定されている場合、シフトを確認してから時間の重複チェック
     if (staff_id) {
