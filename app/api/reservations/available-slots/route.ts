@@ -294,16 +294,22 @@ export async function GET(request: NextRequest) {
     const slots: string[] = [];
     // 営業時間が有効な場合のみスロットを生成
     if (openTimeInMinutes < closeTimeInMinutes) {
-      for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
-        // このスロットから開始した場合の終了時間を計算
-        const slotEndTime = time + duration;
-        
-        // シフト終了時間を超えないスロットのみを追加
-        if (slotEndTime <= closeTimeInMinutes) {
-          const hour = Math.floor(time / 60);
-          const minute = time % 60;
-          slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
-        }
+      // メニュー所要時間を考慮した最大開始時間を計算
+      const maxStartTimeInMinutes = closeTimeInMinutes - duration;
+      
+      console.log('スロット生成詳細:', {
+        openTimeInMinutes,
+        closeTimeInMinutes,
+        duration,
+        maxStartTimeInMinutes,
+        maxStartTimeFormatted: `${Math.floor(maxStartTimeInMinutes / 60).toString().padStart(2, '0')}:${(maxStartTimeInMinutes % 60).toString().padStart(2, '0')}`
+      });
+      
+      for (let time = openTimeInMinutes; time <= maxStartTimeInMinutes; time += 30) {
+        const hour = Math.floor(time / 60);
+        const minute = time % 60;
+        const slotTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        slots.push(slotTime);
       }
     } else {
       console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });
