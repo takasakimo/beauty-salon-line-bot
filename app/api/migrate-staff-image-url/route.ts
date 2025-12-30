@@ -8,10 +8,11 @@ export async function POST(request: NextRequest) {
   try {
     // セキュリティ: 本番環境では認証を追加することを推奨
     // ここでは簡単な認証チェック（環境変数で制御可能）
+    // 認証キーが設定されていない場合は認証をスキップ（開発環境用）
     const migrationKey = request.headers.get('x-migration-key');
-    const expectedKey = process.env.MIGRATION_KEY || 'default-migration-key-change-in-production';
+    const expectedKey = process.env.MIGRATION_KEY;
     
-    if (migrationKey !== expectedKey) {
+    if (expectedKey && migrationKey !== expectedKey) {
       return NextResponse.json(
         { error: '認証が必要です' },
         { status: 401 }
