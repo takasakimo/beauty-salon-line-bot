@@ -191,6 +191,67 @@ export async function GET(request: NextRequest) {
         console.error('スタッフシフト/勤務時間取得エラー:', error);
         // エラーが発生しても続行（店舗の営業時間を使用）
       }
+    } else {
+      // スタッフが指定されていない場合：その日付に勤務している全スタッフのシフト終了時間を取得
+      try {
+        const allStaffShiftsResult = await query(
+          `SELECT 
+            COALESCE(ss.end_time, NULL) as shift_end_time,
+            COALESCE(ss.is_off, false) as is_off,
+            s.working_hours
+          FROM staff s
+          LEFT JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
+            AND ss.tenant_id = $1 
+            AND ss.shift_date = $2
+          WHERE s.tenant_id = $1
+          AND (ss.is_off IS NULL OR ss.is_off = false)`,
+          [tenantId, date]
+        );
+        
+        // 最も早いシフト開始時間と最も遅いシフト終了時間を取得
+        let earliestStartTime: string | null = null;
+        let latestEndTime: string | null = null;
+        
+        for (const row of allStaffShiftsResult.rows) {
+          let startTime: string | null = null;
+          let endTime: string | null = null;
+          
+          if (row.shift_start_time && row.shift_end_time) {
+            startTime = row.shift_start_time.substring(0, 5);
+            endTime = row.shift_end_time.substring(0, 5);
+          } else if (row.working_hours) {
+            const match = row.working_hours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              startTime = match[1];
+              endTime = match[2];
+            }
+          }
+          
+          if (startTime) {
+            if (!earliestStartTime || startTime < earliestStartTime) {
+              earliestStartTime = startTime;
+            }
+          }
+          
+          if (endTime) {
+            if (!latestEndTime || endTime > latestEndTime) {
+              latestEndTime = endTime;
+            }
+          }
+        }
+        
+        // シフト時間を設定（スタッフがいる場合のみ）
+        if (earliestStartTime && latestEndTime && allStaffShiftsResult.rows.length > 0) {
+          staffWorkingHours = {
+            start: earliestStartTime,
+            end: latestEndTime
+          };
+          console.log('スタッフ未指定時のシフト時間:', { earliestStartTime, latestEndTime, staffCount: allStaffShiftsResult.rows.length });
+        }
+      } catch (error: any) {
+        console.error('全スタッフシフト取得エラー:', error);
+        // エラーが発生しても続行（店舗の営業時間を使用）
+      }
     }
     
     // スタッフが休みの場合は空き時間を返さない
