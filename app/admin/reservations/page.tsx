@@ -81,12 +81,15 @@ function TimelineScheduleView({
     });
   };
 
-  // 1週間分の日付を生成（今日から7日後まで）
+  // 1週間分の日付を生成（選択された日付を含む週、または今日から7日後まで）
   const getWeekDates = () => {
     const dates = [];
+    // フィルタ日付が設定されている場合は、その日付を含む週を表示
+    // そうでない場合は今日から7日後まで
+    const baseDate = new Date();
     for (let i = 0; i < 7; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
+      const date = new Date(baseDate);
+      date.setDate(baseDate.getDate() + i);
       dates.push(date);
     }
     return dates;

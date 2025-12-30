@@ -269,10 +269,10 @@ function ReservationPageContent() {
     }
   };
 
-  // 日付選択用の日付リスト（今日から7日後まで）
+  // 日付選択用の日付リスト（今日から1ヶ月後まで）
   const getDateOptions = () => {
     const dates = [];
-    for (let i = 0; i <= 6; i++) {
+    for (let i = 0; i <= 30; i++) {
       const date = new Date();
       date.setDate(date.getDate() + i);
       dates.push(date.toISOString().split('T')[0]);
@@ -523,79 +523,91 @@ function ReservationPageContent() {
                   <p className="text-gray-600">空き時間を取得中...</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300 text-sm">
-                    <thead>
-                      <tr>
-                        <th className="border border-gray-300 bg-gray-50 p-2 text-left font-semibold">時間</th>
-                {getDateOptions().map((date) => {
-                  const dateObj = new Date(date);
-                  const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-                          const isHoliday = dayName === '日' || dayName === '土';
-                          const isNewYear = dateObj.getMonth() === 0 && dateObj.getDate() <= 3;
-                  return (
-                            <th
-                      key={date}
-                              className={`border border-gray-300 bg-gray-50 p-2 text-center font-semibold ${
-                                isHoliday || isNewYear ? 'text-red-600' : ''
-                              }`}
-                            >
-                              <div>{dateObj.getMonth() + 1}/{dateObj.getDate()}</div>
-                              <div className="text-xs">({dayName}{isNewYear ? '祝' : ''})</div>
-                            </th>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        // 時間スロットを生成（9:00から19:00まで30分間隔）
-                        const timeSlots: string[] = [];
-                        for (let hour = 9; hour < 19; hour++) {
-                          timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-                          timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
-                        }
+                <div className="space-y-6">
+                  {/* 日付選択 */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      予約日を選択（今日から1ヶ月先まで）
+                    </label>
+                    <div className="grid grid-cols-7 gap-2 mb-4">
+                      {getDateOptions().map((date) => {
+                        const dateObj = new Date(date);
+                        const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+                        const isHoliday = dayName === '日' || dayName === '土';
+                        const isNewYear = dateObj.getMonth() === 0 && dateObj.getDate() <= 3;
+                        const isSelected = selectedDate === date;
+                        const hasAvailableSlots = availableSlotsByDate[date] && availableSlotsByDate[date].length > 0;
                         
-                        return timeSlots.map((time) => (
-                          <tr key={time}>
-                            <td className="border border-gray-300 bg-gray-50 p-2 text-center font-medium">
-                              {time}
-                            </td>
-                            {getDateOptions().map((date) => {
-                              const availableSlots = availableSlotsByDate[date] || [];
-                              const isAvailable = availableSlots.includes(time);
-                              const isSelected = selectedDate === date && selectedTime === time;
-                              
-                              return (
-                                <td
-                                  key={`${date}-${time}`}
-                                  className={`border border-gray-300 p-2 text-center ${
-                                    isSelected
-                                      ? 'bg-pink-200'
-                                      : isAvailable
-                                      ? 'bg-white cursor-pointer hover:bg-pink-50'
-                                      : 'bg-gray-100'
-                                  }`}
-                                  onClick={() => {
-                                    if (isAvailable) {
-                                      handleDateTimeSelect(date, time);
-                                    }
-                                  }}
-                    >
-                                  {isAvailable ? (
-                                    <span className="text-red-600 text-lg">◎</span>
-                                  ) : (
-                                    <span className="text-gray-400">×</span>
-                                  )}
-                                </td>
-                  );
-                })}
-                          </tr>
-                        ));
-                      })()}
-                    </tbody>
-                  </table>
-              </div>
+                        return (
+                          <button
+                            key={date}
+                            onClick={() => {
+                              setSelectedDate(date);
+                              setSelectedTime('');
+                            }}
+                            className={`p-3 rounded-lg border-2 transition-all ${
+                              isSelected
+                                ? 'border-pink-500 bg-pink-50 shadow-md'
+                                : hasAvailableSlots
+                                ? 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
+                                : 'border-gray-100 bg-gray-50 opacity-50'
+                            }`}
+                            disabled={!hasAvailableSlots}
+                          >
+                            <div className={`text-xs font-medium ${isHoliday || isNewYear ? 'text-red-600' : 'text-gray-700'}`}>
+                              {dayName}
+                            </div>
+                            <div className={`text-lg font-semibold mt-1 ${isHoliday || isNewYear ? 'text-red-600' : 'text-gray-900'}`}>
+                              {dateObj.getDate()}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {dateObj.getMonth() + 1}月
+                            </div>
+                            {hasAvailableSlots && (
+                              <div className="text-xs text-pink-600 mt-1 font-semibold">
+                                {availableSlotsByDate[date].length}件
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* 時間選択 */}
+                  {selectedDate && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-3">
+                        時間を選択
+                      </label>
+                      {availableSlotsByDate[selectedDate] && availableSlotsByDate[selectedDate].length > 0 ? (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                          {availableSlotsByDate[selectedDate].map((time) => {
+                            const isSelected = selectedTime === time;
+                            return (
+                              <button
+                                key={time}
+                                onClick={() => handleDateTimeSelect(selectedDate, time)}
+                                className={`px-4 py-2 rounded-lg border-2 transition-all ${
+                                  isSelected
+                                    ? 'border-pink-500 bg-pink-500 text-white shadow-md'
+                                    : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50 text-gray-900'
+                                }`}
+                              >
+                                {time}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <p>この日は利用可能な時間がありません</p>
+                          <p className="text-sm mt-2">別の日付を選択してください</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
               
               <div className="mt-4 flex items-center justify-between">
