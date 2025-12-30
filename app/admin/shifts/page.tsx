@@ -7,7 +7,10 @@ import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import { 
   ChevronLeftIcon,
   ChevronRightIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  PlusIcon,
+  XMarkIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 interface Staff {
@@ -25,16 +28,32 @@ interface Shift {
   staff_name?: string;
 }
 
+// シフトパターン
+const SHIFT_PATTERNS = [
+  { id: 'morning', name: '早番', time: '07:00-16:00', start: '07:00', end: '16:00', color: 'bg-orange-100 text-orange-800' },
+  { id: 'day', name: '日勤', time: '09:00-18:00', start: '09:00', end: '18:00', color: 'bg-blue-100 text-blue-800' },
+  { id: 'late', name: '遅番', time: '13:00-22:00', start: '13:00', end: '22:00', color: 'bg-purple-100 text-purple-800' },
+  { id: 'night', name: '夜勤', time: '22:00-07:00', start: '22:00', end: '07:00', color: 'bg-gray-100 text-gray-800' },
+  { id: 'off', name: '休み', time: '-', start: null, end: null, color: 'bg-green-100 text-green-800' },
+  { id: 'custom', name: 'カスタム', time: '自由設定', start: null, end: null, color: 'bg-gray-100 text-gray-800' }
+];
+
 export default function ShiftManagement() {
   const router = useRouter();
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [shifts, setShifts] = useState<Record<string, Record<number, Shift>>>({}); // {date: {staff_id: shift}}
+  const [shifts, setShifts] = useState<Record<string, Shift[]>>({}); // {date: [shift, ...]}
   const [currentDate, setCurrentDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [showCopyDialog, setShowCopyDialog] = useState(false);
-  const [copyTargetMonth, setCopyTargetMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showShiftDialog, setShowShiftDialog] = useState(false);
+  
+  // シフト追加用の状態
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('');
+  const [selectedPattern, setSelectedPattern] = useState<string>('');
+  const [customStartTime, setCustomStartTime] = useState('09:00');
+  const [customEndTime, setCustomEndTime] = useState('18:00');
 
   useEffect(() => {
     loadStaff();
@@ -80,29 +99,15 @@ export default function ShiftManagement() {
 
       if (response.ok) {
         const data = await response.json();
-        const shiftsMap: Record<string, Record<number, Shift>> = {};
+        const shiftsMap: Record<string, Shift[]> = {};
         
-        // 月の日付を初期化
-        const monthDates = getMonthDates(currentDate);
-        monthDates.forEach(date => {
-          shiftsMap[date] = {};
-          staff.forEach(s => {
-            shiftsMap[date][s.staff_id] = {
-              staff_id: s.staff_id,
-              shift_date: date,
-              start_time: null,
-              end_time: null,
-              is_off: false
-            };
-          });
-        });
-
-        // 取得したシフトデータをマップに反映
+        // シフトデータを日付ごとに整理
         data.forEach((shift: Shift) => {
           const dateKey = shift.shift_date.split('T')[0];
-          if (shiftsMap[dateKey]) {
-            shiftsMap[dateKey][shift.staff_id] = shift;
+          if (!shiftsMap[dateKey]) {
+            shiftsMap[dateKey] = [];
           }
+          shiftsMap[dateKey].push(shift);
         });
 
         setShifts(shiftsMap);
@@ -128,94 +133,28 @@ export default function ShiftManagement() {
     return d;
   };
 
-  const getMonthDates = (date: Date) => {
-    const start = getStartOfMonth(date);
-    const end = getEndOfMonth(date);
-    const dates: string[] = [];
-    const current = new Date(start);
-    while (current <= end) {
-      dates.push(current.toISOString().split('T')[0]);
+  // カレンダーの日付を生成（週単位で表示）
+  const generateCalendarDates = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startDate = new Date(firstDay);
+    startDate.setDate(startDate.getDate() - firstDay.getDay());
+    
+    const dates: Date[] = [];
+    const current = new Date(startDate);
+    
+    while (current <= lastDay || current.getDay() !== 0) {
+      dates.push(new Date(current));
       current.setDate(current.getDate() + 1);
     }
+    
     return dates;
   };
 
-  const handleShiftChange = (date: string, staffId: number, field: 'start_time' | 'end_time' | 'is_off', value: string | boolean) => {
-    setShifts(prev => {
-      const newShifts = { ...prev };
-      if (!newShifts[date]) {
-        newShifts[date] = {};
-      }
-      if (!newShifts[date][staffId]) {
-        newShifts[date][staffId] = {
-          staff_id: staffId,
-          shift_date: date,
-          start_time: null,
-          end_time: null,
-          is_off: false
-        };
-      }
-      newShifts[date][staffId] = {
-        ...newShifts[date][staffId],
-        [field]: value,
-        ...(field === 'is_off' && value === true ? { start_time: null, end_time: null } : {})
-      };
-      return newShifts;
-    });
-  };
-
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      setError('');
-
-      // シフトデータを配列に変換
-      const shiftsArray: Shift[] = [];
-      Object.keys(shifts).forEach(date => {
-        Object.values(shifts[date]).forEach(shift => {
-          if (shift.start_time || shift.end_time || shift.is_off) {
-            shiftsArray.push({
-              staff_id: shift.staff_id,
-              shift_date: date,
-              start_time: shift.is_off ? null : shift.start_time,
-              end_time: shift.is_off ? null : shift.end_time,
-              is_off: shift.is_off
-            });
-          }
-        });
-      });
-
-      const url = getApiUrlWithTenantId('/api/admin/shifts');
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ shifts: shiftsArray }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'シフトの保存に失敗しました');
-      }
-
-      alert('シフトを保存しました');
-      await loadShifts();
-    } catch (error: any) {
-      console.error('シフト保存エラー:', error);
-      setError(error.message || 'シフトの保存に失敗しました');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const monthDates = getMonthDates(currentDate);
-  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return `${date.getMonth() + 1}/${date.getDate()}`;
+  const formatDate = (date: Date) => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   };
 
   const formatMonthYear = (date: Date) => {
@@ -238,129 +177,152 @@ export default function ShiftManagement() {
     setCurrentDate(new Date());
   };
 
-  const handleCopyMonth = async () => {
-    try {
-      if (!confirm(`現在の月のシフトを${copyTargetMonth.getFullYear()}年${copyTargetMonth.getMonth() + 1}月にコピーしますか？`)) {
-        return;
-      }
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+    setShowShiftDialog(true);
+    setSelectedStaffId('');
+    setSelectedPattern('');
+    setCustomStartTime('09:00');
+    setCustomEndTime('18:00');
+  };
 
+  const getShiftPattern = (shift: Shift) => {
+    if (shift.is_off) {
+      return SHIFT_PATTERNS.find(p => p.id === 'off');
+    }
+    if (!shift.start_time || !shift.end_time) {
+      return null;
+    }
+    const start = shift.start_time.substring(0, 5);
+    const end = shift.end_time.substring(0, 5);
+    
+    return SHIFT_PATTERNS.find(p => 
+      p.start && p.end && p.start === start && p.end === end
+    ) || SHIFT_PATTERNS.find(p => p.id === 'custom');
+  };
+
+  const handleAddShift = async () => {
+    if (!selectedDate || !selectedStaffId || !selectedPattern) {
+      setError('従業員とシフトパターンを選択してください');
+      return;
+    }
+
+    const pattern = SHIFT_PATTERNS.find(p => p.id === selectedPattern);
+    if (!pattern) {
+      setError('シフトパターンが無効です');
+      return;
+    }
+
+    const dateKey = formatDate(selectedDate);
+    const existingShifts = shifts[dateKey] || [];
+    
+    // 重複チェック
+    if (existingShifts.some(s => s.staff_id === parseInt(selectedStaffId))) {
+      setError('この従業員のシフトは既に登録されています');
+      return;
+    }
+
+    try {
       setSaving(true);
       setError('');
 
-      // 現在の月のシフトを取得
-      const currentYear = currentDate.getFullYear();
-      const currentMonth = currentDate.getMonth() + 1;
-      const url = getApiUrlWithTenantId(`/api/admin/shifts?year=${currentYear}&month=${currentMonth}`);
+      const startTime = selectedPattern === 'off' ? null : 
+                      (selectedPattern === 'custom' ? customStartTime : pattern.start);
+      const endTime = selectedPattern === 'off' ? null : 
+                     (selectedPattern === 'custom' ? customEndTime : pattern.end);
+
+      const newShift: Shift = {
+        staff_id: parseInt(selectedStaffId),
+        shift_date: dateKey,
+        start_time: startTime,
+        end_time: endTime,
+        is_off: selectedPattern === 'off'
+      };
+
+      const url = getApiUrlWithTenantId('/api/admin/shifts');
       const response = await fetch(url, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('シフトの取得に失敗しました');
-      }
-
-      const currentShifts: Shift[] = await response.json();
-
-      // コピー先の月の日数を取得
-      const targetYear = copyTargetMonth.getFullYear();
-      const targetMonth = copyTargetMonth.getMonth() + 1;
-      const targetStartDate = new Date(targetYear, targetMonth - 1, 1);
-      const targetEndDate = new Date(targetYear, targetMonth, 0);
-      const targetDays = targetEndDate.getDate();
-      const currentDays = getEndOfMonth(currentDate).getDate();
-
-      // シフトをコピー先の月に変換
-      const copiedShifts: Shift[] = [];
-      currentShifts.forEach(shift => {
-        const shiftDate = new Date(shift.shift_date);
-        const dayOfMonth = shiftDate.getDate();
-        
-        // 日付がコピー先の月の日数を超える場合はスキップ
-        if (dayOfMonth > targetDays) {
-          return;
-        }
-
-        const newDate = new Date(targetYear, targetMonth - 1, dayOfMonth);
-        copiedShifts.push({
-          staff_id: shift.staff_id,
-          shift_date: newDate.toISOString().split('T')[0],
-          start_time: shift.start_time,
-          end_time: shift.end_time,
-          is_off: shift.is_off
-        });
-      });
-
-      // コピー先の月のシフトを保存
-      const saveUrl = getApiUrlWithTenantId('/api/admin/shifts');
-      const saveResponse = await fetch(saveUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ shifts: copiedShifts }),
+        body: JSON.stringify({ shifts: [newShift] }),
       });
 
-      if (!saveResponse.ok) {
-        const errorData = await saveResponse.json();
-        throw new Error(errorData.error || 'シフトのコピーに失敗しました');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'シフトの追加に失敗しました');
       }
 
-      alert('シフトをコピーしました');
-      setShowCopyDialog(false);
+      // ローカル状態を更新
+      const staffMember = staff.find(s => s.staff_id === parseInt(selectedStaffId));
+      setShifts(prev => ({
+        ...prev,
+        [dateKey]: [...(prev[dateKey] || []), { ...newShift, staff_name: staffMember?.name }]
+      }));
+
+      // フォームリセット
+      setSelectedStaffId('');
+      setSelectedPattern('');
+      setCustomStartTime('09:00');
+      setCustomEndTime('18:00');
     } catch (error: any) {
-      console.error('シフトコピーエラー:', error);
-      setError(error.message || 'シフトのコピーに失敗しました');
+      console.error('シフト追加エラー:', error);
+      setError(error.message || 'シフトの追加に失敗しました');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteMonth = async () => {
+  const handleDeleteShift = async (shiftId: number, dateKey: string) => {
+    if (!confirm('このシフトを削除しますか？')) {
+      return;
+    }
+
     try {
-      if (!confirm(`現在の月（${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月）のシフトをすべて削除しますか？`)) {
-        return;
-      }
-
       setSaving(true);
-      setError('');
-
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      const startDate = getStartOfMonth(currentDate).toISOString().split('T')[0];
-      const endDate = getEndOfMonth(currentDate).toISOString().split('T')[0];
-
-      // 現在の月のシフトを取得
-      const url = getApiUrlWithTenantId(`/api/admin/shifts?year=${year}&month=${month}`);
+      const url = getApiUrlWithTenantId(`/api/admin/shifts/${shiftId}`);
       const response = await fetch(url, {
+        method: 'DELETE',
         credentials: 'include',
       });
 
       if (!response.ok) {
-        throw new Error('シフトの取得に失敗しました');
+        throw new Error('シフトの削除に失敗しました');
       }
 
-      const shifts: Shift[] = await response.json();
-
-      // 各シフトを削除
-      for (const shift of shifts) {
-        if (shift.shift_id) {
-          const deleteUrl = getApiUrlWithTenantId(`/api/admin/shifts/${shift.shift_id}`);
-          await fetch(deleteUrl, {
-            method: 'DELETE',
-            credentials: 'include',
-          });
-        }
-      }
-
-      alert('シフトを削除しました');
-      await loadShifts();
+      // ローカル状態を更新
+      setShifts(prev => ({
+        ...prev,
+        [dateKey]: (prev[dateKey] || []).filter(s => s.shift_id !== shiftId)
+      }));
     } catch (error: any) {
       console.error('シフト削除エラー:', error);
       setError(error.message || 'シフトの削除に失敗しました');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePatternChange = (patternId: string) => {
+    setSelectedPattern(patternId);
+    const pattern = SHIFT_PATTERNS.find(p => p.id === patternId);
+    if (pattern && pattern.start && pattern.end) {
+      setCustomStartTime(pattern.start);
+      setCustomEndTime(pattern.end);
+    }
+  };
+
+  const calendarDates = generateCalendarDates();
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+  const today = formatDate(new Date());
+
+  // 利用可能なスタッフ（まだシフトが割り当てられていない）
+  const getAvailableStaff = () => {
+    if (!selectedDate) return staff;
+    const dateKey = formatDate(selectedDate);
+    const existingShiftStaffIds = (shifts[dateKey] || []).map(s => s.staff_id);
+    return staff.filter(s => !existingShiftStaffIds.includes(s.staff_id));
   };
 
   return (
@@ -454,8 +416,9 @@ export default function ShiftManagement() {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="bg-white shadow rounded-lg p-6">
+            {/* ヘッダー */}
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">シフト管理（月単位）</h2>
+              <h2 className="text-2xl font-bold text-gray-900">シフト管理</h2>
               <div className="flex items-center space-x-4">
                 <button
                   onClick={goToPreviousMonth}
@@ -478,20 +441,6 @@ export default function ShiftManagement() {
                 <div className="text-lg font-semibold text-gray-900">
                   {formatMonthYear(currentDate)}
                 </div>
-                <button
-                  onClick={() => setShowCopyDialog(true)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                  disabled={saving}
-                >
-                  月をコピー
-                </button>
-                <button
-                  onClick={handleDeleteMonth}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  disabled={saving}
-                >
-                  月を削除
-                </button>
               </div>
             </div>
 
@@ -501,166 +450,265 @@ export default function ShiftManagement() {
               </div>
             )}
 
+            {/* シフトパターン凡例 */}
+            <div className="mb-6 flex flex-wrap gap-4">
+              {SHIFT_PATTERNS.map(pattern => (
+                <div key={pattern.id} className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded-full ${pattern.color.split(' ')[0]}`}></div>
+                  <span className="text-sm text-gray-700">
+                    {pattern.name} {pattern.time}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             {loading ? (
               <div className="text-center py-8">
                 <p className="text-gray-600">読み込み中...</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300 text-sm">
-                  <thead>
-                    <tr>
-                      <th className="border border-gray-300 bg-gray-50 p-3 text-left font-semibold sticky left-0 bg-gray-50 z-10 min-w-[120px]">
-                        従業員
-                      </th>
-                      {monthDates.map((date) => {
-                        const dateObj = new Date(date);
-                        const dayOfWeek = dateObj.getDay();
-                        const dayName = dayNames[dayOfWeek];
-                        const isHoliday = dayOfWeek === 0 || dayOfWeek === 6;
-                        const isToday = date === new Date().toISOString().split('T')[0];
-                        return (
-                          <th
-                            key={date}
-                            className={`border border-gray-300 bg-gray-50 p-2 text-center font-semibold min-w-[100px] ${
-                              isHoliday ? 'bg-red-50' : isToday ? 'bg-yellow-50' : ''
-                            }`}
-                          >
-                            <div className={`text-xs ${isToday ? 'text-pink-600 font-bold' : isHoliday ? 'text-red-600' : 'text-gray-700'}`}>
-                              {dayName}
-                            </div>
-                            <div className={`text-sm font-bold ${isToday ? 'text-pink-600' : isHoliday ? 'text-red-600' : 'text-gray-900'}`}>
-                              {dateObj.getDate()}
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {staff.map((staffMember) => (
-                      <tr key={staffMember.staff_id}>
-                        <td className="border border-gray-300 bg-gray-50 p-3 font-medium sticky left-0 bg-gray-50 z-10">
-                          {staffMember.name}
-                        </td>
-                        {monthDates.map((date) => {
-                          const shift = shifts[date]?.[staffMember.staff_id] || {
-                            staff_id: staffMember.staff_id,
-                            shift_date: date,
-                            start_time: null,
-                            end_time: null,
-                            is_off: false
-                          };
-                          const dateObj = new Date(date);
-                          const dayOfWeek = dateObj.getDay();
-                          const isHoliday = dayOfWeek === 0 || dayOfWeek === 6;
-                          const isToday = date === new Date().toISOString().split('T')[0];
-
-                          return (
-                            <td
-                              key={`${staffMember.staff_id}-${date}`}
-                              className={`border border-gray-300 p-2 align-top ${
-                                isHoliday ? 'bg-red-50' : isToday ? 'bg-yellow-50' : 'bg-white'
-                              }`}
-                            >
-                              <div className="space-y-1">
-                                <label className="flex items-center space-x-1">
-                                  <input
-                                    type="checkbox"
-                                    checked={shift.is_off}
-                                    onChange={(e) =>
-                                      handleShiftChange(date, staffMember.staff_id, 'is_off', e.target.checked)
-                                    }
-                                    className="h-3 w-3 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                                  />
-                                  <span className="text-xs text-gray-600">休</span>
-                                </label>
-                                {!shift.is_off && (
-                                  <>
-                                    <div>
-                                      <input
-                                        type="time"
-                                        value={shift.start_time || ''}
-                                        onChange={(e) =>
-                                          handleShiftChange(date, staffMember.staff_id, 'start_time', e.target.value)
-                                        }
-                                        className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                                        placeholder="開始"
-                                      />
-                                    </div>
-                                    <div>
-                                      <input
-                                        type="time"
-                                        value={shift.end_time || ''}
-                                        onChange={(e) =>
-                                          handleShiftChange(date, staffMember.staff_id, 'end_time', e.target.value)
-                                        }
-                                        className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                                        placeholder="終了"
-                                      />
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
+              <>
+                {/* カレンダー */}
+                <div className="mb-6">
+                  {/* 曜日ヘッダー */}
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {dayNames.map((day, index) => (
+                      <div
+                        key={day}
+                        className={`text-center text-sm font-semibold py-2 ${
+                          index === 0 ? 'text-red-600' : index === 6 ? 'text-blue-600' : 'text-gray-700'
+                        }`}
+                      >
+                        {day}
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-6 py-2 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-              >
-                {saving ? '保存中...' : 'シフトを保存'}
-              </button>
-            </div>
+                  {/* カレンダー本体 */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {calendarDates.map((date, index) => {
+                      const dateKey = formatDate(date);
+                      const dayShifts = shifts[dateKey] || [];
+                      const isToday = dateKey === today;
+                      const isCurrentMonth = date.getMonth() === currentDate.getMonth();
+                      const dayOfWeek = date.getDay();
+
+                      return (
+                        <div
+                          key={index}
+                          onClick={() => handleDateClick(date)}
+                          className={`min-h-[120px] p-2 border rounded cursor-pointer transition-all hover:shadow-md ${
+                            isCurrentMonth ? 'bg-white border-gray-300' : 'bg-gray-50 border-gray-200'
+                          } ${isToday ? 'ring-2 ring-pink-500' : ''} ${
+                            dayOfWeek === 0 ? 'bg-red-50' : dayOfWeek === 6 ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span
+                              className={`text-sm font-medium ${
+                                isCurrentMonth ? 'text-gray-900' : 'text-gray-400'
+                              } ${isToday ? 'text-pink-600 font-bold' : ''}`}
+                            >
+                              {date.getDate()}
+                            </span>
+                            {dayShifts.length > 0 && (
+                              <span className="text-xs bg-pink-100 text-pink-800 px-2 py-0.5 rounded-full">
+                                {dayShifts.length}名
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-1 overflow-y-auto max-h-20">
+                            {dayShifts.slice(0, 3).map((shift) => {
+                              const pattern = getShiftPattern(shift);
+                              return (
+                                <div
+                                  key={shift.shift_id || shift.staff_id}
+                                  className="text-xs flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div
+                                    className={`w-2 h-2 rounded-full ${
+                                      pattern?.color.split(' ')[0] || 'bg-gray-300'
+                                    }`}
+                                  ></div>
+                                  <span className="truncate">{shift.staff_name || staff.find(s => s.staff_id === shift.staff_id)?.name}</span>
+                                </div>
+                              );
+                            })}
+                            {dayShifts.length > 3 && (
+                              <div className="text-xs text-gray-500">
+                                他{dayShifts.length - 3}名...
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 月コピーダイアログ */}
-      {showCopyDialog && (
+      {/* シフト編集ダイアログ */}
+      {showShiftDialog && selectedDate && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">月をコピー</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              {currentDate.getFullYear()}年{currentDate.getMonth() + 1}月のシフトをコピー先の月にコピーします。
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                コピー先の月
-              </label>
-              <input
-                type="month"
-                value={`${copyTargetMonth.getFullYear()}-${String(copyTargetMonth.getMonth() + 1).padStart(2, '0')}`}
-                onChange={(e) => {
-                  const [year, month] = e.target.value.split('-').map(Number);
-                  setCopyTargetMonth(new Date(year, month - 1, 1));
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-              />
-            </div>
-            <div className="flex justify-end space-x-3">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">
+                {selectedDate.getMonth() + 1}月{selectedDate.getDate()}日のシフト管理
+              </h3>
               <button
-                onClick={() => setShowCopyDialog(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                disabled={saving}
+                onClick={() => setShowShiftDialog(false)}
+                className="text-gray-400 hover:text-gray-600"
               >
-                キャンセル
+                <XMarkIcon className="h-6 w-6" />
               </button>
+            </div>
+
+            {/* 登録済みシフト一覧 */}
+            <div className="mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                登録済みシフト（{(shifts[formatDate(selectedDate)] || []).length}名）
+              </h4>
+              {(shifts[formatDate(selectedDate)] || []).length === 0 ? (
+                <p className="text-sm text-gray-500 py-4">まだシフトが登録されていません</p>
+              ) : (
+                <div className="space-y-2">
+                  {(shifts[formatDate(selectedDate)] || []).map((shift) => {
+                    const pattern = getShiftPattern(shift);
+                    return (
+                      <div
+                        key={shift.shift_id || shift.staff_id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 font-semibold`}>
+                            {(shift.staff_name || staff.find(s => s.staff_id === shift.staff_id)?.name || '?').charAt(0)}
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {shift.staff_name || staff.find(s => s.staff_id === shift.staff_id)?.name}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-xs px-2 py-0.5 rounded ${pattern?.color || 'bg-gray-100 text-gray-800'}`}>
+                                {pattern?.name || 'カスタム'}
+                              </span>
+                              {shift.start_time && shift.end_time && (
+                                <span className="text-xs text-gray-600">
+                                  {shift.start_time.substring(0, 5)} - {shift.end_time.substring(0, 5)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        {shift.shift_id && (
+                          <button
+                            onClick={() => handleDeleteShift(shift.shift_id!, formatDate(selectedDate))}
+                            className="text-red-600 hover:text-red-800 p-1"
+                            disabled={saving}
+                          >
+                            <TrashIcon className="h-5 w-5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">シフト追加</h4>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    従業員
+                  </label>
+                  <select
+                    value={selectedStaffId}
+                    onChange={(e) => setSelectedStaffId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  >
+                    <option value="">選択してください</option>
+                    {getAvailableStaff().map(s => (
+                      <option key={s.staff_id} value={s.staff_id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {getAvailableStaff().length === 0 && (
+                    <p className="text-xs text-gray-500 mt-1">全従業員のシフトが登録済みです</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    シフトパターン
+                  </label>
+                  <select
+                    value={selectedPattern}
+                    onChange={(e) => handlePatternChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  >
+                    <option value="">選択してください</option>
+                    {SHIFT_PATTERNS.map(pattern => (
+                      <option key={pattern.id} value={pattern.id}>
+                        {pattern.name} {pattern.time && `(${pattern.time})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedPattern && selectedPattern !== 'off' && selectedPattern !== '' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        開始時間
+                      </label>
+                      <input
+                        type="time"
+                        value={selectedPattern === 'custom' ? customStartTime : SHIFT_PATTERNS.find(p => p.id === selectedPattern)?.start || customStartTime}
+                        onChange={(e) => setCustomStartTime(e.target.value)}
+                        disabled={selectedPattern !== 'custom'}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        終了時間
+                      </label>
+                      <input
+                        type="time"
+                        value={selectedPattern === 'custom' ? customEndTime : SHIFT_PATTERNS.find(p => p.id === selectedPattern)?.end || customEndTime}
+                        onChange={(e) => setCustomEndTime(e.target.value)}
+                        disabled={selectedPattern !== 'custom'}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleAddShift}
+                  disabled={!selectedStaffId || !selectedPattern || saving}
+                  className="w-full px-4 py-2 bg-pink-600 text-white rounded-md hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  シフトを追加
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
               <button
-                onClick={handleCopyMonth}
-                disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-md hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                onClick={() => setShowShiftDialog(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
               >
-                {saving ? 'コピー中...' : 'コピー'}
+                閉じる
               </button>
             </div>
           </div>
@@ -669,4 +717,3 @@ export default function ShiftManagement() {
     </div>
   );
 }
-
