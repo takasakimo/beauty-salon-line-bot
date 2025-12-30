@@ -16,7 +16,26 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const menuId = searchParams.get('menu_id');
 
-    let queryText = 'SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date FROM staff WHERE tenant_id = $1';
+    // image_urlカラムが存在するかチェック
+    let hasImageUrl = false;
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'staff' AND column_name = 'image_url'`
+      );
+      hasImageUrl = columnCheck.rows.length > 0;
+    } catch (checkError: any) {
+      console.error('カラムチェックエラー:', checkError);
+      // エラーが発生しても続行（image_urlなしで処理）
+    }
+
+    // image_urlカラムが存在する場合は含める
+    const selectColumns = hasImageUrl
+      ? 'staff_id, name, email, phone_number, working_hours, image_url, created_date'
+      : 'staff_id, name, email, phone_number, working_hours, created_date';
+
+    let queryText = `SELECT ${selectColumns} FROM staff WHERE tenant_id = $1`;
     const params: any[] = [tenantId];
 
     // メニューIDが指定されている場合、対応可能なスタッフのみを取得
@@ -32,7 +51,15 @@ export async function GET(request: NextRequest) {
     
     const result = await query(queryText, params);
     
-    return NextResponse.json(result.rows);
+    // image_urlが存在しない場合は、各レコードにnullを追加
+    const rows = result.rows.map((row: any) => {
+      if (!hasImageUrl) {
+        row.image_url = null;
+      }
+      return row;
+    });
+    
+    return NextResponse.json(rows);
   } catch (error: any) {
     console.error('Error fetching staff:', error);
     return NextResponse.json(
