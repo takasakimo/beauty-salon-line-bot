@@ -987,15 +987,26 @@ export default function StaffManagement() {
                                   <p className="text-xs text-gray-600">
                                     <span className="font-medium text-pink-600">{selectedMenuIds.length}件</span> 選択中
                                   </p>
-                                  {selectedMenuIds.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setSelectedMenuIds([])}
-                                      className="text-xs text-gray-500 hover:text-gray-700 underline"
-                                    >
-                                      すべて解除
-                                    </button>
-                                  )}
+                                  <div className="flex gap-3">
+                                    {selectedMenuIds.length < menus.length && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedMenuIds(menus.map(m => m.menu_id))}
+                                        className="text-xs text-pink-600 hover:text-pink-700 underline"
+                                      >
+                                        全て選択
+                                      </button>
+                                    )}
+                                    {selectedMenuIds.length > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedMenuIds([])}
+                                        className="text-xs text-gray-500 hover:text-gray-700 underline"
+                                      >
+                                        すべて解除
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                                 <p className="mt-2 text-xs text-gray-600 bg-blue-50 p-2 rounded border border-blue-100">
                                   選択したメニューのみ、このスタッフが対応可能になります。未選択のメニューは予約時にこのスタッフを選択できません。
