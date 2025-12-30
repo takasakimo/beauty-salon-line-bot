@@ -27,7 +27,7 @@ export async function PUT(
     }
     const staffId = parseInt(params.id);
     const body = await request.json();
-    const { name, email, phone_number, working_hours, menu_ids } = body;
+    const { name, email, phone_number, working_hours, menu_ids, image_url } = body;
 
     // バリデーション
     if (!name) {
@@ -47,14 +47,15 @@ export async function PUT(
       // スタッフ情報を更新
       const result = await client.query(
         `UPDATE staff 
-         SET name = $1, email = $2, phone_number = $3, working_hours = $4
-         WHERE staff_id = $5 AND tenant_id = $6
+         SET name = $1, email = $2, phone_number = $3, working_hours = $4, image_url = $5
+         WHERE staff_id = $6 AND tenant_id = $7
          RETURNING *`,
         [
           name,
           email || null,
           phone_number || null,
           working_hours || null,
+          image_url || null,
           staffId,
           tenantId
         ]
@@ -101,7 +102,7 @@ export async function PUT(
       let staffResult;
       try {
         staffResult = await query(
-          `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date,
+          `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date,
                   COALESCE(
                     json_agg(
                       json_build_object('menu_id', m.menu_id, 'name', m.name)
@@ -112,7 +113,7 @@ export async function PUT(
            LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
            LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
            WHERE s.staff_id = $1
-           GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date`,
+           GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date`,
           [staffId]
         );
       } catch (joinError: any) {
@@ -120,7 +121,7 @@ export async function PUT(
         if (joinError.message && joinError.message.includes('staff_menus')) {
           console.log('staff_menusテーブルが存在しないため、シンプルなクエリを使用します');
           staffResult = await query(
-            `SELECT staff_id, name, email, phone_number, working_hours, created_date,
+            `SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date,
                     '[]'::json as available_menus
              FROM staff
              WHERE staff_id = $1`,

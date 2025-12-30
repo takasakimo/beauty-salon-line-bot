@@ -112,7 +112,7 @@ export async function DELETE(
       // reservation_menusテーブルが存在しない場合はスキップ
       if (error.message && error.message.includes('reservation_menus')) {
         console.log('reservation_menusテーブルが存在しないため、スキップします');
-      } else {
+    } else {
         throw error;
       }
     }
@@ -128,9 +128,9 @@ export async function DELETE(
 
     // メニューを削除
     const deleteResult = await client.query(
-      `DELETE FROM menus WHERE menu_id = $1 AND tenant_id = $2`,
-      [menuId, tenantId]
-    );
+        `DELETE FROM menus WHERE menu_id = $1 AND tenant_id = $2`,
+        [menuId, tenantId]
+      );
 
     if (deleteResult.rowCount === 0) {
       await client.query('ROLLBACK');

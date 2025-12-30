@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const menuId = searchParams.get('menu_id');
 
-    let queryText = 'SELECT * FROM staff WHERE tenant_id = $1';
+    let queryText = 'SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date FROM staff WHERE tenant_id = $1';
     const params: any[] = [tenantId];
 
     // メニューIDが指定されている場合、対応可能なスタッフのみを取得

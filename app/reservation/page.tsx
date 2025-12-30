@@ -15,6 +15,7 @@ interface Menu {
 interface Staff {
   staff_id: number;
   name: string;
+  image_url?: string | null;
 }
 
 function ReservationPageContent() {
@@ -218,7 +219,8 @@ function ReservationPageContent() {
 
   const handleStaffSelect = (staffMember: Staff | null) => {
     setSelectedStaff(staffMember);
-    setStep('datetime');
+    // 選択状態を更新するだけで、次のステップには進まない
+    // 「次へ進む」ボタンで次のステップに進む
   };
 
   const handleDateTimeSelect = (date: string, time: string) => {
@@ -415,7 +417,7 @@ function ReservationPageContent() {
 
           {step === 'staff' && (
             <div>
-              <h2 className="text-xl font-semibold mb-6 text-gray-800">スタッフを選択</h2>
+              <h2 className="text-xl font-semibold mb-6 text-gray-800">スタッフ指名</h2>
               {selectedMenus.length > 0 && (
                 <p className="text-sm text-gray-600 mb-4">
                   {selectedMenus.map(m => m.name).join('、')}に対応可能なスタッフを表示しています
@@ -430,22 +432,73 @@ function ReservationPageContent() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4">
-                  {staff.map((staffMember) => (
-                    <button
-                      key={staffMember.staff_id}
-                      onClick={() => handleStaffSelect(staffMember)}
-                      className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
-                    >
-                      <h3 className="text-lg font-semibold text-gray-900">{staffMember.name}</h3>
-                    </button>
-                  ))}
+                <div>
+                  {/* 横スクロール可能なスタッフ一覧 */}
+                  <div className="mb-6">
+                    <div className="overflow-x-auto pb-4 -mx-4 px-4">
+                      <div className="flex space-x-4 min-w-max">
+                        {staff.map((staffMember) => {
+                          const isSelected = selectedStaff?.staff_id === staffMember.staff_id;
+                          return (
+                            <button
+                              key={staffMember.staff_id}
+                              onClick={() => handleStaffSelect(staffMember)}
+                              className="flex flex-col items-center min-w-[80px] transition-all"
+                            >
+                              <div className="relative">
+                                {/* 選択インジケーター */}
+                                {isSelected && (
+                                  <div className="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-pink-500 rounded-full z-10"></div>
+                                )}
+                                {/* プロフィール写真 */}
+                                <div className={`w-20 h-20 rounded-full overflow-hidden border-2 flex-shrink-0 ${
+                                  isSelected ? 'border-white shadow-lg' : 'border-gray-300'
+                                }`}>
+                                  {staffMember.image_url ? (
+                                    <img
+                                      src={staffMember.image_url}
+                                      alt={staffMember.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                      <span className="text-gray-400 text-xs">写真なし</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {/* 名前 */}
+                              <h3 className={`text-sm font-semibold mt-2 text-center ${
+                                isSelected ? 'text-pink-600' : 'text-gray-900'
+                              }`}>
+                                {staffMember.name}
+                              </h3>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* スタッフ選択なしオプション */}
                   <button
                     onClick={() => handleStaffSelect(null)}
-                    className="p-6 border-2 border-gray-200 rounded-lg hover:border-pink-500 hover:bg-pink-50 text-left transition-all shadow-sm hover:shadow-md"
+                    className={`w-full p-6 border-2 rounded-lg text-left transition-all shadow-sm hover:shadow-md mb-4 ${
+                      selectedStaff === null
+                        ? 'border-pink-500 bg-pink-50'
+                        : 'border-gray-200 hover:border-pink-500 hover:bg-pink-50'
+                    }`}
                   >
                     <h3 className="text-lg font-semibold text-gray-900">スタッフ選択なし</h3>
                     <p className="text-sm text-gray-600 mt-1">スタッフを指定しない場合はこちらを選択してください</p>
+                  </button>
+                  
+                  {/* 次へ進むボタン */}
+                  <button
+                    onClick={() => setStep('datetime')}
+                    className="w-full px-6 py-3 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 transition-colors"
+                  >
+                    次へ進む
                   </button>
                 </div>
               )}

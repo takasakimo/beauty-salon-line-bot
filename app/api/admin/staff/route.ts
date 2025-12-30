@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     let result;
     try {
       result = await query(
-        `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date,
+        `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date,
                 COALESCE(
                   json_agg(
                     json_build_object('menu_id', m.menu_id, 'name', m.name)
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
          LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
          LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
          WHERE s.tenant_id = $1 
-         GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date
+         GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date
          ORDER BY s.staff_id`,
         [tenantId]
       );
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       if (joinError.message && joinError.message.includes('staff_menus')) {
         console.log('staff_menusテーブルが存在しないため、シンプルなクエリを使用します');
         result = await query(
-          `SELECT staff_id, name, email, phone_number, working_hours, created_date,
+          `SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date,
                   '[]'::json as available_menus
            FROM staff
            WHERE tenant_id = $1 
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       let staffResult;
       try {
         staffResult = await query(
-          `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date,
+          `SELECT s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date,
                   COALESCE(
                     json_agg(
                       json_build_object('menu_id', m.menu_id, 'name', m.name)
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
            LEFT JOIN staff_menus sm ON s.staff_id = sm.staff_id
            LEFT JOIN menus m ON sm.menu_id = m.menu_id AND m.is_active = true
            WHERE s.staff_id = $1
-           GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.created_date`,
+           GROUP BY s.staff_id, s.name, s.email, s.phone_number, s.working_hours, s.image_url, s.created_date`,
           [staffId]
         );
       } catch (joinError: any) {
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
         if (joinError.message && joinError.message.includes('staff_menus')) {
           console.log('staff_menusテーブルが存在しないため、シンプルなクエリを使用します');
           staffResult = await query(
-            `SELECT staff_id, name, email, phone_number, working_hours, created_date,
+            `SELECT staff_id, name, email, phone_number, working_hours, image_url, created_date,
                     '[]'::json as available_menus
              FROM staff
              WHERE staff_id = $1`,

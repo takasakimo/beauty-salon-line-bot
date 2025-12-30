@@ -625,8 +625,8 @@ export default function SettingsPage() {
             </p>
           </div>
 
-        </div>
-      </div>
+              </div>
+            </div>
 
       {/* パスワード変更モーダル */}
       {showPasswordModal && (

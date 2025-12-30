@@ -25,6 +25,7 @@ interface Staff {
   email: string | null;
   phone_number: string | null;
   working_hours: string | null;
+  image_url: string | null;
   created_date: string;
   available_menus?: Array<{ menu_id: number; name: string }>;
 }
@@ -64,6 +65,9 @@ export default function StaffManagement() {
   const [staffError, setStaffError] = useState('');
   const [menus, setMenus] = useState<Menu[]>([]);
   const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
+  const [staffImageFile, setStaffImageFile] = useState<File | null>(null);
+  const [staffImagePreview, setStaffImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     loadStaff();
@@ -153,6 +157,8 @@ export default function StaffManagement() {
       });
       const menuIds = staffMember.available_menus?.map(m => m.menu_id) || [];
       setSelectedMenuIds(menuIds);
+      setStaffImagePreview(staffMember.image_url || null);
+      setStaffImageFile(null);
     } else if (adminMember) {
       setSelectedRole('admin');
       setEditingAdmin(adminMember);
@@ -180,6 +186,8 @@ export default function StaffManagement() {
         email: ''
       });
       setSelectedMenuIds([]);
+      setStaffImagePreview(null);
+      setStaffImageFile(null);
     }
     setStaffError('');
     setShowStaffModal(true);
@@ -203,7 +211,61 @@ export default function StaffManagement() {
       email: ''
     });
     setSelectedMenuIds([]);
+    setStaffImagePreview(null);
+    setStaffImageFile(null);
     setStaffError('');
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setStaffError('画像ファイルのみ選択可能です');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setStaffError('ファイルサイズは5MB以下にしてください');
+        return;
+      }
+      setStaffImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setStaffImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageUpload = async (staffId: number) => {
+    if (!staffImageFile) return null;
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', staffImageFile);
+      formData.append('staff_id', staffId.toString());
+
+      const url = getApiUrlWithTenantId('/api/admin/staff/upload-image');
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '画像のアップロードに失敗しました');
+      }
+
+      const data = await response.json();
+      return data.image_url;
+    } catch (error: any) {
+      console.error('画像アップロードエラー:', error);
+      setStaffError(error.message || '画像のアップロードに失敗しました');
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleMenuToggle = (menuId: number) => {
@@ -269,6 +331,63 @@ export default function StaffManagement() {
         
         const method = editingStaff ? 'PUT' : 'POST';
         
+        // 画像が選択されている場合は先にアップロード
+        let imageUrl = editingStaff?.image_url || null;
+        if (staffImageFile) {
+          if (editingStaff) {
+            // 更新時は既存のstaff_idを使用
+            imageUrl = await handleImageUpload(editingStaff.staff_id);
+          } else {
+            // 新規作成時は一旦画像なしで保存してからアップロード
+            const tempResponse = await fetch(url, {
+              method,
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                name: staffFormData.name,
+                email: staffFormData.email || null,
+                phone_number: staffFormData.phone_number || null,
+                working_hours: staffFormData.working_hours || null,
+                menu_ids: selectedMenuIds,
+                image_url: null
+              }),
+            });
+
+            if (!tempResponse.ok) {
+              const errorData = await tempResponse.json();
+              throw new Error(errorData.error || '保存に失敗しました');
+            }
+
+            const savedStaff = await tempResponse.json();
+            const staffId = savedStaff.staff_id;
+            imageUrl = await handleImageUpload(staffId);
+            
+            // 画像URLを更新
+            const updateUrl = getApiUrlWithTenantId(`/api/admin/staff/${staffId}`);
+            await fetch(updateUrl, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                name: staffFormData.name,
+                email: staffFormData.email || null,
+                phone_number: staffFormData.phone_number || null,
+                working_hours: staffFormData.working_hours || null,
+                menu_ids: selectedMenuIds,
+                image_url: imageUrl
+              }),
+            });
+            await loadStaff();
+            handleCloseStaffModal();
+            return;
+          }
+        }
+        
+        // スタッフ情報を保存（画像URLを含む）
         const response = await fetch(url, {
           method,
           headers: {
@@ -280,7 +399,8 @@ export default function StaffManagement() {
             email: staffFormData.email || null,
             phone_number: staffFormData.phone_number || null,
             working_hours: staffFormData.working_hours || null,
-            menu_ids: selectedMenuIds
+            menu_ids: selectedMenuIds,
+            image_url: imageUrl
           }),
         });
 
@@ -449,10 +569,24 @@ export default function StaffManagement() {
                     staff.map((staffMember) => (
                       <li key={staffMember.staff_id} className="px-6 py-4">
                         <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-medium text-gray-900">
-                              {staffMember.name}
-                            </h3>
+                          <div className="flex items-center space-x-4 flex-1">
+                            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-gray-300 flex-shrink-0">
+                              {staffMember.image_url ? (
+                                <img
+                                  src={staffMember.image_url}
+                                  alt={staffMember.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                  <span className="text-gray-400 text-xs">写真なし</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="text-lg font-medium text-gray-900">
+                                {staffMember.name}
+                              </h3>
                             <div className="mt-2 flex items-center text-sm text-gray-500 space-x-4">
                               {staffMember.email && (
                                 <span>{staffMember.email}</span>
@@ -476,6 +610,7 @@ export default function StaffManagement() {
                                 </div>
                               </div>
                             )}
+                            </div>
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
@@ -739,6 +874,33 @@ export default function StaffManagement() {
                             onChange={(e) => setStaffFormData({ ...staffFormData, working_hours: e.target.value })}
                             className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                           />
+                        </div>
+
+                        <div>
+                          <label htmlFor="staff_image" className="block text-sm font-medium text-gray-700 mb-1">
+                            スタッフ写真
+                          </label>
+                          <div className="flex items-center space-x-4">
+                            {staffImagePreview && (
+                              <div className="relative">
+                                <img
+                                  src={staffImagePreview}
+                                  alt="プレビュー"
+                                  className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
+                                />
+                              </div>
+                            )}
+                            <div className="flex-1">
+                              <input
+                                type="file"
+                                id="staff_image"
+                                accept="image/*"
+                                onChange={handleImageChange}
+                                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100"
+                              />
+                              <p className="mt-1 text-xs text-gray-500">5MB以下の画像ファイルを選択してください</p>
+                            </div>
+                          </div>
                         </div>
 
                         {selectedRole === 'staff' && (
