@@ -234,7 +234,8 @@ function ReservationPageContent() {
 
     setLoading(true);
     try {
-      const reservationDate = new Date(`${selectedDate}T${selectedTime}`);
+      // JST時間として明示的に送信（toISOString()は使わない）
+      const reservationDate = `${selectedDate}T${selectedTime}:00+09:00`;
       
       const response = await fetch('/api/reservations', {
         method: 'POST',
