@@ -33,6 +33,8 @@ export default function ShiftManagement() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [copyTargetMonth, setCopyTargetMonth] = useState(new Date());
 
   useEffect(() => {
     loadStaff();
@@ -68,10 +70,10 @@ export default function ShiftManagement() {
   const loadShifts = async () => {
     try {
       setLoading(true);
-      const startDate = getStartOfWeek(currentDate).toISOString().split('T')[0];
-      const endDate = getEndOfWeek(currentDate).toISOString().split('T')[0];
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
 
-      const url = getApiUrlWithTenantId(`/api/admin/shifts?start_date=${startDate}&end_date=${endDate}`);
+      const url = getApiUrlWithTenantId(`/api/admin/shifts?year=${year}&month=${month}`);
       const response = await fetch(url, {
         credentials: 'include',
       });
@@ -80,9 +82,9 @@ export default function ShiftManagement() {
         const data = await response.json();
         const shiftsMap: Record<string, Record<number, Shift>> = {};
         
-        // 週の日付を初期化
-        const weekDates = getWeekDates(currentDate);
-        weekDates.forEach(date => {
+        // 月の日付を初期化
+        const monthDates = getMonthDates(currentDate);
+        monthDates.forEach(date => {
           shiftsMap[date] = {};
           staff.forEach(s => {
             shiftsMap[date][s.staff_id] = {
@@ -113,27 +115,27 @@ export default function ShiftManagement() {
     }
   };
 
-  const getStartOfWeek = (date: Date) => {
+  const getStartOfMonth = (date: Date) => {
     const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 月曜日を週の始まりとする
-    return new Date(d.setDate(diff));
+    d.setDate(1);
+    return d;
   };
 
-  const getEndOfWeek = (date: Date) => {
-    const start = getStartOfWeek(date);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return end;
+  const getEndOfMonth = (date: Date) => {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + 1);
+    d.setDate(0);
+    return d;
   };
 
-  const getWeekDates = (date: Date) => {
-    const start = getStartOfWeek(date);
+  const getMonthDates = (date: Date) => {
+    const start = getStartOfMonth(date);
+    const end = getEndOfMonth(date);
     const dates: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      dates.push(d.toISOString().split('T')[0]);
+    const current = new Date(start);
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
     }
     return dates;
   };
@@ -208,28 +210,157 @@ export default function ShiftManagement() {
     }
   };
 
-  const weekDates = getWeekDates(currentDate);
-  const dayNames = ['月', '火', '水', '木', '金', '土', '日'];
+  const monthDates = getMonthDates(currentDate);
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return `${date.getMonth() + 1}/${date.getDate()}`;
   };
 
-  const goToPreviousWeek = () => {
+  const formatMonthYear = (date: Date) => {
+    return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  };
+
+  const goToPreviousMonth = () => {
     const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() - 7);
+    newDate.setMonth(currentDate.getMonth() - 1);
     setCurrentDate(newDate);
   };
 
-  const goToNextWeek = () => {
+  const goToNextMonth = () => {
     const newDate = new Date(currentDate);
-    newDate.setDate(currentDate.getDate() + 7);
+    newDate.setMonth(currentDate.getMonth() + 1);
     setCurrentDate(newDate);
   };
 
   const goToToday = () => {
     setCurrentDate(new Date());
+  };
+
+  const handleCopyMonth = async () => {
+    try {
+      if (!confirm(`現在の月のシフトを${copyTargetMonth.getFullYear()}年${copyTargetMonth.getMonth() + 1}月にコピーしますか？`)) {
+        return;
+      }
+
+      setSaving(true);
+      setError('');
+
+      // 現在の月のシフトを取得
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      const url = getApiUrlWithTenantId(`/api/admin/shifts?year=${currentYear}&month=${currentMonth}`);
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('シフトの取得に失敗しました');
+      }
+
+      const currentShifts: Shift[] = await response.json();
+
+      // コピー先の月の日数を取得
+      const targetYear = copyTargetMonth.getFullYear();
+      const targetMonth = copyTargetMonth.getMonth() + 1;
+      const targetStartDate = new Date(targetYear, targetMonth - 1, 1);
+      const targetEndDate = new Date(targetYear, targetMonth, 0);
+      const targetDays = targetEndDate.getDate();
+      const currentDays = getEndOfMonth(currentDate).getDate();
+
+      // シフトをコピー先の月に変換
+      const copiedShifts: Shift[] = [];
+      currentShifts.forEach(shift => {
+        const shiftDate = new Date(shift.shift_date);
+        const dayOfMonth = shiftDate.getDate();
+        
+        // 日付がコピー先の月の日数を超える場合はスキップ
+        if (dayOfMonth > targetDays) {
+          return;
+        }
+
+        const newDate = new Date(targetYear, targetMonth - 1, dayOfMonth);
+        copiedShifts.push({
+          staff_id: shift.staff_id,
+          shift_date: newDate.toISOString().split('T')[0],
+          start_time: shift.start_time,
+          end_time: shift.end_time,
+          is_off: shift.is_off
+        });
+      });
+
+      // コピー先の月のシフトを保存
+      const saveUrl = getApiUrlWithTenantId('/api/admin/shifts');
+      const saveResponse = await fetch(saveUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ shifts: copiedShifts }),
+      });
+
+      if (!saveResponse.ok) {
+        const errorData = await saveResponse.json();
+        throw new Error(errorData.error || 'シフトのコピーに失敗しました');
+      }
+
+      alert('シフトをコピーしました');
+      setShowCopyDialog(false);
+    } catch (error: any) {
+      console.error('シフトコピーエラー:', error);
+      setError(error.message || 'シフトのコピーに失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteMonth = async () => {
+    try {
+      if (!confirm(`現在の月（${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月）のシフトをすべて削除しますか？`)) {
+        return;
+      }
+
+      setSaving(true);
+      setError('');
+
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      const startDate = getStartOfMonth(currentDate).toISOString().split('T')[0];
+      const endDate = getEndOfMonth(currentDate).toISOString().split('T')[0];
+
+      // 現在の月のシフトを取得
+      const url = getApiUrlWithTenantId(`/api/admin/shifts?year=${year}&month=${month}`);
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('シフトの取得に失敗しました');
+      }
+
+      const shifts: Shift[] = await response.json();
+
+      // 各シフトを削除
+      for (const shift of shifts) {
+        if (shift.shift_id) {
+          const deleteUrl = getApiUrlWithTenantId(`/api/admin/shifts/${shift.shift_id}`);
+          await fetch(deleteUrl, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+        }
+      }
+
+      alert('シフトを削除しました');
+      await loadShifts();
+    } catch (error: any) {
+      console.error('シフト削除エラー:', error);
+      setError(error.message || 'シフトの削除に失敗しました');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -324,10 +455,10 @@ export default function ShiftManagement() {
         <div className="px-4 py-6 sm:px-0">
           <div className="bg-white shadow rounded-lg p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">シフト管理</h2>
+              <h2 className="text-2xl font-bold text-gray-900">シフト管理（月単位）</h2>
               <div className="flex items-center space-x-4">
                 <button
-                  onClick={goToPreviousWeek}
+                  onClick={goToPreviousMonth}
                   className="p-2 text-gray-400 hover:text-gray-600"
                 >
                   <ChevronLeftIcon className="h-5 w-5" />
@@ -339,14 +470,28 @@ export default function ShiftManagement() {
                   今日
                 </button>
                 <button
-                  onClick={goToNextWeek}
+                  onClick={goToNextMonth}
                   className="p-2 text-gray-400 hover:text-gray-600"
                 >
                   <ChevronRightIcon className="h-5 w-5" />
                 </button>
                 <div className="text-lg font-semibold text-gray-900">
-                  {formatDate(weekDates[0])} - {formatDate(weekDates[6])}
+                  {formatMonthYear(currentDate)}
                 </div>
+                <button
+                  onClick={() => setShowCopyDialog(true)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                  disabled={saving}
+                >
+                  月をコピー
+                </button>
+                <button
+                  onClick={handleDeleteMonth}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  disabled={saving}
+                >
+                  月を削除
+                </button>
               </div>
             </div>
 
@@ -362,24 +507,31 @@ export default function ShiftManagement() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-gray-300">
+                <table className="min-w-full border-collapse border border-gray-300 text-sm">
                   <thead>
                     <tr>
-                      <th className="border border-gray-300 bg-gray-50 p-3 text-left font-semibold sticky left-0 bg-gray-50 z-10">
+                      <th className="border border-gray-300 bg-gray-50 p-3 text-left font-semibold sticky left-0 bg-gray-50 z-10 min-w-[120px]">
                         従業員
                       </th>
-                      {weekDates.map((date, index) => {
+                      {monthDates.map((date) => {
                         const dateObj = new Date(date);
-                        const isHoliday = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                        const dayOfWeek = dateObj.getDay();
+                        const dayName = dayNames[dayOfWeek];
+                        const isHoliday = dayOfWeek === 0 || dayOfWeek === 6;
+                        const isToday = date === new Date().toISOString().split('T')[0];
                         return (
                           <th
                             key={date}
-                            className={`border border-gray-300 bg-gray-50 p-3 text-center font-semibold min-w-[150px] ${
-                              isHoliday ? 'bg-red-50' : ''
+                            className={`border border-gray-300 bg-gray-50 p-2 text-center font-semibold min-w-[100px] ${
+                              isHoliday ? 'bg-red-50' : isToday ? 'bg-yellow-50' : ''
                             }`}
                           >
-                            <div>{dayNames[index]}</div>
-                            <div className="text-sm font-normal">{formatDate(date)}</div>
+                            <div className={`text-xs ${isToday ? 'text-pink-600 font-bold' : isHoliday ? 'text-red-600' : 'text-gray-700'}`}>
+                              {dayName}
+                            </div>
+                            <div className={`text-sm font-bold ${isToday ? 'text-pink-600' : isHoliday ? 'text-red-600' : 'text-gray-900'}`}>
+                              {dateObj.getDate()}
+                            </div>
                           </th>
                         );
                       })}
@@ -391,7 +543,7 @@ export default function ShiftManagement() {
                         <td className="border border-gray-300 bg-gray-50 p-3 font-medium sticky left-0 bg-gray-50 z-10">
                           {staffMember.name}
                         </td>
-                        {weekDates.map((date) => {
+                        {monthDates.map((date) => {
                           const shift = shifts[date]?.[staffMember.staff_id] || {
                             staff_id: staffMember.staff_id,
                             shift_date: date,
@@ -400,47 +552,51 @@ export default function ShiftManagement() {
                             is_off: false
                           };
                           const dateObj = new Date(date);
-                          const isHoliday = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                          const dayOfWeek = dateObj.getDay();
+                          const isHoliday = dayOfWeek === 0 || dayOfWeek === 6;
+                          const isToday = date === new Date().toISOString().split('T')[0];
 
                           return (
                             <td
                               key={`${staffMember.staff_id}-${date}`}
-                              className={`border border-gray-300 p-2 ${isHoliday ? 'bg-red-50' : 'bg-white'}`}
+                              className={`border border-gray-300 p-2 align-top ${
+                                isHoliday ? 'bg-red-50' : isToday ? 'bg-yellow-50' : 'bg-white'
+                              }`}
                             >
-                              <div className="space-y-2">
-                                <label className="flex items-center space-x-2">
+                              <div className="space-y-1">
+                                <label className="flex items-center space-x-1">
                                   <input
                                     type="checkbox"
                                     checked={shift.is_off}
                                     onChange={(e) =>
                                       handleShiftChange(date, staffMember.staff_id, 'is_off', e.target.checked)
                                     }
-                                    className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                                    className="h-3 w-3 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
                                   />
-                                  <span className="text-sm text-gray-700">休み</span>
+                                  <span className="text-xs text-gray-600">休</span>
                                 </label>
                                 {!shift.is_off && (
                                   <>
                                     <div>
-                                      <label className="block text-xs text-gray-500 mb-1">開始</label>
                                       <input
                                         type="time"
                                         value={shift.start_time || ''}
                                         onChange={(e) =>
                                           handleShiftChange(date, staffMember.staff_id, 'start_time', e.target.value)
                                         }
-                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                        className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                        placeholder="開始"
                                       />
                                     </div>
                                     <div>
-                                      <label className="block text-xs text-gray-500 mb-1">終了</label>
                                       <input
                                         type="time"
                                         value={shift.end_time || ''}
                                         onChange={(e) =>
                                           handleShiftChange(date, staffMember.staff_id, 'end_time', e.target.value)
                                         }
-                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                        className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                        placeholder="終了"
                                       />
                                     </div>
                                   </>
@@ -468,6 +624,48 @@ export default function ShiftManagement() {
           </div>
         </div>
       </div>
+
+      {/* 月コピーダイアログ */}
+      {showCopyDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">月をコピー</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {currentDate.getFullYear()}年{currentDate.getMonth() + 1}月のシフトをコピー先の月にコピーします。
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                コピー先の月
+              </label>
+              <input
+                type="month"
+                value={`${copyTargetMonth.getFullYear()}-${String(copyTargetMonth.getMonth() + 1).padStart(2, '0')}`}
+                onChange={(e) => {
+                  const [year, month] = e.target.value.split('-').map(Number);
+                  setCopyTargetMonth(new Date(year, month - 1, 1));
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+              />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowCopyDialog(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                disabled={saving}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleCopyMonth}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-pink-600 rounded-md hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {saving ? 'コピー中...' : 'コピー'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

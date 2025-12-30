@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const startDate = searchParams.get('start_date');
     const endDate = searchParams.get('end_date');
+    const year = searchParams.get('year');
+    const month = searchParams.get('month');
     const staffId = searchParams.get('staff_id');
 
     // staff_shiftsテーブルが存在するかチェックし、存在しない場合は作成
@@ -84,14 +86,25 @@ export async function GET(request: NextRequest) {
     `;
     const params: any[] = [tenantId];
 
-    if (startDate) {
-      queryText += ` AND ss.shift_date >= $${params.length + 1}`;
-      params.push(startDate);
-    }
+    // 月単位の指定がある場合は、それを使用（優先）
+    if (year && month) {
+      const yearNum = parseInt(year);
+      const monthNum = parseInt(month);
+      const startOfMonth = `${yearNum}-${String(monthNum).padStart(2, '0')}-01`;
+      const endOfMonth = new Date(yearNum, monthNum, 0).toISOString().split('T')[0];
+      queryText += ` AND ss.shift_date >= $${params.length + 1} AND ss.shift_date <= $${params.length + 2}`;
+      params.push(startOfMonth, endOfMonth);
+    } else {
+      // 従来のstart_date/end_dateもサポート
+      if (startDate) {
+        queryText += ` AND ss.shift_date >= $${params.length + 1}`;
+        params.push(startDate);
+      }
 
-    if (endDate) {
-      queryText += ` AND ss.shift_date <= $${params.length + 1}`;
-      params.push(endDate);
+      if (endDate) {
+        queryText += ` AND ss.shift_date <= $${params.length + 1}`;
+        params.push(endDate);
+      }
     }
 
     if (staffId) {
