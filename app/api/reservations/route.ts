@@ -159,24 +159,51 @@ export async function POST(request: NextRequest) {
     let reservationStartHour: number;
     let reservationStartMinute: number;
     
+    console.log('予約時間抽出デバッグ:', {
+      reservation_date,
+      reservation_date_type: typeof reservation_date,
+      reservation_date_length: typeof reservation_date === 'string' ? reservation_date.length : 0
+    });
+    
     // 文字列から直接時間を抽出（YYYY-MM-DDTHH:mm:ss+09:00 または YYYY-MM-DDTHH:mm:ss形式）
     if (typeof reservation_date === 'string') {
-      const timeMatch = reservation_date.match(/T(\d{2}):(\d{2})/);
-      if (timeMatch) {
-        reservationStartHour = parseInt(timeMatch[1], 10);
-        reservationStartMinute = parseInt(timeMatch[2], 10);
+      // まずTで分割して時間部分を取得
+      const timePart = reservation_date.split('T')[1];
+      if (timePart) {
+        // HH:mm:ss または HH:mm:ss+09:00 から時間と分を抽出
+        const timeMatch = timePart.match(/^(\d{2}):(\d{2})/);
+        if (timeMatch) {
+          reservationStartHour = parseInt(timeMatch[1], 10);
+          reservationStartMinute = parseInt(timeMatch[2], 10);
+          console.log('時間抽出成功:', { reservationStartHour, reservationStartMinute, timePart });
+        } else {
+          // フォールバック: Dateオブジェクトから取得
+          reservationStartHour = reservationDateTime.getHours();
+          reservationStartMinute = reservationDateTime.getMinutes();
+          console.log('時間抽出失敗、フォールバック:', { reservationStartHour, reservationStartMinute });
+        }
       } else {
-        // フォールバック: Dateオブジェクトから取得（ローカル時間として）
+        // Tがない場合（YYYY-MM-DD形式のみ）
         reservationStartHour = reservationDateTime.getHours();
         reservationStartMinute = reservationDateTime.getMinutes();
+        console.log('Tがない形式、フォールバック:', { reservationStartHour, reservationStartMinute });
       }
     } else {
       reservationStartHour = reservationDateTime.getHours();
       reservationStartMinute = reservationDateTime.getMinutes();
+      console.log('文字列ではない、フォールバック:', { reservationStartHour, reservationStartMinute });
     }
     
     const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
     const reservationEndTimeInMinutes = reservationStartTimeInMinutes + totalDuration;
+    
+    console.log('予約時間計算結果:', {
+      reservationStartHour,
+      reservationStartMinute,
+      reservationStartTimeInMinutes,
+      reservationEndTimeInMinutes,
+      totalDuration
+    });
     
     // スタッフが指定されている場合は、シフトを確認（優先）、なければデフォルトの勤務時間をチェック
     if (staff_id) {
