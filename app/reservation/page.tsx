@@ -251,7 +251,7 @@ function ReservationPageContent() {
           phone_number: customer?.phone_number || customerInfo.phone,
           menu_ids: selectedMenus.map(m => m.menu_id),
           staff_id: selectedStaff ? selectedStaff.staff_id : null,
-          reservation_date: reservationDate.toISOString()
+          reservation_date: reservationDate
         })
       });
 
