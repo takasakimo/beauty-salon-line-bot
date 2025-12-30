@@ -296,6 +296,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 予約開始時間と終了時間を取得（分単位）
+    const reservationStartHour = reservationDateTimeLocal.getHours();
+    const reservationStartMinute = reservationDateTimeLocal.getMinutes();
+    const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
+    const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
+    
     // スタッフが指定されている場合、シフトを確認してから時間の重複チェック
     if (staff_id) {
       // まずシフトを確認
@@ -320,18 +326,10 @@ export async function POST(request: NextRequest) {
             const shiftStartTime = shift.start_time.substring(0, 5);
             const shiftEndTime = shift.end_time.substring(0, 5);
             
-            const reservationStartHour = reservationDateTimeLocal.getHours();
-            const reservationStartMinute = reservationDateTimeLocal.getMinutes();
-            const reservationEndHour = reservationEndTime.getHours();
-            const reservationEndMinute = reservationEndTime.getMinutes();
-            
             const [shiftStartHour, shiftStartMinute] = shiftStartTime.split(':').map(Number);
             const [shiftEndHour, shiftEndMinute] = shiftEndTime.split(':').map(Number);
             const shiftStartTimeInMinutes = shiftStartHour * 60 + shiftStartMinute;
             const shiftEndTimeInMinutes = shiftEndHour * 60 + shiftEndMinute;
-            
-            const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
-            const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
             
             if (reservationStartTimeInMinutes < shiftStartTimeInMinutes) {
               return NextResponse.json(
@@ -380,6 +378,152 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
+      // スタッフが指定されていない場合：その時間帯に勤務しているスタッフがいるか、予約可能かをチェック
+      try {
+        // その日付に勤務しているスタッフを取得（シフトまたはデフォルト勤務時間）
+        const workingStaffResult = await query(
+          `SELECT 
+            s.staff_id,
+            COALESCE(ss.start_time, NULL) as shift_start_time,
+            COALESCE(ss.end_time, NULL) as shift_end_time,
+            COALESCE(ss.is_off, false) as is_off,
+            s.working_hours
+          FROM staff s
+          LEFT JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
+            AND ss.tenant_id = $1 
+            AND ss.shift_date = $2
+          WHERE s.tenant_id = $1
+          ORDER BY s.staff_id`,
+          [tenantId, reservationDateStr]
+        );
+        
+        const availableStaff: Array<{ staff_id: number; start_time: number; end_time: number }> = [];
+        
+        for (const staffRow of workingStaffResult.rows) {
+          let staffStartTime: string | null = null;
+          let staffEndTime: string | null = null;
+          
+          // シフトが設定されている場合
+          if (staffRow.shift_start_time && staffRow.shift_end_time && !staffRow.is_off) {
+            staffStartTime = staffRow.shift_start_time.substring(0, 5);
+            staffEndTime = staffRow.shift_end_time.substring(0, 5);
+          } else if (!staffRow.is_off && staffRow.working_hours) {
+            // シフトがなく、デフォルト勤務時間がある場合
+            const match = staffRow.working_hours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              staffStartTime = match[1];
+              staffEndTime = match[2];
+            }
+          }
+          
+          // 勤務時間が設定されている場合、その時間帯に勤務しているかチェック
+          if (staffStartTime && staffEndTime) {
+            const [startHour, startMinute] = staffStartTime.split(':').map(Number);
+            const [endHour, endMinute] = staffEndTime.split(':').map(Number);
+            const staffStartTimeInMinutes = startHour * 60 + startMinute;
+            const staffEndTimeInMinutes = endHour * 60 + endMinute;
+            
+            // 予約時間が勤務時間内かチェック
+            if (reservationStartTimeInMinutes >= staffStartTimeInMinutes && 
+                reservationEndTimeInMinutes <= staffEndTimeInMinutes) {
+              availableStaff.push({
+                staff_id: staffRow.staff_id,
+                start_time: staffStartTimeInMinutes,
+                end_time: staffEndTimeInMinutes
+              });
+            }
+          }
+        }
+        
+        // 勤務しているスタッフがいない場合は予約不可
+        if (availableStaff.length === 0) {
+          return NextResponse.json(
+            { error: 'この時間帯に勤務しているスタッフがいないため、予約できません。別の時間を選択してください。' },
+            { status: 400 }
+          );
+        }
+        
+        // 各スタッフについて、その時間帯に予約が入っているかチェック
+        const dateStrForQuery = dateStr.replace('T', ' ');
+        const reservationCheckResult = await query(
+          `SELECT 
+            r.staff_id,
+            r.reservation_date,
+            COALESCE(
+              (SELECT SUM(m2.duration) 
+               FROM reservation_menus rm2
+               JOIN menus m2 ON rm2.menu_id = m2.menu_id
+               WHERE rm2.reservation_id = r.reservation_id),
+              m.duration,
+              60
+            ) as duration
+          FROM reservations r
+          LEFT JOIN menus m ON r.menu_id = m.menu_id
+          WHERE r.tenant_id = $1
+          AND r.status = 'confirmed'
+          AND DATE(r.reservation_date) = DATE($2)
+          AND r.staff_id IS NOT NULL`,
+          [tenantId, dateStrForQuery]
+        );
+        
+        // 各スタッフの予約状況をチェック
+        const staffAvailability: Record<number, boolean> = {};
+        availableStaff.forEach(staff => {
+          staffAvailability[staff.staff_id] = true; // 初期値は利用可能
+        });
+        
+        reservationCheckResult.rows.forEach((row: any) => {
+          if (!row.staff_id || !staffAvailability[row.staff_id]) return;
+          
+          // 予約時間を分単位に変換
+          let reservationHour: number;
+          let reservationMinute: number;
+          
+          if (typeof row.reservation_date === 'string') {
+            const timeMatch = row.reservation_date.match(/(\d{2}):(\d{2}):/);
+            if (timeMatch) {
+              reservationHour = parseInt(timeMatch[1], 10);
+              reservationMinute = parseInt(timeMatch[2], 10);
+              if (row.reservation_date.includes('Z') || row.reservation_date.endsWith('+00:00')) {
+                reservationHour = (reservationHour + 9) % 24;
+              }
+            } else {
+              const dateObj = new Date(row.reservation_date);
+              reservationHour = (dateObj.getUTCHours() + 9) % 24;
+              reservationMinute = dateObj.getUTCMinutes();
+            }
+          } else {
+            const dateObj = row.reservation_date instanceof Date ? row.reservation_date : new Date(row.reservation_date);
+            reservationHour = (dateObj.getUTCHours() + 9) % 24;
+            reservationMinute = dateObj.getUTCMinutes();
+          }
+          
+          const existingStartTime = reservationHour * 60 + reservationMinute;
+          const existingDuration = parseInt(row.duration) || 60;
+          const existingEndTime = existingStartTime + existingDuration;
+          
+          // 時間帯が重複しているかチェック
+          if (reservationStartTimeInMinutes < existingEndTime && reservationEndTimeInMinutes > existingStartTime) {
+            staffAvailability[row.staff_id] = false; // このスタッフは予約で埋まっている
+          }
+        });
+        
+        // 利用可能なスタッフがいるかチェック
+        const hasAvailableStaff = Object.values(staffAvailability).some(available => available);
+        
+        if (!hasAvailableStaff) {
+          return NextResponse.json(
+            { error: 'この時間帯は全てのスタッフが予約で埋まっているため、予約できません。別の時間を選択してください。' },
+            { status: 400 }
+          );
+        }
+      } catch (error: any) {
+        console.error('スタッフ未指定時のバリデーションエラー:', error);
+        // エラーが発生した場合は警告を出して続行（既存の最大同時予約数チェックにフォールバック）
+        console.warn('スタッフ未指定時のバリデーションに失敗しました。最大同時予約数のチェックにフォールバックします。');
+      }
+      
+      // 最大同時予約数チェック（フォールバック）
       // スタッフ未指定の場合：最大同時予約数をチェック（複数メニュー対応）
       let concurrentCheck;
       try {
