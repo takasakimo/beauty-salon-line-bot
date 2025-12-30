@@ -18,11 +18,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // staffテーブルにimage_urlカラムを追加
+    // staffテーブルにimage_urlカラムを追加（Base64データURIを保存するためTEXT型）
     await query(`
       ALTER TABLE staff 
-      ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
+      ADD COLUMN IF NOT EXISTS image_url TEXT;
     `);
+    
+    // 既存のVARCHAR(500)カラムをTEXT型に変更（存在する場合）
+    try {
+      await query(`
+        ALTER TABLE staff 
+        ALTER COLUMN image_url TYPE TEXT;
+      `);
+    } catch (error: any) {
+      // カラムが存在しない、または既にTEXT型の場合は無視
+      if (!error.message.includes('does not exist') && !error.message.includes('already')) {
+        console.warn('image_urlカラムの型変更エラー（無視）:', error.message);
+      }
+    }
 
     return NextResponse.json({ 
       success: true,

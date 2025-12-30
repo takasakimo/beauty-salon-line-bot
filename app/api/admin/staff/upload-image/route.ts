@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
 import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
 import { query } from '@/lib/db';
 
@@ -58,37 +56,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ファイル名を生成（staff_{staffId}_{timestamp}.{ext}）
-    const timestamp = Date.now();
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `staff_${staffId}_${timestamp}.${fileExtension}`;
-
-    // public/staff-imagesディレクトリを作成（存在しない場合）
-    const uploadDir = join(process.cwd(), 'public', 'staff-images');
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (error) {
-      // ディレクトリが既に存在する場合は無視
-    }
-
-    // ファイルを保存
-    const filePath = join(uploadDir, fileName);
+    // 画像をBase64エンコードしてデータURIとして保存
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
+    const base64 = buffer.toString('base64');
+    const dataUri = `data:${file.type};base64,${base64}`;
 
-    // 画像URLを生成
-    const imageUrl = `/staff-images/${fileName}`;
-
-    // データベースに画像URLを保存
+    // データベースに画像URL（Base64データURI）を保存
     await query(
       `UPDATE staff SET image_url = $1 WHERE staff_id = $2 AND tenant_id = $3`,
-      [imageUrl, parseInt(staffId), tenantId]
+      [dataUri, parseInt(staffId), tenantId]
     );
 
     return NextResponse.json({ 
       success: true,
-      image_url: imageUrl 
+      image_url: dataUri 
     });
   } catch (error: any) {
     console.error('Error uploading image:', error);
