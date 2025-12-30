@@ -54,7 +54,8 @@ export default function StaffManagement() {
     name: '',
     email: '',
     phone_number: '',
-    working_hours: ''
+    working_hours_start: '10:00',
+    working_hours_end: '19:00'
   });
   const [adminFormData, setAdminFormData] = useState({
     username: '',
@@ -144,16 +145,30 @@ export default function StaffManagement() {
     }
   };
 
+  // working_hoursを開始時間と終了時間にパース
+  const parseWorkingHours = (workingHours: string | null) => {
+    if (!workingHours) {
+      return { start: '10:00', end: '19:00' };
+    }
+    const match = workingHours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+    if (match) {
+      return { start: match[1], end: match[2] };
+    }
+    return { start: '10:00', end: '19:00' };
+  };
+
   const handleOpenStaffModal = (staffMember?: Staff, adminMember?: Admin) => {
     if (staffMember) {
       setSelectedRole('staff');
       setEditingStaff(staffMember);
       setEditingAdmin(null);
+      const { start, end } = parseWorkingHours(staffMember.working_hours);
       setStaffFormData({
         name: staffMember.name,
         email: staffMember.email || '',
         phone_number: staffMember.phone_number || '',
-        working_hours: staffMember.working_hours || ''
+        working_hours_start: start,
+        working_hours_end: end
       });
       const menuIds = staffMember.available_menus?.map(m => m.menu_id) || [];
       setSelectedMenuIds(menuIds);
@@ -177,7 +192,8 @@ export default function StaffManagement() {
         name: '',
         email: '',
         phone_number: '',
-        working_hours: ''
+        working_hours_start: '10:00',
+        working_hours_end: '19:00'
       });
       setAdminFormData({
         username: '',
@@ -202,7 +218,8 @@ export default function StaffManagement() {
       name: '',
       email: '',
       phone_number: '',
-      working_hours: ''
+      working_hours_start: '10:00',
+      working_hours_end: '19:00'
     });
     setAdminFormData({
       username: '',
@@ -331,6 +348,11 @@ export default function StaffManagement() {
         
         const method = editingStaff ? 'PUT' : 'POST';
         
+        // working_hoursを結合（"HH:MM-HH:MM"形式）
+        const workingHours = staffFormData.working_hours_start && staffFormData.working_hours_end
+          ? `${staffFormData.working_hours_start}-${staffFormData.working_hours_end}`
+          : null;
+        
         // 画像が選択されている場合は先にアップロード
         let imageUrl = editingStaff?.image_url || null;
         if (staffImageFile) {
@@ -349,7 +371,7 @@ export default function StaffManagement() {
                 name: staffFormData.name,
                 email: staffFormData.email || null,
                 phone_number: staffFormData.phone_number || null,
-                working_hours: staffFormData.working_hours || null,
+                working_hours: workingHours,
                 menu_ids: selectedMenuIds,
                 image_url: null
               }),
@@ -376,7 +398,7 @@ export default function StaffManagement() {
                 name: staffFormData.name,
                 email: staffFormData.email || null,
                 phone_number: staffFormData.phone_number || null,
-                working_hours: staffFormData.working_hours || null,
+                working_hours: workingHours,
                 menu_ids: selectedMenuIds,
                 image_url: imageUrl
               }),
@@ -398,7 +420,7 @@ export default function StaffManagement() {
             name: staffFormData.name,
             email: staffFormData.email || null,
             phone_number: staffFormData.phone_number || null,
-            working_hours: staffFormData.working_hours || null,
+            working_hours: workingHours,
             menu_ids: selectedMenuIds,
             image_url: imageUrl
           }),
@@ -863,17 +885,35 @@ export default function StaffManagement() {
                         </div>
 
                         <div>
-                          <label htmlFor="staff_working_hours" className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
                             勤務時間
                           </label>
-                          <input
-                            type="text"
-                            id="staff_working_hours"
-                            placeholder="例: 10:00-19:00"
-                            value={staffFormData.working_hours}
-                            onChange={(e) => setStaffFormData({ ...staffFormData, working_hours: e.target.value })}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                          />
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label htmlFor="staff_working_hours_start" className="block text-xs text-gray-500 mb-1">
+                                開始時間
+                              </label>
+                              <input
+                                type="time"
+                                id="staff_working_hours_start"
+                                value={staffFormData.working_hours_start}
+                                onChange={(e) => setStaffFormData({ ...staffFormData, working_hours_start: e.target.value })}
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor="staff_working_hours_end" className="block text-xs text-gray-500 mb-1">
+                                終了時間
+                              </label>
+                              <input
+                                type="time"
+                                id="staff_working_hours_end"
+                                value={staffFormData.working_hours_end}
+                                onChange={(e) => setStaffFormData({ ...staffFormData, working_hours_end: e.target.value })}
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         <div>

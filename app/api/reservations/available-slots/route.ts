@@ -147,6 +147,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
     
+    // スタッフが指定されている場合は、スタッフの勤務時間を取得
+    let staffWorkingHours: { start: string; end: string } | null = null;
+    if (staffId) {
+      try {
+        const staffResult = await query(
+          'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
+          [staffId, tenantId]
+        );
+        if (staffResult.rows.length > 0 && staffResult.rows[0].working_hours) {
+          const workingHoursStr = staffResult.rows[0].working_hours;
+          const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+          if (match) {
+            staffWorkingHours = { start: match[1], end: match[2] };
+          }
+        }
+      } catch (error: any) {
+        console.error('スタッフ勤務時間取得エラー:', error);
+        // エラーが発生しても続行（店舗の営業時間を使用）
+      }
+    }
+    
     // 特別営業時間が設定されている場合はそれを使用、そうでなければ曜日の営業時間を使用
     let dayBusinessHours: { open: string; close: string };
     if (specialBusinessHours[date]) {
@@ -157,8 +178,9 @@ export async function GET(request: NextRequest) {
       dayBusinessHours = businessHours[dayNames[dayOfWeek]] || businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
     }
     
-    const openTime = dayBusinessHours.open || '10:00';
-    const closeTime = dayBusinessHours.close || '19:00';
+    // スタッフの勤務時間が設定されている場合はそれを使用、そうでなければ店舗の営業時間を使用
+    const openTime = staffWorkingHours ? staffWorkingHours.start : (dayBusinessHours.open || '10:00');
+    const closeTime = staffWorkingHours ? staffWorkingHours.end : (dayBusinessHours.close || '19:00');
     
     // 開店時間と閉店時間を分単位に変換
     const [openHour, openMinute] = openTime.split(':').map(Number);
