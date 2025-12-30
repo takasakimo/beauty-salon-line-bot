@@ -631,9 +631,24 @@ function ReservationPageContent() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex items-center justify-between">
                     <span className="text-gray-600 font-medium">スタッフ:</span>
-                    <span className="text-gray-900">{selectedStaff ? selectedStaff.name : 'スタッフ選択なし'}</span>
+                    {selectedStaff ? (
+                      <div className="flex items-center gap-3">
+                        {selectedStaff.image_url && (
+                          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-gray-300 flex-shrink-0">
+                            <img
+                              src={selectedStaff.image_url}
+                              alt={selectedStaff.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <span className="text-gray-900">{selectedStaff.name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-900">スタッフ選択なし</span>
+                    )}
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600 font-medium">日時:</span>

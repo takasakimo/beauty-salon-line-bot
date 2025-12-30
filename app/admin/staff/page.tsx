@@ -270,16 +270,27 @@ export default function StaffManagement() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '画像のアップロードに失敗しました');
+        let errorMessage = '画像のアップロードに失敗しました';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.details || errorMessage;
+        } catch (parseError) {
+          // JSONパースに失敗した場合は、ステータステキストを使用
+          errorMessage = `画像のアップロードに失敗しました (${response.status}: ${response.statusText})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
+      if (!data.image_url) {
+        throw new Error('画像URLの取得に失敗しました');
+      }
       return data.image_url;
     } catch (error: any) {
       console.error('画像アップロードエラー:', error);
-      setStaffError(error.message || '画像のアップロードに失敗しました');
-      return null;
+      const errorMessage = error.message || '画像のアップロードに失敗しました';
+      setStaffError(errorMessage);
+      throw error; // エラーを再スローして、呼び出し元で処理できるようにする
     } finally {
       setUploadingImage(false);
     }
@@ -358,7 +369,16 @@ export default function StaffManagement() {
         if (staffImageFile) {
           if (editingStaff) {
             // 更新時は既存のstaff_idを使用
-            imageUrl = await handleImageUpload(editingStaff.staff_id);
+            try {
+              imageUrl = await handleImageUpload(editingStaff.staff_id);
+              // 画像アップロードが失敗した場合（nullが返された場合）
+              if (!imageUrl) {
+                throw new Error('画像のアップロードに失敗しました。もう一度お試しください。');
+              }
+            } catch (uploadError: any) {
+              // handleImageUpload内で既にエラーメッセージが設定されているが、ここでもスローして処理を中断
+              throw uploadError;
+            }
           } else {
             // 新規作成時は一旦画像なしで保存してからアップロード
             const tempResponse = await fetch(url, {
@@ -384,7 +404,36 @@ export default function StaffManagement() {
 
             const savedStaff = await tempResponse.json();
             const staffId = savedStaff.staff_id;
-            imageUrl = await handleImageUpload(staffId);
+            try {
+              imageUrl = await handleImageUpload(staffId);
+              
+              // 画像アップロードが失敗した場合、作成したスタッフを削除してエラーをスロー
+              if (!imageUrl) {
+                try {
+                  const deleteUrl = getApiUrlWithTenantId(`/api/admin/staff/${staffId}`);
+                  await fetch(deleteUrl, {
+                    method: 'DELETE',
+                    credentials: 'include',
+                  });
+                } catch (deleteError) {
+                  console.error('スタッフ削除エラー:', deleteError);
+                }
+                throw new Error('画像のアップロードに失敗しました。もう一度お試しください。');
+              }
+            } catch (uploadError: any) {
+              // 画像アップロードが失敗した場合、作成したスタッフを削除
+              try {
+                const deleteUrl = getApiUrlWithTenantId(`/api/admin/staff/${staffId}`);
+                await fetch(deleteUrl, {
+                  method: 'DELETE',
+                  credentials: 'include',
+                });
+              } catch (deleteError) {
+                console.error('スタッフ削除エラー:', deleteError);
+              }
+              // エラーを再スロー
+              throw uploadError;
+            }
             
             // 画像URLを更新
             const updateUrl = getApiUrlWithTenantId(`/api/admin/staff/${staffId}`);
