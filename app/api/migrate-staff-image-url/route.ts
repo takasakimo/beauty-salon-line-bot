@@ -8,15 +8,19 @@ export async function POST(request: NextRequest) {
   try {
     // セキュリティ: 本番環境では認証を追加することを推奨
     // ここでは簡単な認証チェック（環境変数で制御可能）
-    // 認証キーが設定されていない場合は認証をスキップ（開発環境用）
+    // 認証キーが設定されている場合のみ認証をチェック
     const migrationKey = request.headers.get('x-migration-key');
     const expectedKey = process.env.MIGRATION_KEY;
     
-    if (expectedKey && migrationKey !== expectedKey) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
+    // MIGRATION_KEYが設定されている場合のみ認証をチェック
+    // 設定されていない場合は認証をスキップ（開発環境や一時的なマイグレーション用）
+    if (expectedKey) {
+      if (!migrationKey || migrationKey !== expectedKey) {
+        return NextResponse.json(
+          { error: '認証が必要です。x-migration-keyヘッダーを設定してください。' },
+          { status: 401 }
+        );
+      }
     }
 
     // staffテーブルにimage_urlカラムを追加（Base64データURIを保存するためTEXT型）
