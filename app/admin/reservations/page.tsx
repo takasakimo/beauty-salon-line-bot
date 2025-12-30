@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
+import AdminNav from '@/app/components/AdminNav';
 import { 
   PlusIcon,
   PencilIcon,
@@ -62,22 +63,31 @@ interface Staff {
 // タイムスケジュール表示コンポーネント
 function TimelineScheduleView({ 
   reservations, 
+  staff,
   onEdit, 
   onStatusChange, 
   onCancel 
 }: { 
   reservations: Reservation[];
+  staff: Staff[];
   onEdit: (reservation: Reservation) => void;
   onStatusChange: (id: number, status: string) => void;
   onCancel: (id: number) => void;
 }) {
   // 時間をフォーマット（HH:MM）
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+    // reservation_dateをJSTとして解釈
+    let dateStr = dateString;
+    // タイムゾーン情報がない場合は+09:00を付与
+    if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+      dateStr = dateStr.replace(' ', 'T') + '+09:00';
+    }
+    const date = new Date(dateStr);
     return date.toLocaleTimeString('ja-JP', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false
+      hour12: false,
+      timeZone: 'Asia/Tokyo'
     });
   };
 
@@ -104,15 +114,45 @@ function TimelineScheduleView({
     timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
   }
 
-  // 日付をキーとして予約をグループ化
-  const reservationsByDate = weekDates.reduce((acc, date) => {
+  // 日付とスタッフをキーとして予約をグループ化
+  const reservationsByDateAndStaff = weekDates.reduce((acc, date) => {
     const dateKey = date.toISOString().split('T')[0];
-    acc[dateKey] = reservations.filter(r => {
-      const reservationDate = new Date(r.reservation_date).toISOString().split('T')[0];
-      return reservationDate === dateKey;
-    });
+    acc[dateKey] = {
+      // 店舗全体（スタッフ未指定）
+      all: reservations.filter(r => {
+        // reservation_dateをJSTとして解釈
+        let dateStr = r.reservation_date;
+        if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+          dateStr = dateStr.replace(' ', 'T') + '+09:00';
+        }
+        const reservationDate = new Date(dateStr);
+        const year = reservationDate.getFullYear();
+        const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
+        const day = String(reservationDate.getDate()).padStart(2, '0');
+        const reservationDateKey = `${year}-${month}-${day}`;
+        // スタッフが指定されていない予約のみ
+        return reservationDateKey === dateKey && (!r.staff_id || r.staff_id === null);
+      }),
+      // 各スタッフごと
+      byStaff: staff.reduce((staffAcc, s) => {
+        staffAcc[s.staff_id] = reservations.filter(r => {
+          let dateStr = r.reservation_date;
+          if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+            dateStr = dateStr.replace(' ', 'T') + '+09:00';
+          }
+          const reservationDate = new Date(dateStr);
+          const year = reservationDate.getFullYear();
+          const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
+          const day = String(reservationDate.getDate()).padStart(2, '0');
+          const reservationDateKey = `${year}-${month}-${day}`;
+          // 該当スタッフの予約のみ
+          return reservationDateKey === dateKey && r.staff_id === s.staff_id;
+        });
+        return staffAcc;
+      }, {} as Record<number, Reservation[]>)
+    };
     return acc;
-  }, {} as Record<string, Reservation[]>);
+  }, {} as Record<string, { all: Reservation[]; byStaff: Record<number, Reservation[]> }>);
 
   // 時間を分に変換
   const timeToMinutes = (time: string) => {
@@ -122,7 +162,14 @@ function TimelineScheduleView({
 
   // 予約の開始時間と終了時間を取得
   const getReservationTimeRange = (reservation: Reservation) => {
-    const start = new Date(reservation.reservation_date);
+    // reservation_dateをJSTとして解釈
+    let dateStr = reservation.reservation_date;
+    // タイムゾーン情報がない場合は+09:00を付与
+    if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+      dateStr = dateStr.replace(' ', 'T') + '+09:00';
+    }
+    const start = new Date(dateStr);
+    // JST時刻として取得（getHours/getMinutesはローカルタイムゾーンを使用）
     const startMinutes = start.getHours() * 60 + start.getMinutes();
     const duration = reservation.total_duration || reservation.menu_duration || 60;
     const endMinutes = startMinutes + duration;
@@ -170,114 +217,158 @@ function TimelineScheduleView({
             ))}
           </div>
           
-          {/* 日付列 */}
+          {/* 日付列 - 店舗全体と各スタッフを並べて表示 */}
           {weekDates.map((date) => {
             const dateKey = date.toISOString().split('T')[0];
-            const dayReservations = reservationsByDate[dateKey] || [];
+            const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
+            const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
             
-            return (
-              <div
-                key={dateKey}
-                className="flex-1 min-w-[200px] border-r border-gray-200 relative"
-              >
-                {/* 日付ヘッダー */}
-                <div className="h-12 border-b border-gray-200 bg-gray-50 px-3 py-2 flex items-center justify-between">
-                  <div className="flex items-center">
-                    <CalendarDaysIcon className="h-4 w-4 text-pink-600 mr-1" />
-                    <span className="text-sm font-semibold text-gray-900">
-                      {formatDate(date)}
-                    </span>
+            // 予約ブロックをレンダリングする関数
+            const renderReservationBlock = (reservation: Reservation) => {
+              const style = getReservationStyle(reservation);
+              const isCancelled = reservation.status === 'cancelled';
+              
+              return (
+                <div
+                  key={reservation.reservation_id}
+                  onClick={() => !isCancelled && onEdit(reservation)}
+                  className={`absolute left-0.5 right-0.5 rounded p-1 shadow-sm border-l-2 ${
+                    isCancelled
+                      ? 'bg-gray-100 border-gray-300 opacity-60'
+                      : reservation.status === 'completed'
+                      ? 'bg-green-50 border-green-400 cursor-pointer hover:bg-green-100'
+                      : 'bg-pink-50 border-pink-400 cursor-pointer hover:bg-pink-100'
+                  } transition-colors`}
+                  style={style}
+                >
+                  <div className="text-xs font-semibold text-gray-900 mb-0.5 leading-tight">
+                    {formatTime(reservation.reservation_date)}
                   </div>
-                  <span className="text-xs text-gray-500">
-                    ({dayReservations.length}件)
-                  </span>
-                </div>
-                
-                {/* 時間スロット */}
-                <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
-                  {timeSlots.map((time) => (
-                    <div
-                      key={time}
-                      className="border-b border-gray-100"
-                      style={{ height: '40px' }}
-                    ></div>
-                  ))}
-                  
-                  {/* 予約ブロック */}
-                  {dayReservations.map((reservation) => {
-                    const style = getReservationStyle(reservation);
-                    const { start } = getReservationTimeRange(reservation);
-                    const isCancelled = reservation.status === 'cancelled';
-                    
-                    return (
-                      <div
-                        key={reservation.reservation_id}
-                        className={`absolute left-1 right-1 rounded p-2 shadow-sm border-l-4 ${
-                          isCancelled
-                            ? 'bg-gray-100 border-gray-300 opacity-60'
-                            : reservation.status === 'completed'
-                            ? 'bg-green-50 border-green-400'
-                            : 'bg-pink-50 border-pink-400'
-                        }`}
-                        style={style}
-                      >
-                        <div className="text-xs font-semibold text-gray-900 mb-1">
-                          {formatTime(reservation.reservation_date)}
-                        </div>
-                        <div className="text-xs text-gray-700 font-medium mb-1">
-                          {reservation.customer_name}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          {reservation.menus && reservation.menus.length > 1 ? (
-                            <div>
-                              {reservation.menus.map((menu, idx) => (
-                                <div key={menu.menu_id}>
-                                  {idx > 0 && ' + '}
-                                  {menu.menu_name}
-                                </div>
-                              ))}
-                              <div className="mt-1 font-semibold">
-                                ¥{(reservation.total_price || reservation.price || 0).toLocaleString()}
-                              </div>
-                            </div>
-                          ) : (
-                            <div>
-                              {reservation.menu_name}
-                              <div className="mt-1">
-                                ¥{(reservation.total_price || reservation.menu_price || reservation.price || 0).toLocaleString()}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {reservation.staff_name && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {reservation.staff_name}
+                  <div className="text-xs text-gray-700 font-medium mb-0.5 leading-tight truncate">
+                    {reservation.customer_name}
+                  </div>
+                  <div className="text-xs text-gray-600 leading-tight">
+                    {reservation.menus && reservation.menus.length > 1 ? (
+                      <div>
+                        {reservation.menus.map((menu, idx) => (
+                          <div key={menu.menu_id} className="truncate">
+                            {idx > 0 && ' + '}
+                            {menu.menu_name}
                           </div>
-                        )}
-                        <div className="flex items-center space-x-1 mt-2">
-                          {!isCancelled && (
-                            <>
-                              <button
-                                onClick={() => onEdit(reservation)}
-                                className="p-1 text-gray-400 hover:text-gray-600"
-                                title="編集"
-                              >
-                                <PencilIcon className="h-3 w-3" />
-                              </button>
-                              <button
-                                onClick={() => onCancel(reservation.reservation_id)}
-                                className="p-1 text-gray-400 hover:text-red-600"
-                                title="キャンセル"
-                              >
-                                <XMarkIcon className="h-3 w-3" />
-                              </button>
-                            </>
-                          )}
+                        ))}
+                        <div className="mt-0.5 font-semibold text-xs">
+                          ¥{(reservation.total_price || reservation.price || 0).toLocaleString()}
                         </div>
                       </div>
-                    );
-                  })}
+                    ) : (
+                      <div>
+                        <div className="truncate">{reservation.menu_name}</div>
+                        <div className="mt-0.5 text-xs">
+                          ¥{(reservation.total_price || reservation.menu_price || reservation.price || 0).toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {reservation.staff_name && (
+                    <div className="text-xs text-gray-500 mt-0.5 leading-tight truncate">
+                      {reservation.staff_name}
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-0.5 mt-1">
+                    {!isCancelled && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit(reservation);
+                          }}
+                          className="p-0.5 text-gray-400 hover:text-gray-600"
+                          title="編集"
+                        >
+                          <PencilIcon className="h-2.5 w-2.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCancel(reservation.reservation_id);
+                          }}
+                          className="p-0.5 text-gray-400 hover:text-red-600"
+                          title="キャンセル"
+                        >
+                          <XMarkIcon className="h-2.5 w-2.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+              );
+            };
+            
+            return (
+              <div key={dateKey} className="flex border-r border-gray-200">
+                {/* 店舗全体の列 */}
+                <div className="flex-1 min-w-[100px] border-r border-gray-200 relative">
+                  {/* 日付ヘッダー */}
+                  <div className="h-12 border-b border-gray-200 bg-gray-50 px-2 py-1 flex items-center justify-between">
+                    <div className="flex items-center">
+                      <CalendarDaysIcon className="h-3 w-3 text-pink-600 mr-1" />
+                      <span className="text-xs font-semibold text-gray-900">
+                        {formatDate(date)}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      ({totalCount})
+                    </span>
+                  </div>
+                  
+                  {/* 列ヘッダー */}
+                  <div className="h-10 border-b border-gray-200 bg-blue-50 px-2 py-1 flex items-center">
+                    <span className="text-xs font-semibold text-gray-900">店舗全体</span>
+                    <span className="ml-1 text-xs text-gray-500">({dayData.all.length})</span>
+                  </div>
+                  
+                  {/* 時間スロット */}
+                  <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
+                    {timeSlots.map((time) => (
+                      <div
+                        key={time}
+                        className="border-b border-gray-100"
+                        style={{ height: '40px' }}
+                      ></div>
+                    ))}
+                    
+                    {/* 予約ブロック（店舗全体） */}
+                    {dayData.all.map(renderReservationBlock)}
+                  </div>
+                </div>
+                
+                {/* 各スタッフの列 */}
+                {staff.map((s) => {
+                  const staffReservations = dayData.byStaff[s.staff_id] || [];
+                  return (
+                    <div key={s.staff_id} className="flex-1 min-w-[100px] border-r border-gray-200 relative">
+                      {/* 列ヘッダー */}
+                      <div className="h-10 border-b border-gray-200 bg-purple-50 px-2 py-1 flex items-center">
+                        <span className="text-xs font-semibold text-gray-900">{s.name}</span>
+                        <span className="ml-1 text-xs text-gray-500">({staffReservations.length})</span>
+                      </div>
+                      
+                      {/* 時間スロット */}
+                      <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
+                        {timeSlots.map((time) => (
+                          <div
+                            key={time}
+                            className="border-b border-gray-100"
+                            style={{ height: '40px' }}
+                          ></div>
+                        ))}
+                        
+                        {/* 予約ブロック（スタッフ別） */}
+                        {staffReservations.map(renderReservationBlock)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
@@ -494,21 +585,27 @@ export default function ReservationManagement() {
   const handleOpenModal = (reservation?: Reservation) => {
     if (reservation) {
       setEditingReservation(reservation);
-      const dateTime = new Date(reservation.reservation_date);
+      // reservation_dateをJSTとして解釈
+      let dateStr = reservation.reservation_date;
+      // タイムゾーン情報がない場合は+09:00を付与
+      if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+        dateStr = dateStr.replace(' ', 'T') + '+09:00';
+      }
+      const dateTime = new Date(dateStr);
       // 複数メニューの場合はmenus配列から取得、そうでなければmenu_idから
       const menuIds = reservation.menus && reservation.menus.length > 0
         ? reservation.menus.map(m => m.menu_id)
         : [reservation.menu_id];
       setFormData({
-        customer_id: reservation.customer_id.toString(),
-        customer_name: reservation.customer_name,
+        customer_id: reservation.customer_id ? reservation.customer_id.toString() : '',
+        customer_name: reservation.customer_name || '',
         customer_email: reservation.customer_email || '',
         customer_phone: reservation.customer_phone || '',
         selectedMenuIds: menuIds,
-        staff_id: reservation.staff_id.toString(),
+        staff_id: reservation.staff_id ? reservation.staff_id.toString() : '',
         reservation_date: dateTime.toISOString().split('T')[0],
         reservation_time: dateTime.toTimeString().slice(0, 5),
-        status: reservation.status,
+        status: reservation.status || 'confirmed',
         notes: reservation.notes || ''
       });
     } else {
@@ -616,8 +713,29 @@ export default function ReservationManagement() {
         throw new Error(errorData.error || '保存に失敗しました');
       }
 
+      // 予約更新後、更新された予約の日付にフィルタを変更
+      if (editingReservation) {
+        // 更新後の日付を取得
+        const updatedDate = formData.reservation_date;
+        if (updatedDate && updatedDate !== filterDate) {
+          // フィルタ日付を更新
+          setFilterDate(updatedDate);
+          // URLパラメータも更新（スーパー管理者の場合）
+          if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.set('date', updatedDate);
+            const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+            router.replace(newUrl, { scroll: false });
+          }
+        }
+      }
+
       handleCloseModal();
-      loadReservations();
+      // filterDateが変更された場合、useEffectで自動的にloadReservationsが呼ばれる
+      // 変更されていない場合のみ手動で呼び出す
+      if (!editingReservation || formData.reservation_date === filterDate) {
+        loadReservations();
+      }
     } catch (error: any) {
       setError(error.message || '保存に失敗しました');
     }
@@ -643,6 +761,34 @@ export default function ReservationManagement() {
       loadReservations();
     } catch (error: any) {
       alert(error.message || 'キャンセルに失敗しました');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!editingReservation) {
+      return;
+    }
+
+    if (!confirm('この予約を削除してもよろしいですか？この操作は取り消せません。')) {
+      return;
+    }
+
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${editingReservation.reservation_id}`);
+      const response = await fetch(url, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '削除に失敗しました');
+      }
+
+      handleCloseModal();
+      loadReservations();
+    } catch (error: any) {
+      setError(error.message || '削除に失敗しました');
     }
   };
 
@@ -718,13 +864,30 @@ export default function ReservationManagement() {
     
     reservations
       .filter(r => showCancelled || r.status !== 'cancelled')
-      .sort((a, b) => new Date(a.reservation_date).getTime() - new Date(b.reservation_date).getTime())
+      .sort((a, b) => {
+        // reservation_dateをJSTとして解釈
+        const parseDate = (dateStr: string) => {
+          let str = dateStr;
+          if (typeof str === 'string' && !str.includes('+') && !str.includes('Z')) {
+            str = str.replace(' ', 'T') + '+09:00';
+          }
+          return new Date(str).getTime();
+        };
+        return parseDate(a.reservation_date) - parseDate(b.reservation_date);
+      })
       .forEach(reservation => {
-        const date = new Date(reservation.reservation_date);
+        // reservation_dateをJSTとして解釈
+        let dateStr = reservation.reservation_date;
+        // タイムゾーン情報がない場合は+09:00を付与
+        if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+          dateStr = dateStr.replace(' ', 'T') + '+09:00';
+        }
+        const date = new Date(dateStr);
         const dateKey = date.toLocaleDateString('ja-JP', {
           year: 'numeric',
           month: 'long',
-          day: 'numeric'
+          day: 'numeric',
+          timeZone: 'Asia/Tokyo'
         });
         
         if (!grouped[dateKey]) {
@@ -743,10 +906,17 @@ export default function ReservationManagement() {
 
   // 時間をフォーマット（HH:MM）
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+    // reservation_dateをJSTとして解釈
+    let dateStr = dateString;
+    // タイムゾーン情報がない場合は+09:00を付与
+    if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+      dateStr = dateStr.replace(' ', 'T') + '+09:00';
+    }
+    const date = new Date(dateStr);
     return date.toLocaleTimeString('ja-JP', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'Asia/Tokyo'
     });
   };
 
@@ -760,92 +930,7 @@ export default function ReservationManagement() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-semibold text-gray-900">予約管理</h1>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  href={getAdminLinkUrl('/admin/dashboard')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  ダッシュボード
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/reservations')}
-                  className="border-pink-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  予約管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/customers')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                  prefetch={false}
-                >
-                  顧客管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/menus')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  メニュー管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/products')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  商品管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/sales')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  売上管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/staff')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  従業員管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/shifts')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  シフト管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/settings')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  設定
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center">
-              <button
-                onClick={async () => {
-                  try {
-                    await fetch('/api/admin/logout', {
-                      method: 'POST',
-                      credentials: 'include',
-                    });
-                    router.push('/admin/login');
-                  } catch (error) {
-                    console.error('ログアウトエラー:', error);
-                  }
-                }}
-                className="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium"
-              >
-                ログアウト
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <AdminNav currentPath="/admin/reservations" title="予約管理" />
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -957,13 +1042,23 @@ export default function ReservationManagement() {
                         <div className="flex items-center">
                           <CalendarDaysIcon className="h-5 w-5 text-gray-400 mr-2" />
                           <h3 className="text-lg font-medium text-gray-900">
-                            {new Date(reservation.reservation_date).toLocaleString('ja-JP', {
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
+                            {(() => {
+                              // reservation_dateをJSTとして解釈
+                              let dateStr = reservation.reservation_date;
+                              // タイムゾーン情報がない場合は+09:00を付与
+                              if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+                                dateStr = dateStr.replace(' ', 'T') + '+09:00';
+                              }
+                              const date = new Date(dateStr);
+                              return date.toLocaleString('ja-JP', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: 'Asia/Tokyo'
+                              });
+                            })()}
                           </h3>
                           <span className={`ml-3 px-2 py-1 text-xs rounded ${getStatusColor(reservation.status)}`}>
                             {getStatusLabel(reservation.status)}
@@ -1046,7 +1141,7 @@ export default function ReservationManagement() {
                   予約が登録されていません
                 </div>
               ) : (
-                <TimelineScheduleView reservations={getFilteredReservations()} onEdit={handleOpenModal} onStatusChange={handleStatusChange} onCancel={handleCancel} />
+                <TimelineScheduleView reservations={getFilteredReservations()} staff={staff} onEdit={handleOpenModal} onStatusChange={handleStatusChange} onCancel={handleCancel} />
               )}
             </div>
           )}
@@ -1321,20 +1416,35 @@ export default function ReservationManagement() {
                     </div>
                   </div>
 
-                  <div className="mt-6 flex justify-end space-x-3">
-                    <button
-                      type="button"
-                      onClick={handleCloseModal}
-                      className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
-                    >
-                      キャンセル
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
-                    >
-                      {editingReservation ? '更新' : '追加'}
-                    </button>
+                  <div className="mt-6 flex justify-between items-center">
+                    {/* 左下に削除ボタン（編集時のみ表示） */}
+                    <div className="flex-shrink-0">
+                      {editingReservation && (
+                        <button
+                          type="button"
+                          onClick={handleDelete}
+                          className="px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        >
+                          削除
+                        </button>
+                      )}
+                    </div>
+                    {/* 右下にキャンセルと更新/追加ボタン */}
+                    <div className="flex justify-end space-x-3 ml-auto">
+                      <button
+                        type="button"
+                        onClick={handleCloseModal}
+                        className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                      >
+                        {editingReservation ? '更新' : '追加'}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
