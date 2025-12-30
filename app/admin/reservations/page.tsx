@@ -320,6 +320,10 @@ export default function ReservationManagement() {
       const dateParam = urlParams.get('date');
       if (dateParam) {
         setFilterDate(dateParam);
+      } else {
+        // dateパラメータがない場合は、今日の日付をデフォルトとして設定
+        const today = new Date().toISOString().split('T')[0];
+        setFilterDate(today);
       }
     }
     // 他のデータ（顧客、メニュー、スタッフ）を読み込む
@@ -356,9 +360,11 @@ export default function ReservationManagement() {
       setLoading(true);
       let baseUrl = '/api/admin/reservations';
       const params = new URLSearchParams();
-      if (filterDate) params.append('date', filterDate);
+      // filterDateが空文字列の場合は、今日の日付を使用
+      const dateToFilter = filterDate || new Date().toISOString().split('T')[0];
+      params.append('date', dateToFilter);
       if (filterStatus) params.append('status', filterStatus);
-      if (params.toString()) baseUrl += '?' + params.toString();
+      baseUrl += '?' + params.toString();
       
       const url = getApiUrlWithTenantId(baseUrl);
 
