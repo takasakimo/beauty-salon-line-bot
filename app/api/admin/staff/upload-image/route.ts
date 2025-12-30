@@ -63,10 +63,40 @@ export async function POST(request: NextRequest) {
     const dataUri = `data:${file.type};base64,${base64}`;
 
     // データベースに画像URL（Base64データURI）を保存
-    await query(
-      `UPDATE staff SET image_url = $1 WHERE staff_id = $2 AND tenant_id = $3`,
-      [dataUri, parseInt(staffId), tenantId]
-    );
+    try {
+      await query(
+        `UPDATE staff SET image_url = $1 WHERE staff_id = $2 AND tenant_id = $3`,
+        [dataUri, parseInt(staffId), tenantId]
+      );
+    } catch (updateError: any) {
+      // カラムが存在しない場合は自動的に作成
+      if (updateError.message && updateError.message.includes('does not exist')) {
+        console.log('image_urlカラムが存在しないため、自動的に作成します');
+        try {
+          // カラムを追加
+          await query(`
+            ALTER TABLE staff 
+            ADD COLUMN IF NOT EXISTS image_url TEXT;
+          `);
+          console.log('✅ image_urlカラムを追加しました');
+          
+          // 再度更新を試行
+          await query(
+            `UPDATE staff SET image_url = $1 WHERE staff_id = $2 AND tenant_id = $3`,
+            [dataUri, parseInt(staffId), tenantId]
+          );
+        } catch (migrationError: any) {
+          console.error('マイグレーションエラー:', migrationError);
+          return NextResponse.json(
+            { error: 'データベースの設定に失敗しました', details: migrationError.message },
+            { status: 500 }
+          );
+        }
+      } else {
+        // その他のエラーは再スロー
+        throw updateError;
+      }
+    }
 
     return NextResponse.json({ 
       success: true,
