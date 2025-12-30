@@ -198,7 +198,7 @@ export default function AdminDashboard() {
             </Link>
 
             <Link
-              href={getAdminLinkUrl('/admin/reservations')}
+              href={`${getAdminLinkUrl('/admin/reservations')}?date=${new Date().toISOString().split('T')[0]}`}
               className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="p-5">

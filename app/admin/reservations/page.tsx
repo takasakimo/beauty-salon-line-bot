@@ -314,7 +314,19 @@ export default function ReservationManagement() {
   const [showCancelled, setShowCancelled] = useState(false);
 
   useEffect(() => {
-    loadData();
+    // URLパラメータから日付を取得
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const dateParam = urlParams.get('date');
+      if (dateParam) {
+        setFilterDate(dateParam);
+      }
+    }
+    // 他のデータ（顧客、メニュー、スタッフ）を読み込む
+    loadCustomers();
+    loadMenus();
+    loadStaff();
+    // loadReservationsはfilterDateが変更されたときにuseEffectで自動的に呼び出される
   }, []);
 
   useEffect(() => {
