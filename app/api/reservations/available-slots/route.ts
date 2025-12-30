@@ -279,18 +279,40 @@ export async function GET(request: NextRequest) {
     const openTimeInMinutes = openHour * 60 + openMinute;
     const closeTimeInMinutes = closeHour * 60 + closeMinute;
     
+    console.log('スロット生成パラメータ:', {
+      openTime,
+      closeTime,
+      openTimeInMinutes,
+      closeTimeInMinutes,
+      duration,
+      staffWorkingHours,
+      staffId
+    });
+    
     // 営業時間のスロットを生成（30分間隔）
+    // メニューの所要時間を考慮して、シフト終了時間を超えないスロットのみを生成
     const slots: string[] = [];
     // 営業時間が有効な場合のみスロットを生成
     if (openTimeInMinutes < closeTimeInMinutes) {
-    for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
-      const hour = Math.floor(time / 60);
-      const minute = time % 60;
-      slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+      for (let time = openTimeInMinutes; time < closeTimeInMinutes; time += 30) {
+        // このスロットから開始した場合の終了時間を計算
+        const slotEndTime = time + duration;
+        
+        // シフト終了時間を超えないスロットのみを追加
+        if (slotEndTime <= closeTimeInMinutes) {
+          const hour = Math.floor(time / 60);
+          const minute = time % 60;
+          slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+        }
       }
     } else {
       console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });
     }
+    
+    console.log('生成されたスロット:', {
+      slotCount: slots.length,
+      slots: slots.slice(-10) // 最後の10個を表示
+    });
 
     // 現在時刻を取得（JST時間を使用）
     const now = new Date();
