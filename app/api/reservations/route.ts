@@ -251,6 +251,20 @@ export async function POST(request: NextRequest) {
           [tenantId, reservationDateStr]
         );
         
+        console.log('スタッフ未指定時のバリデーション:', {
+          reservationDateStr,
+          reservationStartTimeInMinutes,
+          reservationEndTimeInMinutes,
+          totalStaff: workingStaffResult.rows.length,
+          staffData: workingStaffResult.rows.map((r: any) => ({
+            staff_id: r.staff_id,
+            shift_start_time: r.shift_start_time,
+            shift_end_time: r.shift_end_time,
+            is_off: r.is_off,
+            working_hours: r.working_hours
+          }))
+        });
+        
         const availableStaff: Array<{ staff_id: number; start_time: number; end_time: number }> = [];
         
         for (const staffRow of workingStaffResult.rows) {
@@ -278,19 +292,45 @@ export async function POST(request: NextRequest) {
             const staffEndTimeInMinutes = endHour * 60 + endMinute;
             
             // 予約時間が勤務時間内かチェック
-            if (reservationStartTimeInMinutes >= staffStartTimeInMinutes && 
-                reservationEndTimeInMinutes <= staffEndTimeInMinutes) {
+            const isWithinWorkingHours = reservationStartTimeInMinutes >= staffStartTimeInMinutes && 
+                reservationEndTimeInMinutes <= staffEndTimeInMinutes;
+            
+            console.log(`スタッフ${staffRow.staff_id}のチェック:`, {
+              staffStartTime,
+              staffEndTime,
+              staffStartTimeInMinutes,
+              staffEndTimeInMinutes,
+              reservationStartTimeInMinutes,
+              reservationEndTimeInMinutes,
+              isWithinWorkingHours
+            });
+            
+            if (isWithinWorkingHours) {
               availableStaff.push({
                 staff_id: staffRow.staff_id,
                 start_time: staffStartTimeInMinutes,
                 end_time: staffEndTimeInMinutes
               });
             }
+          } else {
+            // 勤務時間が設定されていないスタッフも利用可能として扱う（後方互換性のため）
+            console.log(`スタッフ${staffRow.staff_id}: 勤務時間が設定されていないため、利用可能として扱います`);
+            availableStaff.push({
+              staff_id: staffRow.staff_id,
+              start_time: 0,
+              end_time: 24 * 60
+            });
           }
         }
         
+        console.log('利用可能なスタッフ:', {
+          availableStaffCount: availableStaff.length,
+          availableStaffIds: availableStaff.map(s => s.staff_id)
+        });
+        
         // 勤務しているスタッフがいない場合は予約不可
         if (availableStaff.length === 0) {
+          console.error('利用可能なスタッフがいません');
           return NextResponse.json(
             { success: false, error: 'この時間帯に勤務しているスタッフがいないため、予約できません。別の時間を選択してください。' },
             { status: 400 }
@@ -364,7 +404,14 @@ export async function POST(request: NextRequest) {
         // 利用可能なスタッフがいるかチェック
         const hasAvailableStaff = Object.values(staffAvailability).some(available => available);
         
+        console.log('スタッフの予約状況:', {
+          staffAvailability,
+          hasAvailableStaff,
+          reservationCheckCount: reservationCheckResult.rows.length
+        });
+        
         if (!hasAvailableStaff) {
+          console.error('全てのスタッフが予約で埋まっています');
           return NextResponse.json(
             { success: false, error: 'この時間帯は全てのスタッフが予約で埋まっているため、予約できません。別の時間を選択してください。' },
             { status: 400 }
