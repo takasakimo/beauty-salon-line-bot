@@ -154,57 +154,87 @@ export async function POST(request: NextRequest) {
     // 予約日の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
     const dayOfWeek = reservationDateTime.getDay();
     
-    // スタッフが指定されている場合は、スタッフの勤務時間をチェック
+    // スタッフが指定されている場合は、シフトを確認（優先）、なければデフォルトの勤務時間をチェック
     if (staff_id) {
       try {
-        const staffResult = await query(
-          'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
-          [staff_id, tenantId]
+        // まずシフトを確認
+        const shiftResult = await query(
+          `SELECT start_time, end_time, is_off 
+           FROM staff_shifts 
+           WHERE staff_id = $1 AND tenant_id = $2 AND shift_date = $3`,
+          [staff_id, tenantId, reservationDateStr]
         );
-        if (staffResult.rows.length > 0 && staffResult.rows[0].working_hours) {
-          const workingHoursStr = staffResult.rows[0].working_hours;
-          const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-          if (match) {
-            const staffStartTime = match[1];
-            const staffEndTime = match[2];
-            
-            // 予約開始時間と終了時間を取得
-            const reservationStartHour = reservationDateTime.getHours();
-            const reservationStartMinute = reservationDateTime.getMinutes();
-            const reservationStartTimeStr = `${reservationStartHour.toString().padStart(2, '0')}:${reservationStartMinute.toString().padStart(2, '0')}`;
-            
-            const reservationEndHour = reservationEndTime.getHours();
-            const reservationEndMinute = reservationEndTime.getMinutes();
-            const reservationEndTimeStr = `${reservationEndHour.toString().padStart(2, '0')}:${reservationEndMinute.toString().padStart(2, '0')}`;
-            
-            // 時間を分単位に変換
-            const [staffStartHour, staffStartMinute] = staffStartTime.split(':').map(Number);
-            const [staffEndHour, staffEndMinute] = staffEndTime.split(':').map(Number);
-            const staffStartTimeInMinutes = staffStartHour * 60 + staffStartMinute;
-            const staffEndTimeInMinutes = staffEndHour * 60 + staffEndMinute;
-            
-            const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
-            const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
-            
-            // 予約開始時間が勤務時間内かチェック
-            if (reservationStartTimeInMinutes < staffStartTimeInMinutes) {
-              return NextResponse.json(
-                { success: false, error: `予約開始時間がスタッフの勤務開始時間（${staffStartTime}）より早いため、予約できません。` },
-                { status: 400 }
-              );
-            }
-            
-            // 予約終了時間が勤務時間を超えないかチェック
-            if (reservationEndTimeInMinutes > staffEndTimeInMinutes) {
-              return NextResponse.json(
-                { success: false, error: `予約終了時間がスタッフの勤務終了時間（${staffEndTime}）を超えるため、予約できません。別の時間を選択してください。` },
-                { status: 400 }
-              );
+        
+        let staffStartTime: string | null = null;
+        let staffEndTime: string | null = null;
+        
+        if (shiftResult.rows.length > 0) {
+          const shift = shiftResult.rows[0];
+          if (shift.is_off) {
+            // 休みの場合は予約不可
+            return NextResponse.json(
+              { success: false, error: '選択された日付はスタッフの休み日のため、予約できません。別の日付を選択してください。' },
+              { status: 400 }
+            );
+          } else if (shift.start_time && shift.end_time) {
+            // シフトが設定されている場合はそれを使用
+            staffStartTime = shift.start_time.substring(0, 5); // HH:MM形式に変換
+            staffEndTime = shift.end_time.substring(0, 5);
+          }
+        } else {
+          // シフトが設定されていない場合は、デフォルトの勤務時間を使用
+          const staffResult = await query(
+            'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
+            [staff_id, tenantId]
+          );
+          if (staffResult.rows.length > 0 && staffResult.rows[0].working_hours) {
+            const workingHoursStr = staffResult.rows[0].working_hours;
+            const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              staffStartTime = match[1];
+              staffEndTime = match[2];
             }
           }
         }
+        
+        // 勤務時間が設定されている場合はチェック
+        if (staffStartTime && staffEndTime) {
+          // 予約開始時間と終了時間を取得
+          const reservationStartHour = reservationDateTime.getHours();
+          const reservationStartMinute = reservationDateTime.getMinutes();
+          const reservationStartTimeStr = `${reservationStartHour.toString().padStart(2, '0')}:${reservationStartMinute.toString().padStart(2, '0')}`;
+          
+          const reservationEndHour = reservationEndTime.getHours();
+          const reservationEndMinute = reservationEndTime.getMinutes();
+          const reservationEndTimeStr = `${reservationEndHour.toString().padStart(2, '0')}:${reservationEndMinute.toString().padStart(2, '0')}`;
+          
+          // 時間を分単位に変換
+          const [startHour, startMinute] = staffStartTime.split(':').map(Number);
+          const [endHour, endMinute] = staffEndTime.split(':').map(Number);
+          const staffStartTimeInMinutes = startHour * 60 + startMinute;
+          const staffEndTimeInMinutes = endHour * 60 + endMinute;
+          
+          const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
+          const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
+          
+          // 予約開始時間が勤務時間内かチェック
+          if (reservationStartTimeInMinutes < staffStartTimeInMinutes) {
+            return NextResponse.json(
+              { success: false, error: `予約開始時間がスタッフの勤務開始時間（${staffStartTime}）より早いため、予約できません。` },
+              { status: 400 }
+            );
+          }
+          
+          // 予約終了時間が勤務時間を超えないかチェック
+          if (reservationEndTimeInMinutes > staffEndTimeInMinutes) {
+            return NextResponse.json(
+              { success: false, error: `予約終了時間がスタッフの勤務終了時間（${staffEndTime}）を超えるため、予約できません。別の時間を選択してください。` },
+              { status: 400 }
+            );
+          }
+        }
       } catch (error: any) {
-        console.error('スタッフ勤務時間チェックエラー:', error);
+        console.error('スタッフシフト/勤務時間チェックエラー:', error);
         // エラーが発生しても続行（店舗の営業時間チェックにフォールバック）
       }
     }

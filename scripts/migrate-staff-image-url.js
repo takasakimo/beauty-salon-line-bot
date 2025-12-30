@@ -2,9 +2,19 @@ require('dotenv').config();
 const { Client } = require('pg');
 
 async function migrateStaffImageUrl() {
+  // 環境変数の優先順位: POSTGRES_URL > POSTGRES_URL_NON_POOLING > DATABASE_URL
+  const databaseUrl = process.env.POSTGRES_URL || 
+                      process.env.POSTGRES_URL_NON_POOLING ||
+                      process.env.DATABASE_URL;
+  
+  if (!databaseUrl) {
+    console.error('データベース接続URLが見つかりません。環境変数を確認してください。');
+    process.exit(1);
+  }
+  
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL?.includes('localhost') ? false : {
+    connectionString: databaseUrl,
+    ssl: databaseUrl.includes('localhost') ? false : {
       rejectUnauthorized: false
     }
   });

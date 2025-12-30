@@ -32,7 +32,8 @@
     "products:migrate": "node scripts/migrate-products.js",
     "products-inventory:migrate": "node scripts/migrate-products-inventory.js",
     "product-categories:migrate": "node scripts/migrate-product-categories.js",
-    "menu-categories:migrate": "node scripts/migrate-menu-categories.js"
+    "menu-categories:migrate": "node scripts/migrate-menu-categories.js",
+    "staff-shifts:migrate": "node scripts/migrate-staff-shifts.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

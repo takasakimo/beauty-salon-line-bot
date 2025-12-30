@@ -296,8 +296,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // スタッフが指定されている場合、時間の重複チェック
+    // スタッフが指定されている場合、シフトを確認してから時間の重複チェック
     if (staff_id) {
+      // まずシフトを確認
+      try {
+        const shiftResult = await query(
+          `SELECT start_time, end_time, is_off 
+           FROM staff_shifts 
+           WHERE staff_id = $1 AND tenant_id = $2 AND shift_date = $3`,
+          [staff_id, tenantId, reservationDateStr]
+        );
+        
+        if (shiftResult.rows.length > 0) {
+          const shift = shiftResult.rows[0];
+          if (shift.is_off) {
+            // 休みの場合は予約不可
+            return NextResponse.json(
+              { error: '選択された日付はスタッフの休み日のため、予約できません。別の日付を選択してください。' },
+              { status: 400 }
+            );
+          } else if (shift.start_time && shift.end_time) {
+            // シフトが設定されている場合は時間をチェック
+            const shiftStartTime = shift.start_time.substring(0, 5);
+            const shiftEndTime = shift.end_time.substring(0, 5);
+            
+            const reservationStartHour = reservationDateTimeLocal.getHours();
+            const reservationStartMinute = reservationDateTimeLocal.getMinutes();
+            const reservationEndHour = reservationEndTime.getHours();
+            const reservationEndMinute = reservationEndTime.getMinutes();
+            
+            const [shiftStartHour, shiftStartMinute] = shiftStartTime.split(':').map(Number);
+            const [shiftEndHour, shiftEndMinute] = shiftEndTime.split(':').map(Number);
+            const shiftStartTimeInMinutes = shiftStartHour * 60 + shiftStartMinute;
+            const shiftEndTimeInMinutes = shiftEndHour * 60 + shiftEndMinute;
+            
+            const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
+            const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
+            
+            if (reservationStartTimeInMinutes < shiftStartTimeInMinutes) {
+              return NextResponse.json(
+                { error: `予約開始時間がスタッフのシフト開始時間（${shiftStartTime}）より早いため、予約できません。` },
+                { status: 400 }
+              );
+            }
+            
+            if (reservationEndTimeInMinutes > shiftEndTimeInMinutes) {
+              return NextResponse.json(
+                { error: `予約終了時間がスタッフのシフト終了時間（${shiftEndTime}）を超えるため、予約できません。別の時間を選択してください。` },
+                { status: 400 }
+              );
+            }
+          }
+        }
+      } catch (error: any) {
+        console.error('スタッフシフトチェックエラー:', error);
+        // エラーが発生しても続行
+      }
+      
       // 同じスタッフの既存予約をチェック
       const dateStrForQuery = dateStr.replace('T', ' ');
       const conflictCheck = await query(

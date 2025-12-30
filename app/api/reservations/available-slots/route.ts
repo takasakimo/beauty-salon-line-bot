@@ -147,25 +147,55 @@ export async function GET(request: NextRequest) {
       return NextResponse.json([]);
     }
     
-    // スタッフが指定されている場合は、スタッフの勤務時間を取得
+    // スタッフが指定されている場合は、シフトを確認（優先）、なければデフォルトの勤務時間を使用
     let staffWorkingHours: { start: string; end: string } | null = null;
+    let isStaffOff = false;
+    
     if (staffId) {
       try {
-        const staffResult = await query(
-          'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
-          [staffId, tenantId]
+        // まずシフトを確認
+        const shiftResult = await query(
+          `SELECT start_time, end_time, is_off 
+           FROM staff_shifts 
+           WHERE staff_id = $1 AND tenant_id = $2 AND shift_date = $3`,
+          [staffId, tenantId, date]
         );
-        if (staffResult.rows.length > 0 && staffResult.rows[0].working_hours) {
-          const workingHoursStr = staffResult.rows[0].working_hours;
-          const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-          if (match) {
-            staffWorkingHours = { start: match[1], end: match[2] };
+        
+        if (shiftResult.rows.length > 0) {
+          const shift = shiftResult.rows[0];
+          if (shift.is_off) {
+            // 休みの場合は空き時間を返さない
+            isStaffOff = true;
+          } else if (shift.start_time && shift.end_time) {
+            // シフトが設定されている場合はそれを使用
+            staffWorkingHours = {
+              start: shift.start_time.substring(0, 5), // HH:MM形式に変換
+              end: shift.end_time.substring(0, 5)
+            };
+          }
+        } else {
+          // シフトが設定されていない場合は、デフォルトの勤務時間を使用
+          const staffResult = await query(
+            'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
+            [staffId, tenantId]
+          );
+          if (staffResult.rows.length > 0 && staffResult.rows[0].working_hours) {
+            const workingHoursStr = staffResult.rows[0].working_hours;
+            const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
+            if (match) {
+              staffWorkingHours = { start: match[1], end: match[2] };
+            }
           }
         }
       } catch (error: any) {
-        console.error('スタッフ勤務時間取得エラー:', error);
+        console.error('スタッフシフト/勤務時間取得エラー:', error);
         // エラーが発生しても続行（店舗の営業時間を使用）
       }
+    }
+    
+    // スタッフが休みの場合は空き時間を返さない
+    if (isStaffOff) {
+      return NextResponse.json([]);
     }
     
     // 特別営業時間が設定されている場合はそれを使用、そうでなければ曜日の営業時間を使用
