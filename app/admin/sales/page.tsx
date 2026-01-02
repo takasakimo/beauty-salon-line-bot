@@ -33,6 +33,11 @@ interface SalesSummary {
   monthCount: number;
 }
 
+interface Staff {
+  staff_id: number;
+  name: string;
+}
+
 export default function SalesManagement() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -47,6 +52,8 @@ export default function SalesManagement() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [salesTypeFilter, setSalesTypeFilter] = useState<'all' | 'reservation' | 'product'>('all');
+  const [staffFilter, setStaffFilter] = useState<string>('all'); // 'all' or staff_id
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [sortBy, setSortBy] = useState<'date' | 'staff' | 'customer' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [error, setError] = useState('');
@@ -54,7 +61,29 @@ export default function SalesManagement() {
   useEffect(() => {
     loadSummary();
     loadTodaySales();
+    loadStaff();
   }, []);
+
+  const loadStaff = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/staff');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        setStaff(data);
+      }
+    } catch (error) {
+      console.error('スタッフ取得エラー:', error);
+    }
+  };
 
   // 過去の月のタブが選択された時、または年・月が変更された時にデータを読み込む
   useEffect(() => {
@@ -274,6 +303,7 @@ export default function SalesManagement() {
   };
 
   const handlePrint = () => {
+    // 印刷用のスタイルを適用してから印刷
     window.print();
   };
 
@@ -307,6 +337,16 @@ export default function SalesManagement() {
     // タイプフィルター適用
     if (salesTypeFilter !== 'all') {
       sales = sales.filter(sale => sale.type === salesTypeFilter);
+    }
+
+    // 担当者フィルター適用
+    if (staffFilter !== 'all') {
+      const staffId = parseInt(staffFilter);
+      sales = sales.filter(sale => {
+        if (!sale.staff_name) return false;
+        const selectedStaff = staff.find(s => s.staff_id === staffId);
+        return selectedStaff && sale.staff_name === selectedStaff.name;
+      });
     }
 
     // ソート適用
@@ -385,11 +425,11 @@ export default function SalesManagement() {
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-6 print:hidden">
             <h2 className="text-2xl font-bold text-gray-900">売上管理</h2>
             <button
               onClick={handlePrint}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 print:hidden"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
             >
               <PrinterIcon className="h-5 w-5 mr-2" />
               印刷
@@ -404,7 +444,7 @@ export default function SalesManagement() {
           )}
 
           {/* サマリーカード */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-8">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-8 print:hidden">
             <div className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100">
               <div className="p-5">
                 <div className="flex items-center">
@@ -616,6 +656,21 @@ export default function SalesManagement() {
                     <option value="all">総売上（予約+物販）</option>
                     <option value="reservation">予約のみ</option>
                     <option value="product">物販のみ</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">担当者:</label>
+                  <select
+                    value={staffFilter}
+                    onChange={(e) => setStaffFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  >
+                    <option value="all">すべて</option>
+                    {staff.map((s) => (
+                      <option key={s.staff_id} value={s.staff_id.toString()}>
+                        {s.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
