@@ -101,13 +101,7 @@ export default function SalesManagement() {
     setLoadingSales(true);
     setError('');
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tenantId = urlParams.get('tenantId');
-      
       let url = '/api/admin/sales-details?type=today';
-      if (tenantId) {
-        url += `&tenantId=${tenantId}`;
-      }
       url = getApiUrlWithTenantId(url);
       
       const response = await fetch(url, {
@@ -149,9 +143,6 @@ export default function SalesManagement() {
         const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
         
         let url = `/api/admin/sales-details?type=custom&startDate=${startDateStr}&endDate=${endDateStr}`;
-        if (tenantId) {
-          url += `&tenantId=${tenantId}`;
-        }
         url = getApiUrlWithTenantId(url);
         
         const response = await fetch(url, {
@@ -173,9 +164,6 @@ export default function SalesManagement() {
       } else {
         // 今月の売上を取得
         let url = '/api/admin/sales-details?type=month';
-        if (tenantId) {
-          url += `&tenantId=${tenantId}`;
-        }
         url = getApiUrlWithTenantId(url);
         
         const response = await fetch(url, {
@@ -218,13 +206,7 @@ export default function SalesManagement() {
     setLoadingSales(true);
     setError('');
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tenantId = urlParams.get('tenantId');
-      
       let url = `/api/admin/sales-details?type=custom&startDate=${startDate}&endDate=${endDate}`;
-      if (tenantId) {
-        url += `&tenantId=${tenantId}`;
-      }
       url = getApiUrlWithTenantId(url);
       
       const response = await fetch(url, {

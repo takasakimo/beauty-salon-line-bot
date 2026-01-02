@@ -12,21 +12,17 @@ export function getApiUrlWithTenantId(baseUrl: string): string {
   const urlParams = new URLSearchParams(window.location.search);
   const tenantId = urlParams.get('tenantId');
   
-  console.log('getApiUrlWithTenantId:', {
-    currentUrl: window.location.href,
-    search: window.location.search,
-    tenantId,
-    baseUrl
-  });
+  // 既にtenantIdがURLに含まれている場合は追加しない
+  if (baseUrl.includes('tenantId=')) {
+    return baseUrl;
+  }
   
   if (tenantId) {
     const separator = baseUrl.includes('?') ? '&' : '?';
     const url = `${baseUrl}${separator}tenantId=${tenantId}`;
-    console.log('API URL with tenantId:', url);
     return url;
   }
   
-  console.warn('tenantIdが見つかりません。URL:', window.location.href);
   return baseUrl;
 }
 
