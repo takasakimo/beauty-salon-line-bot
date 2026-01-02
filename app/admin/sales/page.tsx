@@ -54,17 +54,13 @@ export default function SalesManagement() {
     loadTodaySales();
   }, []);
 
-  // 過去の月のタブが選択された時に自動的にデータを読み込む
+  // 過去の月のタブが選択された時、または年・月が変更された時にデータを読み込む
   useEffect(() => {
     if (activeTab === 'past-month' && selectedYear && selectedMonth) {
-      // 既にデータが読み込まれている場合はスキップ
-      const hasData = allSales.length > 0;
-      if (!hasData) {
-        loadMonthSales(selectedYear, selectedMonth);
-      }
+      loadMonthSales(selectedYear, selectedMonth);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, selectedYear, selectedMonth]);
 
   const loadSummary = async () => {
     try {
@@ -145,6 +141,8 @@ export default function SalesManagement() {
         let url = `/api/admin/sales-details?type=custom&startDate=${startDateStr}&endDate=${endDateStr}`;
         url = getApiUrlWithTenantId(url);
         
+        console.log('過去の売上取得:', { year, month, startDateStr, endDateStr, url });
+        
         const response = await fetch(url, {
           credentials: 'include',
         });
@@ -156,10 +154,12 @@ export default function SalesManagement() {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || '過去の売上データの取得に失敗しました');
+          console.error('過去の売上取得エラー:', { status: response.status, errorData, url });
+          throw new Error(errorData.error || `過去の売上データの取得に失敗しました (${response.status})`);
         }
 
         const data = await response.json();
+        console.log('過去の売上データ取得成功:', { count: data.length, data });
         setAllSales(data);
       } else {
         // 今月の売上を取得
@@ -251,6 +251,9 @@ export default function SalesManagement() {
 
   const handlePastMonthChange = () => {
     if (selectedYear && selectedMonth) {
+      // データをクリアしてから再読み込み
+      setAllSales([]);
+      setError('');
       loadMonthSales(selectedYear, selectedMonth);
     }
   };
@@ -470,8 +473,14 @@ export default function SalesManagement() {
                       id="selectedYear"
                       value={selectedYear}
                       onChange={(e) => {
-                        setSelectedYear(parseInt(e.target.value));
+                        const newYear = parseInt(e.target.value);
+                        setSelectedYear(newYear);
                         setAllSales([]); // データをクリア
+                        setError(''); // エラーもクリア
+                        // タブが過去の月の場合は自動的に再読み込み
+                        if (activeTab === 'past-month' && newYear && selectedMonth) {
+                          loadMonthSales(newYear, selectedMonth);
+                        }
                       }}
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                     >
@@ -493,8 +502,14 @@ export default function SalesManagement() {
                       id="selectedMonth"
                       value={selectedMonth}
                       onChange={(e) => {
-                        setSelectedMonth(parseInt(e.target.value));
+                        const newMonth = parseInt(e.target.value);
+                        setSelectedMonth(newMonth);
                         setAllSales([]); // データをクリア
+                        setError(''); // エラーもクリア
+                        // タブが過去の月の場合は自動的に再読み込み
+                        if (activeTab === 'past-month' && selectedYear && newMonth) {
+                          loadMonthSales(selectedYear, newMonth);
+                        }
                       }}
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                     >
