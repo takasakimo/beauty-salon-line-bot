@@ -159,7 +159,20 @@ export default function SalesManagement() {
         }
 
         const data = await response.json();
-        console.log('過去の売上データ取得成功:', { count: data.length, data });
+        console.log('過去の売上データ取得成功:', { 
+          count: data.length, 
+          year, 
+          month,
+          startDateStr, 
+          endDateStr,
+          url,
+          data: data.slice(0, 5) // 最初の5件だけ表示
+        });
+        
+        if (data.length === 0) {
+          console.warn('過去の売上データが0件です:', { year, month, startDateStr, endDateStr });
+        }
+        
         setAllSales(data);
       } else {
         // 今月の売上を取得
