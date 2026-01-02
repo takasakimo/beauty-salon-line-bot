@@ -652,14 +652,25 @@ export default function ReservationManagement() {
   };
 
   const handleCustomerSelect = (customerId: string) => {
-    const customer = customers.find(c => c.customer_id.toString() === customerId);
-    if (customer) {
+    if (customerId) {
+      const customer = customers.find(c => c.customer_id.toString() === customerId);
+      if (customer) {
+        setFormData({
+          ...formData,
+          customer_id: customerId,
+          customer_name: customer.real_name,
+          customer_email: customer.email || '',
+          customer_phone: customer.phone_number || ''
+        });
+      }
+    } else {
+      // 顧客選択をクリアした場合、飛び込み客フォームを表示
       setFormData({
         ...formData,
-        customer_id: customerId,
-        customer_name: customer.real_name,
-        customer_email: customer.email || '',
-        customer_phone: customer.phone_number || ''
+        customer_id: '',
+        customer_name: '',
+        customer_email: '',
+        customer_phone: ''
       });
     }
   };
@@ -1178,68 +1189,97 @@ export default function ReservationManagement() {
                   <div className="space-y-4">
                     {/* 顧客選択 */}
                     <div>
-                      <label htmlFor="customer_id" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="customer_id" className="block text-sm font-medium text-gray-700 mb-2">
                         顧客
                       </label>
-                      <select
-                        id="customer_id"
-                        value={formData.customer_id}
-                        onChange={(e) => handleCustomerSelect(e.target.value)}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      >
-                        <option value="">新規顧客を入力</option>
-                        {customers.map((customer) => (
-                          <option key={customer.customer_id} value={customer.customer_id}>
-                            {customer.real_name} {customer.phone_number && `(${customer.phone_number})`}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="space-y-3">
+                        <select
+                          id="customer_id"
+                          value={formData.customer_id}
+                          onChange={(e) => handleCustomerSelect(e.target.value)}
+                          className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        >
+                          <option value="">既存顧客を選択</option>
+                          {customers.map((customer) => (
+                            <option key={customer.customer_id} value={customer.customer_id}>
+                              {customer.real_name} {customer.phone_number && `(${customer.phone_number})`}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {/* 飛び込み客用の入力フォーム */}
+                        <div className="border-t border-gray-200 pt-3">
+                          <div className="flex items-center mb-2">
+                            <input
+                              type="checkbox"
+                              id="walk_in_customer"
+                              checked={!formData.customer_id}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({ ...formData, customer_id: '', customer_name: '', customer_email: '', customer_phone: '' });
+                                } else {
+                                  setFormData({ ...formData, customer_name: '', customer_email: '', customer_phone: '' });
+                                }
+                              }}
+                              className="h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor="walk_in_customer" className="ml-2 text-sm font-medium text-gray-700">
+                              飛び込み客として登録
+                            </label>
+                          </div>
+                          
+                          {!formData.customer_id && (
+                            <div className="space-y-3 mt-3 bg-gray-50 p-4 rounded-md">
+                              <div>
+                                <label htmlFor="customer_name" className="block text-sm font-medium text-gray-700">
+                                  お名前 <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  id="customer_name"
+                                  required={!formData.customer_id}
+                                  value={formData.customer_name}
+                                  onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                                  placeholder="例: 山田 太郎"
+                                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label htmlFor="customer_phone" className="block text-sm font-medium text-gray-700">
+                                    電話番号
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    id="customer_phone"
+                                    value={formData.customer_phone}
+                                    onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                                    placeholder="例: 090-1234-5678"
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label htmlFor="customer_email" className="block text-sm font-medium text-gray-700">
+                                    メールアドレス
+                                  </label>
+                                  <input
+                                    type="email"
+                                    id="customer_email"
+                                    value={formData.customer_email}
+                                    onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
+                                    placeholder="例: example@email.com"
+                                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                  />
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-2">
+                                ※ お名前のみの入力でも予約可能です。電話番号やメールアドレスは任意です。
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-
-                    {/* 新規顧客情報（顧客が選択されていない場合） */}
-                    {!formData.customer_id && (
-                      <>
-                        <div>
-                          <label htmlFor="customer_name" className="block text-sm font-medium text-gray-700">
-                            顧客名 <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            id="customer_name"
-                            required={!formData.customer_id}
-                            value={formData.customer_name}
-                            onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label htmlFor="customer_email" className="block text-sm font-medium text-gray-700">
-                              メールアドレス
-                            </label>
-                            <input
-                              type="email"
-                              id="customer_email"
-                              value={formData.customer_email}
-                              onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
-                              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                            />
-                          </div>
-                          <div>
-                            <label htmlFor="customer_phone" className="block text-sm font-medium text-gray-700">
-                              電話番号
-                            </label>
-                            <input
-                              type="tel"
-                              id="customer_phone"
-                              value={formData.customer_phone}
-                              onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">

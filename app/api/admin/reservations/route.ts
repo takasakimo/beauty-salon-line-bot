@@ -90,12 +90,41 @@ export async function GET(request: NextRequest) {
 
     // メニュー配列をパース
     const reservations = result.rows.map((row: any) => {
-      // reservation_dateに+09:00を付与してJSTとして明示的に返す
+      // reservation_dateをJSTとして処理
       let reservationDate = row.reservation_date;
-      if (reservationDate && typeof reservationDate === 'string' && !reservationDate.includes('+') && !reservationDate.includes('Z')) {
-        // タイムゾーン情報がない場合は+09:00を付与
-        reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+      
+      if (reservationDate) {
+        if (reservationDate instanceof Date) {
+          // Dateオブジェクトの場合、UTC時刻として解釈してJSTに変換
+          // PostgreSQLから返されるDateオブジェクトはUTC時刻として扱われる
+          // データベースに保存されている時刻はJST時刻なので、UTCとして解釈された時刻をJSTに戻す
+          const year = reservationDate.getUTCFullYear();
+          const month = String(reservationDate.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(reservationDate.getUTCDate()).padStart(2, '0');
+          const hours = String(reservationDate.getUTCHours()).padStart(2, '0');
+          const minutes = String(reservationDate.getUTCMinutes()).padStart(2, '0');
+          const seconds = String(reservationDate.getUTCSeconds()).padStart(2, '0');
+          // JST時刻として文字列に変換（+09:00を付与）
+          reservationDate = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
+        } else if (typeof reservationDate === 'string') {
+          // 文字列の場合
+          if (!reservationDate.includes('+') && !reservationDate.includes('Z')) {
+            // タイムゾーン情報がない場合は+09:00を付与
+            reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+          } else if (reservationDate.includes('Z') || reservationDate.endsWith('+00:00')) {
+            // UTC時刻（Z付きまたは+00:00）の場合は、JSTに変換
+            const dateObj = new Date(reservationDate);
+            const year = dateObj.getUTCFullYear();
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getUTCDate()).padStart(2, '0');
+            const hours = String(dateObj.getUTCHours()).padStart(2, '0');
+            const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(dateObj.getUTCSeconds()).padStart(2, '0');
+            reservationDate = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
+          }
+        }
       }
+      
       return {
         ...row,
         reservation_date: reservationDate,
@@ -624,19 +653,49 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // JavaScriptで時間帯の重複をチェック
+      // JavaScriptで時間帯の重複をチェック（JST時刻で比較、分単位）
       let concurrentCount = 0;
       concurrentCheck.rows.forEach((row: any) => {
-        const existingStart = new Date(row.reservation_date);
-        const existingDuration = parseFloat(row.duration) || 60;
-        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+        // 既存予約の時間を文字列から直接抽出（JSTとして扱う）
+        const reservationDateStr = row.reservation_date;
+        const existingDuration = parseInt(row.duration) || 60;
         
-        // 時間帯が重複しているかチェック（JST時刻で比較）
-        // データベースから取得したUTC時刻をJSTに変換
-        const existingStartUTC = new Date(row.reservation_date);
-        const existingStartJST = new Date(existingStartUTC.getTime() + (9 * 60 * 60 * 1000));
-        const existingEndJST = new Date(existingStartJST.getTime() + existingDuration * 60000);
-        if (reservationDateTimeLocal < existingEndJST && reservationEndTime > existingStartJST) {
+        let existingHour: number;
+        let existingMinute: number;
+        
+        if (typeof reservationDateStr === 'string') {
+          // 文字列から時間を直接抽出
+          const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+          if (timeMatch) {
+            existingHour = parseInt(timeMatch[1], 10);
+            existingMinute = parseInt(timeMatch[2], 10);
+            
+            // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+            if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+              existingHour = (existingHour + 9) % 24;
+            }
+          } else {
+            // フォールバック: Dateオブジェクトから取得
+            const dateObj = new Date(reservationDateStr);
+            // UTC時間として取得してJSTに変換
+            existingHour = (dateObj.getUTCHours() + 9) % 24;
+            existingMinute = dateObj.getUTCMinutes();
+          }
+        } else {
+          // Dateオブジェクトの場合（PostgreSQLから返される場合）
+          const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+          // UTC時間として取得してJSTに変換
+          existingHour = (dateObj.getUTCHours() + 9) % 24;
+          existingMinute = dateObj.getUTCMinutes();
+        }
+        
+        const existingStartTimeInMinutes = existingHour * 60 + existingMinute;
+        const existingEndTimeInMinutes = existingStartTimeInMinutes + existingDuration;
+        
+        // 時間帯が重複しているかチェック（分単位で比較）
+        // reservationStartTimeInMinutesとreservationEndTimeInMinutesは既に計算済み（344行目と318行目）
+        // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
+        if (reservationStartTimeInMinutes < existingEndTimeInMinutes && reservationEndTimeInMinutes > existingStartTimeInMinutes) {
           concurrentCount++;
         }
       });
@@ -653,17 +712,23 @@ export async function POST(request: NextRequest) {
     let actualCustomerId = customer_id;
     
     if (!actualCustomerId) {
-      if (customer_email || customer_phone) {
-        const customerQuery = customer_email
-          ? 'SELECT customer_id FROM customers WHERE email = $1 AND tenant_id = $2'
-          : 'SELECT customer_id FROM customers WHERE phone_number = $1 AND tenant_id = $2';
-        const customerParams = customer_email ? [customer_email, tenantId] : [customer_phone, tenantId];
-        const customerResult = await query(customerQuery, customerParams);
+      // 顧客名が指定されている場合（飛び込み客対応）
+      if (customer_name) {
+        // emailまたはphone_numberで既存顧客を検索
+        if (customer_email || customer_phone) {
+          const customerQuery = customer_email
+            ? 'SELECT customer_id FROM customers WHERE email = $1 AND tenant_id = $2'
+            : 'SELECT customer_id FROM customers WHERE phone_number = $1 AND tenant_id = $2';
+          const customerParams = customer_email ? [customer_email, tenantId] : [customer_phone, tenantId];
+          const customerResult = await query(customerQuery, customerParams);
+          
+          if (customerResult.rows.length > 0) {
+            actualCustomerId = customerResult.rows[0].customer_id;
+          }
+        }
         
-        if (customerResult.rows.length > 0) {
-          actualCustomerId = customerResult.rows[0].customer_id;
-        } else if (customer_name) {
-          // 顧客が存在しない場合は作成
+        // 既存顧客が見つからない場合、またはemail/phoneがない場合は新規作成
+        if (!actualCustomerId) {
           const insertCustomerQuery = `
             INSERT INTO customers (tenant_id, email, real_name, phone_number, registered_date) 
             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
@@ -679,7 +744,7 @@ export async function POST(request: NextRequest) {
 
     if (!actualCustomerId) {
       return NextResponse.json(
-        { error: '顧客情報が必要です' },
+        { error: '顧客名が必要です' },
         { status: 400 }
       );
     }
