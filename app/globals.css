@@ -85,21 +85,115 @@ body {
     display: none !important;
   }
 
-  /* テーブルの印刷スタイル */
+  /* 売上管理画面の印刷レイアウト調整 */
+  .max-w-7xl {
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .px-4, .sm\\:px-6, .lg\\:px-8 {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .py-6 {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* テーブルの印刷スタイル - A4縦向きに最適化 */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
   table {
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
     border-collapse: collapse;
+    font-size: 10px !important;
+    table-layout: fixed;
   }
 
   th, td {
-    border: 1px solid #000;
-    padding: 8px;
+    border: 1px solid #000 !important;
+    padding: 4px 6px !important;
     text-align: left;
+    font-size: 9px !important;
+    word-wrap: break-word;
+    overflow: hidden;
   }
 
   th {
     background-color: #f3f4f6 !important;
     font-weight: bold;
+    font-size: 9px !important;
+    padding: 5px 6px !important;
+  }
+
+  /* セル幅の最適化 */
+  th:nth-child(1), td:nth-child(1) {
+    width: 15% !important; /* 日時 */
+  }
+
+  th:nth-child(2), td:nth-child(2) {
+    width: 8% !important; /* 種類 */
+  }
+
+  th:nth-child(3), td:nth-child(3) {
+    width: 15% !important; /* 顧客 */
+  }
+
+  th:nth-child(4), td:nth-child(4) {
+    width: 25% !important; /* 内容 */
+  }
+
+  th:nth-child(5), td:nth-child(5) {
+    width: 12% !important; /* スタッフ */
+  }
+
+  th:nth-child(6), td:nth-child(6) {
+    width: 12% !important; /* 金額 */
+    text-align: right !important;
+  }
+
+  /* サマリーカードの調整 */
+  .grid.print\\:grid-cols-3 {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 0.5rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .grid.print\\:grid-cols-3 > div {
+    padding: 0.5rem !important;
+    font-size: 10px !important;
+  }
+
+  .grid.print\\:grid-cols-3 > div > div:first-child {
+    font-size: 9px !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .grid.print\\:grid-cols-3 > div > div:last-child {
+    font-size: 14px !important;
+  }
+
+  /* 印刷用ヘッダーの調整 */
+  .hidden.print\\:block {
+    display: block !important;
+    margin-bottom: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    font-size: 12px !important;
+  }
+
+  .hidden.print\\:block h1 {
+    font-size: 16px !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .hidden.print\\:block p {
+    font-size: 10px !important;
+    margin-top: 0.25rem !important;
   }
 
   /* ページ区切りを避ける */
@@ -107,9 +201,13 @@ body {
     page-break-inside: avoid;
   }
 
-  /* 印刷用ヘッダーを表示 */
-  .hidden.print\\:block {
-    display: block !important;
+  /* 余白の削減 */
+  .mb-6, .mb-4 {
+    margin-bottom: 0.5rem !important;
+  }
+
+  .p-6 {
+    padding: 0.5rem !important;
   }
 }
 
