@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminLinkUrl } from '@/lib/admin-utils';
+import AdminNav from '@/app/components/AdminNav';
 import { 
   UsersIcon, 
   CalendarDaysIcon, 
@@ -14,7 +15,6 @@ import {
 interface Statistics {
   totalCustomers: number;
   newCustomersMonth: number;
-  regularCustomers: number;
   averageSpending: number;
   monthlySales: number;
   todayReservations: number;
@@ -64,17 +64,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/admin/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      router.push('/admin/login');
-    } catch (error) {
-      console.error('ログアウトエラー:', error);
-    }
-  };
 
   if (loading) {
     return (
@@ -94,84 +83,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-semibold text-gray-900">
-                  {stats.tenantName}
-                </h1>
-                <span className="ml-2 text-sm text-gray-500">管理画面</span>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  href={getAdminLinkUrl('/admin/dashboard')}
-                  className="border-pink-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  ダッシュボード
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/reservations')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  予約管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/customers')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  顧客管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/menus')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  メニュー管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/products')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  商品管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/sales')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  売上管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/staff')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  従業員管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/shifts')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  シフト管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/settings')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  設定
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center">
-              <button
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium"
-              >
-                ログアウト
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <AdminNav 
+        currentPath="/admin/dashboard" 
+        tenantName={stats.tenantName}
+      />
 
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -279,7 +194,7 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Link
               href={getAdminLinkUrl('/admin/customers')}
               className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
@@ -290,20 +205,6 @@ export default function AdminDashboard() {
                 </h3>
                 <p className="text-2xl font-bold text-gray-900">
                   {stats.newCustomersMonth}人
-                </p>
-              </div>
-            </Link>
-
-            <Link
-              href={getAdminLinkUrl('/admin/customers')}
-              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
-            >
-              <div className="p-5">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">
-                  常連顧客
-                </h3>
-                <p className="text-2xl font-bold text-gray-900">
-                  {stats.regularCustomers}人
                 </p>
               </div>
             </Link>
