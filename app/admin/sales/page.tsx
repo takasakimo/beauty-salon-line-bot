@@ -47,6 +47,8 @@ export default function SalesManagement() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [salesTypeFilter, setSalesTypeFilter] = useState<'all' | 'reservation' | 'product'>('all');
+  const [sortBy, setSortBy] = useState<'date' | 'staff' | 'customer' | 'amount'>('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -302,11 +304,38 @@ export default function SalesManagement() {
       sales = allSales;
     }
 
-    if (salesTypeFilter === 'all') {
-      return sales;
-    } else {
-      return sales.filter(sale => sale.type === salesTypeFilter);
+    // タイプフィルター適用
+    if (salesTypeFilter !== 'all') {
+      sales = sales.filter(sale => sale.type === salesTypeFilter);
     }
+
+    // ソート適用
+    const sortedSales = [...sales].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        case 'staff':
+          const staffA = a.staff_name || '';
+          const staffB = b.staff_name || '';
+          comparison = staffA.localeCompare(staffB, 'ja');
+          break;
+        case 'customer':
+          const customerA = a.customer_name || '';
+          const customerB = b.customer_name || '';
+          comparison = customerA.localeCompare(customerB, 'ja');
+          break;
+        case 'amount':
+          comparison = a.price - b.price;
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return sortedSales;
   };
 
   const getTotalSales = () => {
@@ -576,17 +605,39 @@ export default function SalesManagement() {
                   </button>
                 </div>
               )}
-              <div className="flex items-center gap-4">
-                <label className="text-sm font-medium text-gray-700">表示フィルター:</label>
-                <select
-                  value={salesTypeFilter}
-                  onChange={(e) => setSalesTypeFilter(e.target.value as 'all' | 'reservation' | 'product')}
-                  className="px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                >
-                  <option value="all">総売上（予約+物販）</option>
-                  <option value="reservation">予約のみ</option>
-                  <option value="product">物販のみ</option>
-                </select>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">表示フィルター:</label>
+                  <select
+                    value={salesTypeFilter}
+                    onChange={(e) => setSalesTypeFilter(e.target.value as 'all' | 'reservation' | 'product')}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  >
+                    <option value="all">総売上（予約+物販）</option>
+                    <option value="reservation">予約のみ</option>
+                    <option value="product">物販のみ</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">並び替え:</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'date' | 'staff' | 'customer' | 'amount')}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  >
+                    <option value="date">日時</option>
+                    <option value="staff">担当者</option>
+                    <option value="customer">顧客</option>
+                    <option value="amount">金額</option>
+                  </select>
+                  <button
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    className="px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                    title={sortOrder === 'asc' ? '昇順' : '降順'}
+                  >
+                    {sortOrder === 'asc' ? '↑' : '↓'}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -651,23 +702,83 @@ export default function SalesManagement() {
                     <table className="min-w-full divide-y divide-gray-200 print:border-collapse">
                       <thead className="bg-gray-50 print:bg-gray-100">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400">
-                            日時
+                          <th 
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400 cursor-pointer hover:bg-gray-100 print:cursor-default print:hover:bg-gray-100"
+                            onClick={() => {
+                              if (sortBy === 'date') {
+                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setSortBy('date');
+                                setSortOrder('asc');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-1">
+                              日時
+                              {sortBy === 'date' && (
+                                <span className="text-pink-600">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400">
                             種類
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400">
-                            顧客
+                          <th 
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400 cursor-pointer hover:bg-gray-100 print:cursor-default print:hover:bg-gray-100"
+                            onClick={() => {
+                              if (sortBy === 'customer') {
+                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setSortBy('customer');
+                                setSortOrder('asc');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-1">
+                              顧客
+                              {sortBy === 'customer' && (
+                                <span className="text-pink-600">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400">
                             内容
                           </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400">
-                            スタッフ
+                          <th 
+                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400 cursor-pointer hover:bg-gray-100 print:cursor-default print:hover:bg-gray-100"
+                            onClick={() => {
+                              if (sortBy === 'staff') {
+                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setSortBy('staff');
+                                setSortOrder('asc');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center gap-1">
+                              スタッフ
+                              {sortBy === 'staff' && (
+                                <span className="text-pink-600">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
                           </th>
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400">
-                            金額
+                          <th 
+                            className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider print:border print:border-gray-400 cursor-pointer hover:bg-gray-100 print:cursor-default print:hover:bg-gray-100"
+                            onClick={() => {
+                              if (sortBy === 'amount') {
+                                setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                              } else {
+                                setSortBy('amount');
+                                setSortOrder('asc');
+                              }
+                            }}
+                          >
+                            <div className="flex items-center justify-end gap-1">
+                              金額
+                              {sortBy === 'amount' && (
+                                <span className="text-pink-600">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                              )}
+                            </div>
                           </th>
                         </tr>
                       </thead>
