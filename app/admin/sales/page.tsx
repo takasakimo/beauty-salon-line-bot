@@ -47,6 +47,7 @@ export default function SalesManagement() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [salesTypeFilter, setSalesTypeFilter] = useState<'all' | 'reservation' | 'product'>('all');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadSummary();
@@ -98,23 +99,37 @@ export default function SalesManagement() {
 
   const loadTodaySales = async () => {
     setLoadingSales(true);
+    setError('');
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const tenantId = urlParams.get('tenantId');
-      const url = tenantId 
-        ? `/api/admin/sales-details?type=today&tenantId=${tenantId}`
-        : `/api/admin/sales-details?type=today`;
+      
+      let url = '/api/admin/sales-details?type=today';
+      if (tenantId) {
+        url += `&tenantId=${tenantId}`;
+      }
+      url = getApiUrlWithTenantId(url);
       
       const response = await fetch(url, {
         credentials: 'include',
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setTodaySales(data);
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
       }
-    } catch (error) {
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || '今日の売上データの取得に失敗しました');
+      }
+
+      const data = await response.json();
+      setTodaySales(data);
+    } catch (error: any) {
       console.error('今日の売上取得エラー:', error);
+      setError(error.message || '売上データの取得に失敗しました');
+      setTodaySales([]);
     } finally {
       setLoadingSales(false);
     }
@@ -122,6 +137,7 @@ export default function SalesManagement() {
 
   const loadMonthSales = async (year?: number, month?: number) => {
     setLoadingSales(true);
+    setError('');
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const tenantId = urlParams.get('tenantId');
@@ -132,35 +148,62 @@ export default function SalesManagement() {
         const lastDay = new Date(year, month, 0).getDate();
         const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
         
-        const url = tenantId 
-          ? `/api/admin/sales-details?type=custom&startDate=${startDateStr}&endDate=${endDateStr}&tenantId=${tenantId}`
-          : `/api/admin/sales-details?type=custom&startDate=${startDateStr}&endDate=${endDateStr}`;
+        let url = `/api/admin/sales-details?type=custom&startDate=${startDateStr}&endDate=${endDateStr}`;
+        if (tenantId) {
+          url += `&tenantId=${tenantId}`;
+        }
+        url = getApiUrlWithTenantId(url);
         
         const response = await fetch(url, {
           credentials: 'include',
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          setAllSales(data);
+        if (response.status === 401) {
+          router.push('/admin/login');
+          return;
         }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || '過去の売上データの取得に失敗しました');
+        }
+
+        const data = await response.json();
+        setAllSales(data);
       } else {
         // 今月の売上を取得
-        const url = tenantId 
-          ? `/api/admin/sales-details?type=month&tenantId=${tenantId}`
-          : `/api/admin/sales-details?type=month`;
+        let url = '/api/admin/sales-details?type=month';
+        if (tenantId) {
+          url += `&tenantId=${tenantId}`;
+        }
+        url = getApiUrlWithTenantId(url);
         
         const response = await fetch(url, {
           credentials: 'include',
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          setMonthSales(data);
+        if (response.status === 401) {
+          router.push('/admin/login');
+          return;
         }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || '今月の売上データの取得に失敗しました');
+        }
+
+        const data = await response.json();
+        setMonthSales(data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('月間売上取得エラー:', error);
+      setError(error.message || '売上データの取得に失敗しました');
+      // エラー時は空配列を設定
+      if (year && month) {
+        setAllSales([]);
+      } else {
+        setMonthSales([]);
+      }
     } finally {
       setLoadingSales(false);
     }
@@ -168,28 +211,42 @@ export default function SalesManagement() {
 
   const loadCustomSales = async () => {
     if (!startDate || !endDate) {
-      alert('開始日と終了日を選択してください');
+      setError('開始日と終了日を選択してください');
       return;
     }
     
     setLoadingSales(true);
+    setError('');
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const tenantId = urlParams.get('tenantId');
-      const url = tenantId 
-        ? `/api/admin/sales-details?type=custom&startDate=${startDate}&endDate=${endDate}&tenantId=${tenantId}`
-        : `/api/admin/sales-details?type=custom&startDate=${startDate}&endDate=${endDate}`;
+      
+      let url = `/api/admin/sales-details?type=custom&startDate=${startDate}&endDate=${endDate}`;
+      if (tenantId) {
+        url += `&tenantId=${tenantId}`;
+      }
+      url = getApiUrlWithTenantId(url);
       
       const response = await fetch(url, {
         credentials: 'include',
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAllSales(data);
+      if (response.status === 401) {
+        router.push('/admin/login');
+        return;
       }
-    } catch (error) {
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || '期間指定の売上データの取得に失敗しました');
+      }
+
+      const data = await response.json();
+      setAllSales(data);
+    } catch (error: any) {
       console.error('期間指定売上取得エラー:', error);
+      setError(error.message || '売上データの取得に失敗しました');
+      setAllSales([]);
     } finally {
       setLoadingSales(false);
     }
@@ -311,6 +368,13 @@ export default function SalesManagement() {
               印刷
             </button>
           </div>
+
+          {/* エラーメッセージ */}
+          {error && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
 
           {/* サマリーカード */}
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 mb-8">
