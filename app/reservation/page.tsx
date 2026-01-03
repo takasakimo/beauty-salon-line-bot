@@ -46,11 +46,27 @@ function ReservationPageContent() {
   const [authenticated, setAuthenticated] = useState(false);
   const [customer, setCustomer] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [businessHours, setBusinessHours] = useState<any>({});
+  const [specialBusinessHours, setSpecialBusinessHours] = useState<Record<string, { open: string; close: string }>>({});
 
   useEffect(() => {
     checkAuth();
     loadMenus();
+    loadTenantInfo();
   }, []);
+
+  const loadTenantInfo = async () => {
+    try {
+      const response = await fetch(`/api/tenants/info?tenant=${tenantCode}`);
+      if (response.ok) {
+        const data = await response.json();
+        setBusinessHours(data.business_hours || {});
+        setSpecialBusinessHours(data.special_business_hours || {});
+      }
+    } catch (error) {
+      console.error('テナント情報取得エラー:', error);
+    }
+  };
 
   useEffect(() => {
     if (selectedMenus.length > 0) {
@@ -615,13 +631,73 @@ function ReservationPageContent() {
                         日時を選択
                       </label>
                       {(() => {
-                        // 営業時間の全30分スロットを生成（9:00-16:30、画像に合わせる）
-                        const timeSlots: string[] = [];
-                        for (let hour = 9; hour < 17; hour++) {
-                          timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-                          if (hour < 16) {
-                            timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
+                        // 営業時間に基づいて時間スロットを動的に生成
+                        // すべての曜日の営業時間を確認して、最も早い開店時間と最も遅い閉店時間を取得
+                        let minOpenHour = 9;
+                        let minOpenMinute = 0;
+                        let maxCloseHour = 19;
+                        let maxCloseMinute = 0;
+                        
+                        // 曜日名のマッピング（0=日曜日、1=月曜日、...、6=土曜日）
+                        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                        
+                        // すべての曜日の営業時間を確認
+                        for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+                          const dayName = dayNames[dayOfWeek];
+                          const dayBusinessHours = businessHours[dayName] || businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
+                          
+                          if (dayBusinessHours.open) {
+                            const [openHour, openMinute] = dayBusinessHours.open.split(':').map(Number);
+                            if (openHour < minOpenHour || (openHour === minOpenHour && openMinute < minOpenMinute)) {
+                              minOpenHour = openHour;
+                              minOpenMinute = openMinute;
+                            }
                           }
+                          
+                          if (dayBusinessHours.close) {
+                            const [closeHour, closeMinute] = dayBusinessHours.close.split(':').map(Number);
+                            if (closeHour > maxCloseHour || (closeHour === maxCloseHour && closeMinute > maxCloseMinute)) {
+                              maxCloseHour = closeHour;
+                              maxCloseMinute = closeMinute;
+                            }
+                          }
+                        }
+                        
+                        // 特別営業時間も確認
+                        Object.values(specialBusinessHours).forEach((hours: any) => {
+                          if (hours.open) {
+                            const [openHour, openMinute] = hours.open.split(':').map(Number);
+                            if (openHour < minOpenHour || (openHour === minOpenHour && openMinute < minOpenMinute)) {
+                              minOpenHour = openHour;
+                              minOpenMinute = openMinute;
+                            }
+                          }
+                          if (hours.close) {
+                            const [closeHour, closeMinute] = hours.close.split(':').map(Number);
+                            if (closeHour > maxCloseHour || (closeHour === maxCloseHour && closeMinute > maxCloseMinute)) {
+                              maxCloseHour = closeHour;
+                              maxCloseMinute = closeMinute;
+                            }
+                          }
+                        });
+                        
+                        // デフォルト値（営業時間が設定されていない場合）
+                        if (Object.keys(businessHours).length === 0 && Object.keys(specialBusinessHours).length === 0) {
+                          minOpenHour = 9;
+                          minOpenMinute = 0;
+                          maxCloseHour = 19;
+                          maxCloseMinute = 0;
+                        }
+                        
+                        // 時間スロットを生成（30分間隔）
+                        const timeSlots: string[] = [];
+                        const startTimeInMinutes = minOpenHour * 60 + minOpenMinute;
+                        const endTimeInMinutes = maxCloseHour * 60 + maxCloseMinute;
+                        
+                        for (let timeInMinutes = startTimeInMinutes; timeInMinutes <= endTimeInMinutes; timeInMinutes += 30) {
+                          const hour = Math.floor(timeInMinutes / 60);
+                          const minute = timeInMinutes % 60;
+                          timeSlots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
                         }
                         
                         const twoWeekDates = getTwoWeekDates();
