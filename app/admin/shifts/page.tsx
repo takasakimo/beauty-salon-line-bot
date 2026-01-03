@@ -71,7 +71,9 @@ export default function ShiftManagement() {
   const [timeTableShifts, setTimeTableShifts] = useState<Record<string, TimeTableShiftData>>({});
 
   useEffect(() => {
-    loadStaff();
+    loadStaff().finally(() => {
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -79,6 +81,8 @@ export default function ShiftManagement() {
       loadShifts();
     } else {
       setShiftRows({});
+      setTimeTableShifts({});
+      setLoading(false);
     }
   }, [selectedStaffId, currentDate]);
 
@@ -158,6 +162,8 @@ export default function ShiftManagement() {
 
         setShiftRows(rows);
         setTimeTableShifts({ ...timeTableShifts });
+      } else {
+        setError('シフトデータの取得に失敗しました');
       }
     } catch (error) {
       console.error('シフト取得エラー:', error);
@@ -491,28 +497,34 @@ export default function ShiftManagement() {
               <>
                 {viewMode === 'timetable' ? (
                   /* タイムテーブル表示 */
-                  <TimeTable
-                    shifts={timeTableShifts}
-                    onUpdate={(date, shift) => {
-                      setTimeTableShifts(prev => ({
-                        ...prev,
-                        [date]: shift
-                      }));
-                      // テーブル表示用データも更新
-                      setShiftRows(prev => ({
-                        ...prev,
-                        [date]: {
-                          ...prev[date],
-                          startTime: shift.startTime,
-                          endTime: shift.endTime,
-                          isOff: shift.isOff,
-                          breakTimes: shift.breakTimes
-                        }
-                      }));
-                    }}
-                    currentDate={currentDate}
-                    selectedStaffId={selectedStaffId}
-                  />
+                  selectedStaffId ? (
+                    <TimeTable
+                      shifts={timeTableShifts}
+                      onUpdate={(date, shift) => {
+                        setTimeTableShifts(prev => ({
+                          ...prev,
+                          [date]: shift
+                        }));
+                        // テーブル表示用データも更新
+                        setShiftRows(prev => ({
+                          ...prev,
+                          [date]: {
+                            ...prev[date],
+                            startTime: shift.startTime,
+                            endTime: shift.endTime,
+                            isOff: shift.isOff,
+                            breakTimes: shift.breakTimes
+                          }
+                        }));
+                      }}
+                      currentDate={currentDate}
+                      selectedStaffId={selectedStaffId}
+                    />
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-gray-600">従業員を選択してください</p>
+                    </div>
+                  )
                 ) : (
                   /* テーブル表示 */
                   <>

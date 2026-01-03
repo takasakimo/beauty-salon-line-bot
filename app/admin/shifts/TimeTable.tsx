@@ -153,11 +153,39 @@ export default function TimeTable({ shifts, onUpdate, currentDate, selectedStaff
       isOff: false
     };
 
+    // 既にシフトがある場合は上書き
+    if (shift.startTime && shift.endTime) {
+      // クリックした時間が既存のシフト時間内の場合は、シフトを削除
+      const clickMinutes = timeToMinutes(time);
+      const startMinutes = timeToMinutes(shift.startTime);
+      const endMinutes = timeToMinutes(shift.endTime);
+      
+      if (clickMinutes >= startMinutes && clickMinutes <= endMinutes) {
+        // シフトを削除
+        onUpdate(date, {
+          date,
+          startTime: null,
+          endTime: null,
+          breakTimes: [],
+          isOff: false
+        });
+        return;
+      }
+    }
+
     if (!shift.startTime) {
       shift.startTime = time;
       shift.endTime = minutesToTime(timeToMinutes(time) + 480); // デフォルト8時間
     } else if (!shift.endTime) {
-      shift.endTime = time;
+      const startMinutes = timeToMinutes(shift.startTime);
+      const clickMinutes = timeToMinutes(time);
+      if (clickMinutes > startMinutes) {
+        shift.endTime = time;
+      } else {
+        // 開始時間より前をクリックした場合は開始時間を更新
+        shift.startTime = time;
+        shift.endTime = minutesToTime(timeToMinutes(time) + 480);
+      }
     } else {
       // 既にシフトがある場合は、新しいシフトとして開始
       shift.startTime = time;
