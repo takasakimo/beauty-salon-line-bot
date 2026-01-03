@@ -385,18 +385,47 @@ export async function POST(request: NextRequest) {
         // エラーが発生しても続行
       }
       
-      // 同じスタッフの既存予約をチェック
+      // 同じスタッフの既存予約をチェック（複数メニュー対応）
       const dateStrForQuery = dateStr.replace('T', ' ');
-      const conflictCheck = await query(
-        `SELECT reservation_id, reservation_date, m.duration
-         FROM reservations r
-         LEFT JOIN menus m ON r.menu_id = m.menu_id
-         WHERE r.tenant_id = $1
-         AND r.staff_id = $2
-         AND r.status = 'confirmed'
-         AND DATE(r.reservation_date) = DATE($3)`,
-        [tenantId, staff_id, dateStrForQuery]
-      );
+      let conflictCheck;
+      try {
+        conflictCheck = await query(
+          `SELECT 
+            r.reservation_id, 
+            r.reservation_date,
+            COALESCE(
+              (SELECT SUM(m2.duration) 
+               FROM reservation_menus rm2
+               JOIN menus m2 ON rm2.menu_id = m2.menu_id
+               WHERE rm2.reservation_id = r.reservation_id),
+              m.duration,
+              60
+            ) as duration
+           FROM reservations r
+           LEFT JOIN menus m ON r.menu_id = m.menu_id
+           WHERE r.tenant_id = $1
+           AND r.staff_id = $2
+           AND r.status = 'confirmed'
+           AND DATE(r.reservation_date) = DATE($3)`,
+          [tenantId, staff_id, dateStrForQuery]
+        );
+      } catch (error: any) {
+        // reservation_menusテーブルが存在しない場合はフォールバック
+        if (error.message && error.message.includes('reservation_menus')) {
+          conflictCheck = await query(
+            `SELECT reservation_id, reservation_date, COALESCE(m.duration, 60) as duration
+             FROM reservations r
+             LEFT JOIN menus m ON r.menu_id = m.menu_id
+             WHERE r.tenant_id = $1
+             AND r.staff_id = $2
+             AND r.status = 'confirmed'
+             AND DATE(r.reservation_date) = DATE($3)`,
+            [tenantId, staff_id, dateStrForQuery]
+          );
+        } else {
+          throw error;
+        }
+      }
 
       for (const existingReservation of conflictCheck.rows) {
         // 既存予約の時間を文字列から直接抽出（JSTとして扱う）
