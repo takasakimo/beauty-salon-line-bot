@@ -196,7 +196,8 @@ export async function GET(request: NextRequest) {
       try {
         const allStaffShiftsResult = await query(
           `SELECT 
-            COALESCE(ss.end_time, NULL) as shift_end_time,
+            ss.start_time as shift_start_time,
+            ss.end_time as shift_end_time,
             COALESCE(ss.is_off, false) as is_off,
             s.working_hours
           FROM staff s
@@ -295,6 +296,8 @@ export async function GET(request: NextRequest) {
     // 営業時間が有効な場合のみスロットを生成
     if (openTimeInMinutes < closeTimeInMinutes) {
       // メニュー所要時間を考慮した最大開始時間を計算
+      // 予約開始時間 + 予約時間（duration）が勤務終了時間を超えないようにする
+      // 例: 勤務終了が20:00（1200分）、予約時間が60分の場合、最大開始時間は19:00（1140分）
       const maxStartTimeInMinutes = closeTimeInMinutes - duration;
       
       console.log('スロット生成詳細:', {
@@ -302,14 +305,22 @@ export async function GET(request: NextRequest) {
         closeTimeInMinutes,
         duration,
         maxStartTimeInMinutes,
-        maxStartTimeFormatted: `${Math.floor(maxStartTimeInMinutes / 60).toString().padStart(2, '0')}:${(maxStartTimeInMinutes % 60).toString().padStart(2, '0')}`
+        maxStartTimeFormatted: `${Math.floor(maxStartTimeInMinutes / 60).toString().padStart(2, '0')}:${(maxStartTimeInMinutes % 60).toString().padStart(2, '0')}`,
+        maxEndTimeFormatted: `${Math.floor(closeTimeInMinutes / 60).toString().padStart(2, '0')}:${(closeTimeInMinutes % 60).toString().padStart(2, '0')}`
       });
       
+      // 最大開始時間を超えないスロットのみを生成
+      // 例: 20:00終了、60分予約の場合、19:00までのスロットのみ生成（19:00開始なら20:00終了）
       for (let time = openTimeInMinutes; time <= maxStartTimeInMinutes; time += 30) {
         const hour = Math.floor(time / 60);
         const minute = time % 60;
         const slotTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-        slots.push(slotTime);
+        const slotEndTime = time + duration;
+        
+        // 念のため、スロット終了時間が勤務終了時間を超えないことを確認
+        if (slotEndTime <= closeTimeInMinutes) {
+          slots.push(slotTime);
+        }
       }
     } else {
       console.warn('営業時間が無効です:', { openTime, closeTime, openTimeInMinutes, closeTimeInMinutes });

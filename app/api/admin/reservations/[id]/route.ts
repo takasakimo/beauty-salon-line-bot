@@ -167,15 +167,66 @@ export async function PUT(
         }
       }
 
-      for (const existingReservation of conflictCheck.rows) {
-        const existingStart = new Date(existingReservation.reservation_date);
-        const existingDuration = parseFloat(existingReservation.duration) || 60;
-        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+      // 新しい予約の時間を分単位に変換（JSTとして扱う）
+      // dateStrから直接時間を抽出
+      let newReservationHour: number;
+      let newReservationMinute: number;
+      
+      const timeMatchForNew = dateStr.match(/T(\d{2}):(\d{2})/);
+      if (timeMatchForNew) {
+        newReservationHour = parseInt(timeMatchForNew[1], 10);
+        newReservationMinute = parseInt(timeMatchForNew[2], 10);
+      } else {
+        // フォールバック: Dateオブジェクトから取得（ローカル時間として）
+        newReservationHour = reservationDateTimeLocal.getHours();
+        newReservationMinute = reservationDateTimeLocal.getMinutes();
+      }
+      
+      const newReservationStartTimeInMinutes = newReservationHour * 60 + newReservationMinute;
+      const newReservationEndTimeInMinutes = newReservationStartTimeInMinutes + totalDuration;
 
-        // 時間帯が重複しているかチェック
-        if (reservationDateTimeLocal < existingEnd && reservationEndTime > existingStart) {
+      for (const existingReservation of conflictCheck.rows) {
+        // 既存予約の時間を文字列から直接抽出（JSTとして扱う）
+        const reservationDateStr = existingReservation.reservation_date;
+        const existingDuration = parseInt(existingReservation.duration) || 60;
+        
+        let existingHour: number;
+        let existingMinute: number;
+        
+        if (typeof reservationDateStr === 'string') {
+          // 文字列から時間を直接抽出
+          const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+          if (timeMatch) {
+            existingHour = parseInt(timeMatch[1], 10);
+            existingMinute = parseInt(timeMatch[2], 10);
+            
+            // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+            if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+              existingHour = (existingHour + 9) % 24;
+            }
+          } else {
+            // フォールバック: Dateオブジェクトから取得
+            const dateObj = new Date(reservationDateStr);
+            // UTC時間として取得してJSTに変換
+            existingHour = (dateObj.getUTCHours() + 9) % 24;
+            existingMinute = dateObj.getUTCMinutes();
+          }
+        } else {
+          // Dateオブジェクトの場合（PostgreSQLから返される場合）
+          const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+          // UTC時間として取得してJSTに変換
+          existingHour = (dateObj.getUTCHours() + 9) % 24;
+          existingMinute = dateObj.getUTCMinutes();
+        }
+        
+        const existingStartTimeInMinutes = existingHour * 60 + existingMinute;
+        const existingEndTimeInMinutes = existingStartTimeInMinutes + existingDuration;
+
+        // 時間帯が重複しているかチェック（分単位で比較）
+        if (newReservationStartTimeInMinutes < existingEndTimeInMinutes && newReservationEndTimeInMinutes > existingStartTimeInMinutes) {
+          const existingTimeStr = `${String(existingHour).padStart(2, '0')}:${String(existingMinute).padStart(2, '0')}`;
           return NextResponse.json(
-            { error: `この時間帯は既に予約が入っています。既存予約: ${existingStart.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` },
+            { error: `この時間帯は既に予約が入っています。既存予約: ${existingTimeStr}` },
             { status: 400 }
           );
         }
@@ -223,15 +274,66 @@ export async function PUT(
         }
       }
 
-      // JavaScriptで時間帯の重複をチェック
+      // 新しい予約の時間を分単位に変換（JSTとして扱う）
+      // dateStrから直接時間を抽出
+      let newReservationHour: number;
+      let newReservationMinute: number;
+      
+      const timeMatch = dateStr.match(/T(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        newReservationHour = parseInt(timeMatch[1], 10);
+        newReservationMinute = parseInt(timeMatch[2], 10);
+      } else {
+        // フォールバック: Dateオブジェクトから取得（ローカル時間として）
+        newReservationHour = reservationDateTimeLocal.getHours();
+        newReservationMinute = reservationDateTimeLocal.getMinutes();
+      }
+      
+      const newReservationStartTimeInMinutes = newReservationHour * 60 + newReservationMinute;
+      const newReservationEndTimeInMinutes = newReservationStartTimeInMinutes + totalDuration;
+
+      // JavaScriptで時間帯の重複をチェック（JST時刻で比較、分単位）
       let concurrentCount = 0;
       concurrentCheck.rows.forEach((row: any) => {
-        const existingStart = new Date(row.reservation_date);
-        const existingDuration = parseFloat(row.duration) || 60;
-        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+        // 既存予約の時間を文字列から直接抽出（JSTとして扱う）
+        const reservationDateStr = row.reservation_date;
+        const existingDuration = parseInt(row.duration) || 60;
         
-        // 時間帯が重複しているかチェック
-        if (reservationDateTimeLocal < existingEnd && reservationEndTime > existingStart) {
+        let existingHour: number;
+        let existingMinute: number;
+        
+        if (typeof reservationDateStr === 'string') {
+          // 文字列から時間を直接抽出
+          const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+          if (timeMatch) {
+            existingHour = parseInt(timeMatch[1], 10);
+            existingMinute = parseInt(timeMatch[2], 10);
+            
+            // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+            if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+              existingHour = (existingHour + 9) % 24;
+            }
+          } else {
+            // フォールバック: Dateオブジェクトから取得
+            const dateObj = new Date(reservationDateStr);
+            // UTC時間として取得してJSTに変換
+            existingHour = (dateObj.getUTCHours() + 9) % 24;
+            existingMinute = dateObj.getUTCMinutes();
+          }
+        } else {
+          // Dateオブジェクトの場合（PostgreSQLから返される場合）
+          const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+          // UTC時間として取得してJSTに変換
+          existingHour = (dateObj.getUTCHours() + 9) % 24;
+          existingMinute = dateObj.getUTCMinutes();
+        }
+        
+        const existingStartTimeInMinutes = existingHour * 60 + existingMinute;
+        const existingEndTimeInMinutes = existingStartTimeInMinutes + existingDuration;
+        
+        // 時間帯が重複しているかチェック（分単位で比較）
+        // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
+        if (newReservationStartTimeInMinutes < existingEndTimeInMinutes && newReservationEndTimeInMinutes > existingStartTimeInMinutes) {
           concurrentCount++;
         }
       });

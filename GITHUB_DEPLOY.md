@@ -113,3 +113,5 @@ git remote add origin https://github.com/your-username/beauty-salon-line-bot.git
 - Vercelの「Settings」→「Git」でリポジトリが正しく連携されているか確認
 - 必要に応じて、リポジトリを再インポート
 
+
+

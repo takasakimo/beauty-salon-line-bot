@@ -64,3 +64,5 @@ ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255);
 
 エラーは発生せず、スキップされます。これは正常な動作です。
 
+
+

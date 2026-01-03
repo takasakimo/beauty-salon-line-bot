@@ -85,3 +85,5 @@ git push origin main
 - 環境変数（特に`DATABASE_URL`）が正しく設定されているか確認
 - ビルドログを確認してエラーを特定
 
+
+

@@ -72,3 +72,5 @@ npm run db:migrate-customers
 - Vercelの関数タイムアウト設定を確認（最大30秒）
 - データベース接続プールの設定を確認
 
+
+

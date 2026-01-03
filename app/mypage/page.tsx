@@ -216,7 +216,13 @@ function MyPageContent() {
 
   // 予約前日までかどうかをチェック
   const canModifyReservation = (reservationDate: string): boolean => {
-    const date = new Date(reservationDate);
+    // reservation_dateをJSTとして解釈
+    let dateStr = reservationDate;
+    // タイムゾーン情報がない場合は+09:00を付与
+    if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+      dateStr = dateStr.replace(' ', 'T') + '+09:00';
+    }
+    const date = new Date(dateStr);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const reservationDateOnly = new Date(date);
@@ -490,7 +496,18 @@ function MyPageContent() {
                   const canModify = reservation.status === 'confirmed' && canModifyReservation(reservation.reservation_date);
                   return (
                     <div key={reservation.reservation_id} className="p-4 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-sm transition-all">
-                      <p className="font-semibold text-gray-900 mb-1">{new Date(reservation.reservation_date).toLocaleString('ja-JP')}</p>
+                      <p className="font-semibold text-gray-900 mb-1">{(() => {
+                        // reservation_dateをJSTとして解釈
+                        let dateStr = reservation.reservation_date;
+                        // タイムゾーン情報がない場合は+09:00を付与
+                        if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+                          dateStr = dateStr.replace(' ', 'T') + '+09:00';
+                        }
+                        const date = new Date(dateStr);
+                        return date.toLocaleString('ja-JP', {
+                          timeZone: 'Asia/Tokyo'
+                        });
+                      })()}</p>
                       <p className="text-gray-700 mb-1">
                         {reservation.menus && reservation.menus.length > 1 ? (
                           <div>

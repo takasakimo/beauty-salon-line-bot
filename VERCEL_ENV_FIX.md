@@ -54,3 +54,5 @@
 ### エラー: `SSL connection required`
 → 接続文字列に`?sslmode=require`が含まれているか確認してください。
 
+
+

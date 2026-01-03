@@ -445,14 +445,22 @@ export async function POST(request: NextRequest) {
               existingHour = (existingHour + 9) % 24;
             }
           } else {
+            // フォールバック: Dateオブジェクトから取得
             const dateObj = new Date(existingReservationDateStr);
-            existingHour = (dateObj.getUTCHours() + 9) % 24;
-            existingMinute = dateObj.getUTCMinutes();
+            // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+            // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+            // そのまま時刻を取得する
+            existingHour = dateObj.getHours();
+            existingMinute = dateObj.getMinutes();
           }
         } else {
+          // Dateオブジェクトの場合（PostgreSQLから返される場合）
           const dateObj = existingReservationDateStr instanceof Date ? existingReservationDateStr : new Date(existingReservationDateStr);
-          existingHour = (dateObj.getUTCHours() + 9) % 24;
-          existingMinute = dateObj.getUTCMinutes();
+          // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+          // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+          // そのまま時刻を取得する
+          existingHour = dateObj.getHours();
+          existingMinute = dateObj.getMinutes();
         }
         
         const existingStartTimeInMinutes = existingHour * 60 + existingMinute;
@@ -614,18 +622,27 @@ export async function POST(request: NextRequest) {
             if (timeMatch) {
               reservationHour = parseInt(timeMatch[1], 10);
               reservationMinute = parseInt(timeMatch[2], 10);
+              // UTC時間（Z付き）の場合はJSTに変換（+9時間）
               if (row.reservation_date.includes('Z') || row.reservation_date.endsWith('+00:00')) {
                 reservationHour = (reservationHour + 9) % 24;
               }
             } else {
+              // フォールバック: Dateオブジェクトから取得
               const dateObj = new Date(row.reservation_date);
-              reservationHour = (dateObj.getUTCHours() + 9) % 24;
-              reservationMinute = dateObj.getUTCMinutes();
+              // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+              // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+              // そのまま時刻を取得する
+              reservationHour = dateObj.getHours();
+              reservationMinute = dateObj.getMinutes();
             }
           } else {
+            // Dateオブジェクトの場合（PostgreSQLから返される場合）
             const dateObj = row.reservation_date instanceof Date ? row.reservation_date : new Date(row.reservation_date);
-            reservationHour = (dateObj.getUTCHours() + 9) % 24;
-            reservationMinute = dateObj.getUTCMinutes();
+            // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+            // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+            // そのまま時刻を取得する
+            reservationHour = dateObj.getHours();
+            reservationMinute = dateObj.getMinutes();
           }
           
           const existingStartTime = reservationHour * 60 + reservationMinute;
@@ -725,16 +742,20 @@ export async function POST(request: NextRequest) {
           } else {
             // フォールバック: Dateオブジェクトから取得
             const dateObj = new Date(reservationDateStr);
-            // UTC時間として取得してJSTに変換
-            existingHour = (dateObj.getUTCHours() + 9) % 24;
-            existingMinute = dateObj.getUTCMinutes();
+            // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+            // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+            // そのまま時刻を取得する
+            existingHour = dateObj.getHours();
+            existingMinute = dateObj.getMinutes();
           }
         } else {
           // Dateオブジェクトの場合（PostgreSQLから返される場合）
           const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
-          // UTC時間として取得してJSTに変換
-          existingHour = (dateObj.getUTCHours() + 9) % 24;
-          existingMinute = dateObj.getUTCMinutes();
+          // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+          // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+          // そのまま時刻を取得する
+          existingHour = dateObj.getHours();
+          existingMinute = dateObj.getMinutes();
         }
         
         const existingStartTimeInMinutes = existingHour * 60 + existingMinute;

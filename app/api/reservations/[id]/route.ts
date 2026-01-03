@@ -248,28 +248,118 @@ export async function PUT(
       }
     } else {
       // スタッフ未指定の場合：最大同時予約数をチェック（自分自身を除く）
-      const concurrentCheck = await query(
-        `SELECT 
-           r.reservation_date,
-           COALESCE(m.duration, 60) as duration
-         FROM reservations r
-         LEFT JOIN menus m ON r.menu_id = m.menu_id
-         WHERE r.tenant_id = $1
-         AND r.status = 'confirmed'
-         AND DATE(r.reservation_date) = DATE($2)
-         AND r.reservation_id != $3`,
-        [tenantId, reservation_date, reservationId]
-      );
+      // 複数メニュー対応のため、reservation_menusテーブルから合計時間を取得
+      let concurrentCheck;
+      try {
+        concurrentCheck = await query(
+          `SELECT 
+            r.reservation_date,
+            COALESCE(
+              (SELECT SUM(m2.duration) 
+               FROM reservation_menus rm2
+               JOIN menus m2 ON rm2.menu_id = m2.menu_id
+               WHERE rm2.reservation_id = r.reservation_id),
+              m.duration,
+              60
+            ) as duration
+          FROM reservations r
+          LEFT JOIN menus m ON r.menu_id = m.menu_id
+          WHERE r.tenant_id = $1
+          AND r.status = 'confirmed'
+          AND DATE(r.reservation_date) = DATE($2)
+          AND r.reservation_id != $3`,
+          [tenantId, reservation_date, reservationId]
+        );
+      } catch (error: any) {
+        // reservation_menusテーブルが存在しない場合はフォールバック
+        if (error.message && error.message.includes('reservation_menus')) {
+          concurrentCheck = await query(
+            `SELECT 
+              r.reservation_date,
+              COALESCE(m.duration, 60) as duration
+            FROM reservations r
+            LEFT JOIN menus m ON r.menu_id = m.menu_id
+            WHERE r.tenant_id = $1
+            AND r.status = 'confirmed'
+            AND DATE(r.reservation_date) = DATE($2)
+            AND r.reservation_id != $3`,
+            [tenantId, reservation_date, reservationId]
+          );
+        } else {
+          throw error;
+        }
+      }
 
-      // JavaScriptで時間帯の重複をチェック
+      // 新しい予約の時間を分単位に変換（JSTとして扱う）
+      // reservation_dateから直接時間を抽出
+      let newReservationHour: number;
+      let newReservationMinute: number;
+      
+      if (typeof reservation_date === 'string') {
+        const timePart = reservation_date.split('T')[1];
+        if (timePart) {
+          const timeMatch = timePart.match(/^(\d{2}):(\d{2})/);
+          if (timeMatch) {
+            newReservationHour = parseInt(timeMatch[1], 10);
+            newReservationMinute = parseInt(timeMatch[2], 10);
+          } else {
+            newReservationHour = reservationDateTime.getHours();
+            newReservationMinute = reservationDateTime.getMinutes();
+          }
+        } else {
+          newReservationHour = reservationDateTime.getHours();
+          newReservationMinute = reservationDateTime.getMinutes();
+        }
+      } else {
+        newReservationHour = reservationDateTime.getHours();
+        newReservationMinute = reservationDateTime.getMinutes();
+      }
+      
+      const newReservationStartTimeInMinutes = newReservationHour * 60 + newReservationMinute;
+      const newReservationEndTimeInMinutes = newReservationStartTimeInMinutes + duration;
+
+      // JavaScriptで時間帯の重複をチェック（JST時刻で比較、分単位）
       let concurrentCount = 0;
       concurrentCheck.rows.forEach((row: any) => {
-        const existingStart = new Date(row.reservation_date);
-        const existingDuration = row.duration || 60;
-        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
+        // 既存予約の時間を文字列から直接抽出（JSTとして扱う）
+        const reservationDateStr = row.reservation_date;
+        const existingDuration = parseInt(row.duration) || 60;
         
-        // 時間帯が重複しているかチェック
-        if (reservationDateTime < existingEnd && reservationEndTime > existingStart) {
+        let existingHour: number;
+        let existingMinute: number;
+        
+        if (typeof reservationDateStr === 'string') {
+          // 文字列から時間を直接抽出
+          const timeMatch = reservationDateStr.match(/(\d{2}):(\d{2}):/);
+          if (timeMatch) {
+            existingHour = parseInt(timeMatch[1], 10);
+            existingMinute = parseInt(timeMatch[2], 10);
+            
+            // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+            if (reservationDateStr.includes('Z') || reservationDateStr.endsWith('+00:00')) {
+              existingHour = (existingHour + 9) % 24;
+            }
+          } else {
+            // フォールバック: Dateオブジェクトから取得
+            const dateObj = new Date(reservationDateStr);
+            // UTC時間として取得してJSTに変換
+            existingHour = (dateObj.getUTCHours() + 9) % 24;
+            existingMinute = dateObj.getUTCMinutes();
+          }
+        } else {
+          // Dateオブジェクトの場合（PostgreSQLから返される場合）
+          const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
+          // UTC時間として取得してJSTに変換
+          existingHour = (dateObj.getUTCHours() + 9) % 24;
+          existingMinute = dateObj.getUTCMinutes();
+        }
+        
+        const existingStartTimeInMinutes = existingHour * 60 + existingMinute;
+        const existingEndTimeInMinutes = existingStartTimeInMinutes + existingDuration;
+        
+        // 時間帯が重複しているかチェック（分単位で比較）
+        // 新しい予約の開始時間が既存予約の終了時間より前、かつ新しい予約の終了時間が既存予約の開始時間より後
+        if (newReservationStartTimeInMinutes < existingEndTimeInMinutes && newReservationEndTimeInMinutes > existingStartTimeInMinutes) {
           concurrentCount++;
         }
       });

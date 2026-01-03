@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
+import AdminNav from '@/app/components/AdminNav';
 import { 
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -47,8 +48,8 @@ export default function ShiftManagement() {
   const [error, setError] = useState('');
   
   // 基本設定
-  const [basicWorkType, setBasicWorkType] = useState('8');
   const [basicStartTime, setBasicStartTime] = useState('10:00');
+  const [basicEndTime, setBasicEndTime] = useState('18:00');
   
   // シフト行データ
   const [shiftRows, setShiftRows] = useState<Record<string, ShiftRow>>({});
@@ -193,11 +194,21 @@ export default function ShiftManagement() {
       return;
     }
 
-    const workHours = parseInt(basicWorkType);
-    const start = basicStartTime;
-    const [startHour, startMinute] = start.split(':').map(Number);
-    const endHour = startHour + workHours;
-    const end = `${String(endHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}`;
+    if (!basicStartTime || !basicEndTime) {
+      setError('開始時刻と終了時刻を入力してください');
+      return;
+    }
+
+    // 開始時刻が終了時刻より後でないかチェック
+    const [startHour, startMinute] = basicStartTime.split(':').map(Number);
+    const [endHour, endMinute] = basicEndTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMinute;
+    const endMinutes = endHour * 60 + endMinute;
+
+    if (startMinutes >= endMinutes) {
+      setError('開始時刻は終了時刻より前である必要があります');
+      return;
+    }
 
     setShiftRows(prev => {
       const updated = { ...prev };
@@ -206,13 +217,15 @@ export default function ShiftManagement() {
         if (!row.isHoliday && !row.isOff) {
           updated[dateKey] = {
             ...row,
-            startTime: start,
-            endTime: end
+            startTime: basicStartTime,
+            endTime: basicEndTime
           };
         }
       });
       return updated;
     });
+    
+    setError(''); // 成功時はエラーをクリア
   };
 
   const handleSave = async () => {
@@ -275,91 +288,7 @@ export default function ShiftManagement() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-semibold text-gray-900">シフト管理</h1>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  href={getAdminLinkUrl('/admin/dashboard')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  ダッシュボード
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/reservations')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  予約管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/customers')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  顧客管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/menus')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  メニュー管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/products')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  商品管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/sales')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  売上管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/staff')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  従業員管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/shifts')}
-                  className="border-pink-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  シフト管理
-                </Link>
-                <Link
-                  href={getAdminLinkUrl('/admin/settings')}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                >
-                  設定
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center">
-              <button
-                onClick={async () => {
-                  try {
-                    await fetch('/api/admin/logout', {
-                      method: 'POST',
-                      credentials: 'include',
-                    });
-                    router.push('/admin/login');
-                  } catch (error) {
-                    console.error('ログアウトエラー:', error);
-                  }
-                }}
-                className="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium"
-              >
-                ログアウト
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <AdminNav currentPath="/admin/shifts" title="シフト管理" />
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -448,30 +377,23 @@ export default function ShiftManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        基本勤務種別（時間）
-                      </label>
-                      <select
-                        value={basicWorkType}
-                        onChange={(e) => setBasicWorkType(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-                      >
-                        <option value="4">4時間</option>
-                        <option value="5">5時間</option>
-                        <option value="6">6時間</option>
-                        <option value="7">7時間</option>
-                        <option value="8">8時間</option>
-                        <option value="9">9時間</option>
-                        <option value="10">10時間</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         基本勤務開始時間
                       </label>
                       <input
                         type="time"
                         value={basicStartTime}
                         onChange={(e) => setBasicStartTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        基本勤務終了時間
+                      </label>
+                      <input
+                        type="time"
+                        value={basicEndTime}
+                        onChange={(e) => setBasicEndTime(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                       />
                     </div>
@@ -483,7 +405,7 @@ export default function ShiftManagement() {
                     基本設定を適用
                   </button>
                   <p className="text-xs text-gray-600 mt-2">
-                    ※基本設定を適用すると、出勤の行に選択した勤務種別と開始時間が自動で設定されます（5時間未満は休憩なし、5時間以上は休憩1時間）
+                    ※基本設定を適用すると、出勤の行に選択した開始時刻と終了時刻が自動で設定されます
                   </p>
                 </div>
               )}
