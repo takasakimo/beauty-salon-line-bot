@@ -5,13 +5,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import AdminNav from '@/app/components/AdminNav';
+import TimeTable from './TimeTable';
 import { 
   ChevronLeftIcon,
   ChevronRightIcon,
   CalendarDaysIcon,
   PlusIcon,
   XMarkIcon,
-  TrashIcon
+  TrashIcon,
+  TableCellsIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 
 interface Staff {
@@ -36,6 +39,15 @@ interface ShiftRow {
   startTime: string | null;
   endTime: string | null;
   isOff: boolean;
+  breakTimes?: Array<{ start: string; end: string }>;
+}
+
+interface TimeTableShiftData {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  breakTimes: Array<{ start: string; end: string }>;
+  isOff: boolean;
 }
 
 export default function ShiftManagement() {
@@ -46,13 +58,17 @@ export default function ShiftManagement() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'timetable'>('table');
   
   // 基本設定
   const [basicStartTime, setBasicStartTime] = useState('10:00');
   const [basicEndTime, setBasicEndTime] = useState('18:00');
   
-  // シフト行データ
+  // シフト行データ（テーブル表示用）
   const [shiftRows, setShiftRows] = useState<Record<string, ShiftRow>>({});
+  
+  // タイムテーブル用データ
+  const [timeTableShifts, setTimeTableShifts] = useState<Record<string, TimeTableShiftData>>({});
 
   useEffect(() => {
     loadStaff();
@@ -114,17 +130,34 @@ export default function ShiftManagement() {
           // 既存のシフトを検索
           const existingShift = data.find((s: Shift) => s.shift_date.split('T')[0] === date);
           
+          const breakTimes = existingShift?.break_times 
+            ? (typeof existingShift.break_times === 'string' 
+                ? JSON.parse(existingShift.break_times) 
+                : existingShift.break_times)
+            : [];
+          
           rows[dateKey] = {
             date: dateKey,
             dayOfWeek,
             isHoliday: existingShift?.is_off || false,
             startTime: existingShift?.start_time ? existingShift.start_time.substring(0, 5) : null,
             endTime: existingShift?.end_time ? existingShift.end_time.substring(0, 5) : null,
+            isOff: existingShift?.is_off || false,
+            breakTimes: breakTimes
+          };
+          
+          // タイムテーブル用データも更新
+          timeTableShifts[dateKey] = {
+            date: dateKey,
+            startTime: existingShift?.start_time ? existingShift.start_time.substring(0, 5) : null,
+            endTime: existingShift?.end_time ? existingShift.end_time.substring(0, 5) : null,
+            breakTimes: breakTimes,
             isOff: existingShift?.is_off || false
           };
         });
 
         setShiftRows(rows);
+        setTimeTableShifts({ ...timeTableShifts });
       }
     } catch (error) {
       console.error('シフト取得エラー:', error);
@@ -238,15 +271,21 @@ export default function ShiftManagement() {
       setSaving(true);
       setError('');
 
-      const shiftsToSave: Shift[] = [];
-      Object.values(shiftRows).forEach(row => {
-        if (row.isOff || row.isHoliday) {
+      const shiftsToSave: any[] = [];
+      const dataToUse = viewMode === 'timetable' ? timeTableShifts : shiftRows;
+      
+      Object.values(dataToUse).forEach((row: any) => {
+        const isOff = row.isOff || row.isHoliday;
+        const breakTimes = row.breakTimes || [];
+        
+        if (isOff) {
           shiftsToSave.push({
             staff_id: parseInt(selectedStaffId),
             shift_date: row.date,
             start_time: null,
             end_time: null,
-            is_off: true
+            is_off: true,
+            break_times: []
           });
         } else if (row.startTime && row.endTime) {
           shiftsToSave.push({
@@ -254,7 +293,8 @@ export default function ShiftManagement() {
             shift_date: row.date,
             start_time: row.startTime,
             end_time: row.endTime,
-            is_off: false
+            is_off: false,
+            break_times: breakTimes
           });
         }
       });
@@ -326,6 +366,38 @@ export default function ShiftManagement() {
                 {error}
               </div>
             )}
+
+            {/* タブ切り替え */}
+            <div className="mb-6 border-b border-gray-200">
+              <nav className="flex -mb-px">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                    viewMode === 'table'
+                      ? 'border-pink-500 text-pink-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <TableCellsIcon className="h-5 w-5" />
+                    テーブル表示
+                  </div>
+                </button>
+                <button
+                  onClick={() => setViewMode('timetable')}
+                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                    viewMode === 'timetable'
+                      ? 'border-pink-500 text-pink-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <ClockIcon className="h-5 w-5" />
+                    タイムテーブル表示
+                  </div>
+                </button>
+              </nav>
+            </div>
 
             {/* 従業員選択と基本設定 */}
             <div className="mb-6 space-y-4">
@@ -417,7 +489,34 @@ export default function ShiftManagement() {
               </div>
             ) : selectedStaffId ? (
               <>
-                {/* シフト表 */}
+                {viewMode === 'timetable' ? (
+                  /* タイムテーブル表示 */
+                  <TimeTable
+                    shifts={timeTableShifts}
+                    onUpdate={(date, shift) => {
+                      setTimeTableShifts(prev => ({
+                        ...prev,
+                        [date]: shift
+                      }));
+                      // テーブル表示用データも更新
+                      setShiftRows(prev => ({
+                        ...prev,
+                        [date]: {
+                          ...prev[date],
+                          startTime: shift.startTime,
+                          endTime: shift.endTime,
+                          isOff: shift.isOff,
+                          breakTimes: shift.breakTimes
+                        }
+                      }));
+                    }}
+                    currentDate={currentDate}
+                    selectedStaffId={selectedStaffId}
+                  />
+                ) : (
+                  /* テーブル表示 */
+                  <>
+                    {/* シフト表 */}
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300 text-sm">
                     <thead>
@@ -520,15 +619,30 @@ export default function ShiftManagement() {
                   </table>
                 </div>
 
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="px-6 py-2 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {saving ? '保存中...' : '変更を保存'}
-                  </button>
-                </div>
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="px-6 py-2 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {saving ? '保存中...' : '変更を保存'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                
+                {/* 保存ボタン（タイムテーブル表示時も表示） */}
+                {viewMode === 'timetable' && (
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="px-6 py-2 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {saving ? '保存中...' : '変更を保存'}
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-center py-8">

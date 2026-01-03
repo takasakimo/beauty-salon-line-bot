@@ -71,6 +71,25 @@ export async function GET(request: NextRequest) {
       // テーブル作成に失敗しても続行（既に存在する可能性がある）
     }
 
+    // break_timesカラムが存在するかチェックし、存在しない場合は追加
+    try {
+      const columnCheck = await query(
+        `SELECT column_name 
+         FROM information_schema.columns 
+         WHERE table_name = 'staff_shifts' AND column_name = 'break_times'`
+      );
+      if (columnCheck.rows.length === 0) {
+        await query(`
+          ALTER TABLE staff_shifts 
+          ADD COLUMN break_times JSONB DEFAULT '[]'::jsonb
+        `);
+        console.log('✅ break_timesカラムを追加しました');
+      }
+    } catch (alterError: any) {
+      console.error('break_timesカラム追加エラー:', alterError);
+      // エラーでも続行
+    }
+
     let queryText = `
       SELECT 
         ss.shift_id,
@@ -79,6 +98,7 @@ export async function GET(request: NextRequest) {
         ss.start_time,
         ss.end_time,
         ss.is_off,
+        COALESCE(ss.break_times, '[]'::jsonb) as break_times,
         s.name as staff_name
       FROM staff_shifts ss
       JOIN staff s ON ss.staff_id = s.staff_id
@@ -220,15 +240,38 @@ export async function POST(request: NextRequest) {
           continue; // スタッフが見つからない場合はスキップ
         }
 
+        // break_timesカラムが存在するかチェックし、存在しない場合は追加
+        try {
+          const columnCheck = await client.query(
+            `SELECT column_name 
+             FROM information_schema.columns 
+             WHERE table_name = 'staff_shifts' AND column_name = 'break_times'`
+          );
+          if (columnCheck.rows.length === 0) {
+            await client.query(`
+              ALTER TABLE staff_shifts 
+              ADD COLUMN break_times JSONB DEFAULT '[]'::jsonb
+            `);
+            console.log('✅ break_timesカラムを追加しました');
+          }
+        } catch (alterError: any) {
+          console.error('break_timesカラム追加エラー:', alterError);
+          // エラーでも続行
+        }
+
+        const break_times = (shift as any).break_times || [];
+        const breakTimesJson = JSON.stringify(break_times);
+
         // シフトを登録または更新
         await client.query(
-          `INSERT INTO staff_shifts (staff_id, tenant_id, shift_date, start_time, end_time, is_off, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+          `INSERT INTO staff_shifts (staff_id, tenant_id, shift_date, start_time, end_time, is_off, break_times, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, CURRENT_TIMESTAMP)
            ON CONFLICT (staff_id, tenant_id, shift_date)
            DO UPDATE SET
              start_time = EXCLUDED.start_time,
              end_time = EXCLUDED.end_time,
              is_off = EXCLUDED.is_off,
+             break_times = EXCLUDED.break_times,
              updated_at = CURRENT_TIMESTAMP`,
           [
             staff_id,
@@ -236,7 +279,8 @@ export async function POST(request: NextRequest) {
             shift_date,
             is_off ? null : (start_time || null),
             is_off ? null : (end_time || null),
-            is_off || false
+            is_off || false,
+            breakTimesJson
           ]
         );
       }
