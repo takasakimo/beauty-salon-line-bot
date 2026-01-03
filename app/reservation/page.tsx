@@ -32,6 +32,11 @@ function ReservationPageContent() {
   const [availableSlotsByDate, setAvailableSlotsByDate] = useState<Record<string, string[]>>({});
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [weekStartDate, setWeekStartDate] = useState<Date>(new Date());
+  const [closedDaysInfo, setClosedDaysInfo] = useState<{
+    closedDays: number[];
+    temporaryClosedDays: string[];
+  }>({ closedDays: [], temporaryClosedDays: [] });
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
@@ -85,7 +90,41 @@ function ReservationPageContent() {
     if (selectedMenus.length > 0 && selectedStaff !== undefined) {
       loadAvailableSlotsForAllDates();
     }
-  }, [selectedMenus, selectedStaff]);
+  }, [selectedMenus, selectedStaff, weekStartDate]);
+  
+  // 空きスロットが更新されたら休業日情報も更新
+  useEffect(() => {
+    if (Object.keys(availableSlotsByDate).length > 0) {
+      const dates = getTwoWeekDates();
+      const closedDays: number[] = [];
+      const temporaryClosedDays: string[] = [];
+      
+      // 各日付をチェック
+      for (const date of dates) {
+        const dateStr = date.toISOString().split('T')[0];
+        const availableSlots = availableSlotsByDate[dateStr] || [];
+        
+        // 空きスロットが0件の場合、休業日として扱う
+        if (availableSlots.length === 0) {
+          const dayOfWeek = date.getDay();
+          // 曜日ベースの定休日かどうかをチェック
+          // 同じ曜日が複数回出現する場合は定休日として扱う
+          const sameDayOfWeekCount = dates.filter(d => d.getDay() === dayOfWeek && (availableSlotsByDate[d.toISOString().split('T')[0]] || []).length === 0).length;
+          if (sameDayOfWeekCount >= 2) {
+            // 同じ曜日が2回以上休業の場合は定休日として扱う
+            if (!closedDays.includes(dayOfWeek)) {
+              closedDays.push(dayOfWeek);
+            }
+          } else {
+            // 臨時休業日として扱う
+            temporaryClosedDays.push(dateStr);
+          }
+        }
+      }
+      
+      setClosedDaysInfo({ closedDays, temporaryClosedDays });
+    }
+  }, [availableSlotsByDate, weekStartDate]);
 
   const loadMenus = async () => {
     try {
@@ -169,12 +208,15 @@ function ReservationPageContent() {
       // staff_idパラメータを追加（スタッフが選択されている場合）
       const staffParam = selectedStaff ? `&staff_id=${selectedStaff.staff_id}` : '';
       
-      // すべての日付の空き時間を取得
+      // すべての日付の空き時間を取得（1ヶ月分 + 2週間カレンダー用）
       const dates = getDateOptions();
+      const twoWeekDates = getTwoWeekDates().map(d => d.toISOString().split('T')[0]);
+      // 重複を除去して結合
+      const allDates = Array.from(new Set([...dates, ...twoWeekDates]));
       const slotsByDate: Record<string, string[]> = {};
       
       await Promise.all(
-        dates.map(async (date) => {
+        allDates.map(async (date) => {
           try {
       const response = await fetch(
               `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`
@@ -279,6 +321,47 @@ function ReservationPageContent() {
       dates.push(date.toISOString().split('T')[0]);
     }
     return dates;
+  };
+
+  // 2週間分の日付を生成（週の開始日から14日間）
+  const getTwoWeekDates = () => {
+    const dates: Date[] = [];
+    const startDate = new Date(weekStartDate);
+    for (let i = 0; i < 14; i++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + i);
+      dates.push(date);
+    }
+    return dates;
+  };
+
+  // 日付をフォーマット（1/3(土)形式）
+  const formatDateForCalendar = (date: Date) => {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+    const dayName = dayNames[date.getDay()];
+    return { month, day, dayName, dateStr: date.toISOString().split('T')[0] };
+  };
+
+  // 前の一週間へ
+  const handlePreviousWeek = () => {
+    const newDate = new Date(weekStartDate);
+    newDate.setDate(weekStartDate.getDate() - 7);
+    setWeekStartDate(newDate);
+  };
+
+  // 次の一週間へ
+  const handleNextWeek = () => {
+    const newDate = new Date(weekStartDate);
+    newDate.setDate(weekStartDate.getDate() + 7);
+    setWeekStartDate(newDate);
+  };
+
+  // 現在の週の年月を取得
+  const getCurrentMonthYear = () => {
+    const firstDate = getTwoWeekDates()[0];
+    return `${firstDate.getFullYear()}年${firstDate.getMonth() + 1}月`;
   };
 
   if (!authenticated) {
@@ -575,91 +658,166 @@ function ReservationPageContent() {
                     </div>
                   </div>
                   
-                  {/* 時間選択 - タイムライン形式 */}
-                  {selectedDate && (
+                  {/* 時間選択 - 2週間カレンダー形式（画像と同じ表記） */}
+                  {selectedMenus.length > 0 && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-3">
-                        時間を選択
+                        日時を選択
                       </label>
                       {(() => {
-                        // 営業時間の全30分スロットを生成（9:00-20:00）
+                        // 営業時間の全30分スロットを生成（9:00-16:30、画像に合わせる）
                         const timeSlots: string[] = [];
-                        for (let hour = 9; hour < 20; hour++) {
+                        for (let hour = 9; hour < 17; hour++) {
                           timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-                          timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
+                          if (hour < 16) {
+                            timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
+                          }
                         }
                         
-                        const availableSlots = availableSlotsByDate[selectedDate] || [];
+                        const twoWeekDates = getTwoWeekDates();
                         
                         return (
                           <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                            <div className="flex">
-                              {/* 時間列 */}
-                              <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
-                                <div className="h-12 border-b border-gray-200 flex items-center justify-center">
-                                  <span className="text-xs font-semibold text-gray-700">時間</span>
-                                </div>
-                                {timeSlots.map((time) => (
-                                  <div
-                                    key={time}
-                                    className="h-10 border-b border-gray-100 text-xs text-gray-600 px-2 flex items-center"
-                                    style={{ height: '40px' }}
-                                  >
-                                    {time}
-                                  </div>
-                                ))}
-                              </div>
-                              
-                              {/* 選択可能/不可能の表示列 */}
-                              <div className="flex-1 relative">
-                                <div className="h-12 border-b border-gray-200 bg-gray-50 flex items-center justify-center">
-                                  <span className="text-xs font-semibold text-gray-700">予約可能</span>
-                                </div>
-                                <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
-                                  {timeSlots.map((time) => {
-                                    const isAvailable = availableSlots.includes(time);
-                                    const isSelected = selectedTime === time;
-                                    
-                                    return (
+                            {/* ヘッダー */}
+                            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2">
+                              <button
+                                onClick={handlePreviousWeek}
+                                className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1"
+                              >
+                                &lt;前の一週間
+                              </button>
+                              <h3 className="text-sm font-semibold text-gray-900">
+                                {getCurrentMonthYear()}
+                              </h3>
+                              <button
+                                onClick={handleNextWeek}
+                                className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1"
+                              >
+                                次の一週間&gt;
+                              </button>
+                            </div>
+                            
+                            <div className="overflow-x-auto">
+                              <div className="inline-block min-w-full">
+                                <div className="flex border-b border-gray-200">
+                                  {/* 左側の時間列 */}
+                                  <div className="w-16 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+                                    <div className="h-12 border-b border-gray-200"></div>
+                                    {timeSlots.map((time) => (
                                       <div
                                         key={time}
-                                        className={`h-10 border-b border-gray-100 flex items-center justify-center cursor-pointer transition-colors ${
-                                          isSelected
-                                            ? 'bg-pink-100'
-                                            : isAvailable
-                                            ? 'hover:bg-pink-50'
-                                            : 'bg-gray-50 opacity-50 cursor-not-allowed'
-                                        }`}
-                                        style={{ height: '40px' }}
-                                        onClick={() => {
-                                          if (isAvailable) {
-                                            setSelectedTime(time);
-                                          }
-                                        }}
+                                        className="h-8 border-b border-gray-100 text-xs text-gray-600 px-1 flex items-center justify-center"
+                                        style={{ height: '32px' }}
                                       >
-                                        {isAvailable ? (
-                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                            isSelected
-                                              ? 'bg-pink-500 text-white'
-                                              : 'bg-green-500 text-white'
-                                          }`}>
-                                            <span className="text-lg">○</span>
-                                          </div>
-                                        ) : (
-                                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-100 text-red-600">
-                                            <span className="text-lg font-bold">×</span>
-                                          </div>
-                                        )}
+                                        {time}
+                                      </div>
+                                    ))}
+                                  </div>
+                                  
+                                  {/* 日付列 */}
+                                  {twoWeekDates.map((date) => {
+                                    const { month, day, dayName, dateStr } = formatDateForCalendar(date);
+                                    const availableSlots = availableSlotsByDate[dateStr] || [];
+                                    const dayOfWeek = date.getDay();
+                                    const isClosed = availableSlots.length === 0 && (closedDaysInfo.closedDays.includes(dayOfWeek) || closedDaysInfo.temporaryClosedDays.includes(dateStr));
+                                    
+                                    // 日付の背景色を決定（土曜日=薄い青、日曜日/祝日=薄い赤）
+                                    const isSaturday = dayOfWeek === 6;
+                                    const isSunday = dayOfWeek === 0;
+                                    const isHoliday = dayName === '祝';
+                                    const dateBgColor = isSaturday 
+                                      ? 'bg-blue-50' 
+                                      : (isSunday || isHoliday) 
+                                        ? 'bg-red-50' 
+                                        : 'bg-gray-50';
+                                    const dateTextColor = isSaturday 
+                                      ? 'text-blue-600' 
+                                      : (isSunday || isHoliday) 
+                                        ? 'text-red-600' 
+                                        : 'text-gray-900';
+                                    
+                                    return (
+                                      <div key={dateStr} className="flex-1 min-w-[60px] border-r border-gray-200 relative">
+                                        {/* 日付ヘッダー */}
+                                        <div className={`h-12 border-b border-gray-200 ${dateBgColor} px-1 py-1 flex flex-col items-center justify-center`}>
+                                          <div className={`text-xs font-semibold ${dateTextColor}`}>{day}</div>
+                                          <div className={`text-xs ${dateTextColor}`}>({dayName})</div>
+                                        </div>
+                                        
+                                        {/* 時間スロット */}
+                                        <div className="relative" style={{ height: `${timeSlots.length * 32}px` }}>
+                                          {timeSlots.map((time) => {
+                                            const isAvailable = availableSlots.includes(time);
+                                            const isSelected = selectedDate === dateStr && selectedTime === time;
+                                            
+                                            return (
+                                              <div
+                                                key={time}
+                                                className={`h-8 border-b border-gray-100 flex items-center justify-center cursor-pointer transition-colors ${
+                                                  isSelected
+                                                    ? 'bg-pink-100'
+                                                    : isAvailable
+                                                    ? 'hover:bg-pink-50'
+                                                    : 'bg-gray-50 opacity-50 cursor-not-allowed'
+                                                }`}
+                                                style={{ height: '32px' }}
+                                                onClick={() => {
+                                                  if (isAvailable) {
+                                                    setSelectedDate(dateStr);
+                                                    setSelectedTime(time);
+                                                  }
+                                                }}
+                                              >
+                                                {isAvailable ? (
+                                                  <span className={`text-lg ${isSelected ? 'text-pink-600 font-bold' : 'text-red-600'}`}>
+                                                    ○
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-lg text-black font-bold">×</span>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                          
+                                          {/* 休業日の表示（縦書き） */}
+                                          {isClosed && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-80 pointer-events-none">
+                                              <span 
+                                                className="text-xs text-gray-600 font-semibold"
+                                                style={{ 
+                                                  writingMode: 'vertical-rl',
+                                                  textOrientation: 'upright'
+                                                }}
+                                              >
+                                                休業日
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     );
                                   })}
+                                  
+                                  {/* 右側の時間列 */}
+                                  <div className="w-16 flex-shrink-0 border-l border-gray-200 bg-gray-50">
+                                    <div className="h-12 border-b border-gray-200"></div>
+                                    {timeSlots.map((time) => (
+                                      <div
+                                        key={time}
+                                        className="h-8 border-b border-gray-100 text-xs text-gray-600 px-1 flex items-center justify-center"
+                                        style={{ height: '32px' }}
+                                      >
+                                        {time}
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         );
                       })()}
-                      {selectedTime && (
+                      {selectedTime && selectedDate && (
                         <div className="mt-4 p-3 bg-pink-50 border border-pink-200 rounded-lg">
                           <p className="text-sm text-gray-700">
                             選択された時間: <span className="font-semibold text-pink-600">{selectedDate} {selectedTime}</span>
@@ -688,7 +846,7 @@ function ReservationPageContent() {
                 戻る
               </button>
                 <div className="text-xs text-gray-600">
-                  <span className="text-red-600">◎</span> 予約可能 / <span className="text-gray-400">×</span> 予約不可
+                  <span className="text-red-600">○</span> 予約可能 / <span className="text-black">×</span> 予約不可
             </div>
               </div>
             </div>
