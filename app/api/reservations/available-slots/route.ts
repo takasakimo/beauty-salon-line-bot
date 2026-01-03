@@ -516,16 +516,20 @@ export async function GET(request: NextRequest) {
             } else {
               // フォールバック: Dateオブジェクトから取得
               const dateObj = new Date(reservationDateStr);
-              // UTC時間として取得してJSTに変換
-              reservationHour = (dateObj.getUTCHours() + 9) % 24;
-              reservationMinute = dateObj.getUTCMinutes();
+              // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+              // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+              // そのまま時刻を取得する
+              reservationHour = dateObj.getHours();
+              reservationMinute = dateObj.getMinutes();
             }
           } else {
             // Dateオブジェクトの場合（PostgreSQLから返される場合）
             const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
-            // UTC時間として取得してJSTに変換
-            reservationHour = (dateObj.getUTCHours() + 9) % 24;
-            reservationMinute = dateObj.getUTCMinutes();
+            // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+            // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+            // そのまま時刻を取得する
+            reservationHour = dateObj.getHours();
+            reservationMinute = dateObj.getMinutes();
           }
           
           const reservationStartTime = reservationHour * 60 + reservationMinute;
@@ -580,16 +584,20 @@ export async function GET(request: NextRequest) {
             } else {
               // フォールバック: Dateオブジェクトから取得
               const dateObj = new Date(reservationDateStr);
-              // UTC時間として取得してJSTに変換
-              reservationHour = (dateObj.getUTCHours() + 9) % 24;
-              reservationMinute = dateObj.getUTCMinutes();
+              // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+              // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+              // そのまま時刻を取得する
+              reservationHour = dateObj.getHours();
+              reservationMinute = dateObj.getMinutes();
             }
           } else {
             // Dateオブジェクトの場合（PostgreSQLから返される場合）
             const dateObj = reservationDateStr instanceof Date ? reservationDateStr : new Date(reservationDateStr);
-            // UTC時間として取得してJSTに変換
-            reservationHour = (dateObj.getUTCHours() + 9) % 24;
-            reservationMinute = dateObj.getUTCMinutes();
+            // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+            // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+            // そのまま時刻を取得する
+            reservationHour = dateObj.getHours();
+            reservationMinute = dateObj.getMinutes();
           }
           
           const reservationStartTime = reservationHour * 60 + reservationMinute;
