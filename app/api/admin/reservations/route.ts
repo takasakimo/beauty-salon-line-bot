@@ -277,15 +277,31 @@ export async function POST(request: NextRequest) {
     // 予約日時を計算（合計時間を使用）
     // reservation_dateはJST（+09:00）形式で送られてくるので、タイムゾーン情報を除去してJST時刻として保存
     // 例：2025-12-29T10:00:00+09:00 → 2025-12-29 10:00:00 (JST時刻として保存)
-    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
-    const reservationDateTimeLocal = new Date(dateStr);
-    const reservationEndTime = new Date(reservationDateTimeLocal.getTime() + totalDuration * 60000);
+    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, '').replace(/Z$/, ''); // +09:00やZを除去
+    // 文字列から直接時間を抽出（JSTとして扱う）
+    const timeMatch = dateStr.match(/T(\d{2}):(\d{2})/);
+    if (!timeMatch) {
+      return NextResponse.json(
+        { error: '予約日時の形式が正しくありません' },
+        { status: 400 }
+      );
+    }
+    const reservationStartHour = parseInt(timeMatch[1], 10);
+    const reservationStartMinute = parseInt(timeMatch[2], 10);
+    
+    // 予約終了時間を計算（分単位）
+    const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
+    const reservationEndTimeInMinutes = reservationStartTimeInMinutes + totalDuration;
+    const reservationEndHour = Math.floor(reservationEndTimeInMinutes / 60) % 24;
+    const reservationEndMinute = reservationEndTimeInMinutes % 60;
+    
+    // 日付文字列から日付部分を取得（YYYY-MM-DD形式）
+    const reservationDateStr = dateStr.split('T')[0];
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
-    const dayOfWeek = reservationDateTimeLocal.getDay();
-    
-    // 予約日付を取得（YYYY-MM-DD形式）
-    const reservationDateStr = dateStr.split('T')[0];
+    // 文字列から直接日付を解析（JSTとして扱う）
+    const [year, month, day] = reservationDateStr.split('-').map(Number);
+    const dayOfWeek = new Date(year, month - 1, day).getDay();
     
     // 臨時休業日のチェック
     if (Array.isArray(temporaryClosedDays) && temporaryClosedDays.includes(reservationDateStr)) {
@@ -312,11 +328,6 @@ export async function POST(request: NextRequest) {
     const [closeHour, closeMinute] = closeTime.split(':').map(Number);
     const closeTimeInMinutes = closeHour * 60 + closeMinute;
     
-    // 予約終了時間を分単位に変換（ローカルタイムで計算）
-    const reservationEndHour = reservationEndTime.getHours();
-    const reservationEndMinute = reservationEndTime.getMinutes();
-    const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
-    
     // 閉店時間を超える場合はエラー
     if (reservationEndTimeInMinutes > closeTimeInMinutes) {
       return NextResponse.json(
@@ -324,25 +335,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // 予約開始時間を取得（分単位）
-    // dateStrから直接時間を抽出（JSTとして扱う）
-    let reservationStartHour: number;
-    let reservationStartMinute: number;
-    
-    // 文字列から直接時間を抽出（YYYY-MM-DDTHH:mm:ss形式）
-    const timeMatch = dateStr.match(/T(\d{2}):(\d{2})/);
-    if (timeMatch) {
-      reservationStartHour = parseInt(timeMatch[1], 10);
-      reservationStartMinute = parseInt(timeMatch[2], 10);
-    } else {
-      // フォールバック: Dateオブジェクトから取得（ローカル時間として）
-      reservationStartHour = reservationDateTimeLocal.getHours();
-      reservationStartMinute = reservationDateTimeLocal.getMinutes();
-    }
-    
-    const reservationStartTimeInMinutes = reservationStartHour * 60 + reservationStartMinute;
-    // reservationEndTimeInMinutesは既に289行目で定義済み
     
     // スタッフが指定されている場合、シフトを確認してから時間の重複チェック
     if (staff_id) {
@@ -407,14 +399,41 @@ export async function POST(request: NextRequest) {
       );
 
       for (const existingReservation of conflictCheck.rows) {
-        const existingStart = new Date(existingReservation.reservation_date);
+        // 既存予約の時間を文字列から直接抽出（JSTとして扱う）
+        const existingReservationDateStr = existingReservation.reservation_date;
         const existingDuration = existingReservation.duration || 60;
-        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000);
-
+        
+        let existingHour: number;
+        let existingMinute: number;
+        
+        if (typeof existingReservationDateStr === 'string') {
+          const timeMatch = existingReservationDateStr.match(/(\d{2}):(\d{2}):/);
+          if (timeMatch) {
+            existingHour = parseInt(timeMatch[1], 10);
+            existingMinute = parseInt(timeMatch[2], 10);
+            // UTC時間（Z付き）の場合はJSTに変換（+9時間）
+            if (existingReservationDateStr.includes('Z') || existingReservationDateStr.endsWith('+00:00')) {
+              existingHour = (existingHour + 9) % 24;
+            }
+          } else {
+            const dateObj = new Date(existingReservationDateStr);
+            existingHour = (dateObj.getUTCHours() + 9) % 24;
+            existingMinute = dateObj.getUTCMinutes();
+          }
+        } else {
+          const dateObj = existingReservationDateStr instanceof Date ? existingReservationDateStr : new Date(existingReservationDateStr);
+          existingHour = (dateObj.getUTCHours() + 9) % 24;
+          existingMinute = dateObj.getUTCMinutes();
+        }
+        
+        const existingStartTimeInMinutes = existingHour * 60 + existingMinute;
+        const existingEndTimeInMinutes = existingStartTimeInMinutes + existingDuration;
+        
         // 時間帯が重複しているかチェック
-        if (reservationDateTimeLocal < existingEnd && reservationEndTime > existingStart) {
+        if (reservationStartTimeInMinutes < existingEndTimeInMinutes && reservationEndTimeInMinutes > existingStartTimeInMinutes) {
+          const existingTimeStr = `${existingHour.toString().padStart(2, '0')}:${existingMinute.toString().padStart(2, '0')}`;
           return NextResponse.json(
-            { error: `この時間帯は既に予約が入っています。既存予約: ${existingStart.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` },
+            { error: `この時間帯は既に予約が入っています。既存予約: ${existingTimeStr}` },
             { status: 400 }
           );
         }
