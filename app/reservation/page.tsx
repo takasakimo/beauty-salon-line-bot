@@ -725,9 +725,9 @@ function ReservationPageContent() {
                             
                             <div className="overflow-x-auto">
                               <div className="inline-block min-w-full">
-                                <div className="flex border-b border-gray-200">
-                                  {/* 左側の時間列 */}
-                                  <div className="w-16 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+                                <div className="flex border-b border-gray-200 relative">
+                                  {/* 左側の時間列（固定） */}
+                                  <div className="w-16 flex-shrink-0 border-r border-gray-200 bg-gray-50 sticky left-0 z-10">
                                     <div className="h-12 border-b border-gray-200"></div>
                                     {timeSlots.map((time) => (
                                       <div
@@ -824,8 +824,8 @@ function ReservationPageContent() {
                                     );
                                   })}
                                   
-                                  {/* 右側の時間列 */}
-                                  <div className="w-16 flex-shrink-0 border-l border-gray-200 bg-gray-50">
+                                  {/* 右側の時間列（固定） */}
+                                  <div className="w-16 flex-shrink-0 border-l border-gray-200 bg-gray-50 sticky right-0 z-10">
                                     <div className="h-12 border-b border-gray-200"></div>
                                     {timeSlots.map((time) => (
                                       <div
