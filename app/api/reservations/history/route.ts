@@ -93,12 +93,45 @@ export async function GET(request: NextRequest) {
 
     // メニュー配列をパース
     const reservations = result.rows.map((row: any) => {
-      // reservation_dateに+09:00を付与してJSTとして明示的に返す
+      // reservation_dateをJSTとして処理
+      // PostgreSQLから返されるDateオブジェクトは、データベースに保存されているJST時刻をUTC時刻として解釈して返す
+      // そのため、getUTCHours()などを使うと9時間ずれてしまう
+      // 正しくは、文字列として取得するか、Dateオブジェクトから直接時刻を取得する
       let reservationDate = row.reservation_date;
-      if (reservationDate && typeof reservationDate === 'string' && !reservationDate.includes('+') && !reservationDate.includes('Z')) {
-        // タイムゾーン情報がない場合は+09:00を付与
-        reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+      
+      if (reservationDate) {
+        if (reservationDate instanceof Date) {
+          // Dateオブジェクトの場合、文字列に変換してから処理
+          // PostgreSQLから返されるDateオブジェクトは、データベースの時刻をそのまま返す
+          // データベースにはJST時刻（タイムゾーン情報なし）が保存されているので、
+          // そのまま時刻を取得する
+          const year = reservationDate.getFullYear();
+          const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
+          const day = String(reservationDate.getDate()).padStart(2, '0');
+          const hours = String(reservationDate.getHours()).padStart(2, '0');
+          const minutes = String(reservationDate.getMinutes()).padStart(2, '0');
+          const seconds = String(reservationDate.getSeconds()).padStart(2, '0');
+          // JST時刻として文字列に変換（+09:00を付与）
+          reservationDate = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
+        } else if (typeof reservationDate === 'string') {
+          // 文字列の場合
+          if (!reservationDate.includes('+') && !reservationDate.includes('Z')) {
+            // タイムゾーン情報がない場合は+09:00を付与
+            reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+          } else if (reservationDate.includes('Z') || reservationDate.endsWith('+00:00')) {
+            // UTC時刻（Z付きまたは+00:00）の場合は、JSTに変換
+            const dateObj = new Date(reservationDate);
+            const year = dateObj.getUTCFullYear();
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getUTCDate()).padStart(2, '0');
+            const hours = String(dateObj.getUTCHours()).padStart(2, '0');
+            const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+            const seconds = String(dateObj.getUTCSeconds()).padStart(2, '0');
+            reservationDate = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
+          }
+        }
       }
+      
       return {
         ...row,
         reservation_date: reservationDate,
