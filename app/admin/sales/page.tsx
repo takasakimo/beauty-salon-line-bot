@@ -427,19 +427,74 @@ export default function SalesManagement() {
   const prepareChartData = () => {
     const sales = getFilteredSales();
     
+    // 期間指定の場合は、開始日から終了日までのすべての日付を生成
+    let dateRange: Date[] = [];
+    if (activeTab === 'custom' && startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const current = new Date(start);
+      while (current <= end) {
+        dateRange.push(new Date(current));
+        current.setDate(current.getDate() + 1);
+      }
+    } else if (activeTab === 'past-month' && selectedYear && selectedMonth) {
+      // 過去の月の場合は、その月のすべての日付を生成
+      const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
+      const lastDay = new Date(selectedYear, selectedMonth, 0);
+      const current = new Date(firstDay);
+      while (current <= lastDay) {
+        dateRange.push(new Date(current));
+        current.setDate(current.getDate() + 1);
+      }
+    } else if (activeTab === 'month') {
+      // 今月の場合は、今月のすべての日付を生成
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      const current = new Date(firstDay);
+      while (current <= lastDay) {
+        dateRange.push(new Date(current));
+        current.setDate(current.getDate() + 1);
+      }
+    }
+    
     // 日付別の売上を集計
     const salesByDate: Record<string, { reservation: number; product: number; total: number }> = {};
+    
+    // 期間指定の場合は、すべての日付を0で初期化
+    if (dateRange.length > 0) {
+      dateRange.forEach(date => {
+        // 年を含めた日付キーを使用（YYYY-MM-DD形式）
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        salesByDate[dateKey] = { reservation: 0, product: 0, total: 0 };
+      });
+    }
+    
+    // 実際の売上データを集計
     sales.forEach(sale => {
-      const date = new Date(sale.date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
-      if (!salesByDate[date]) {
-        salesByDate[date] = { reservation: 0, product: 0, total: 0 };
+      const saleDate = new Date(sale.date);
+      // 期間指定の場合は年を含めたキー、それ以外は月/日のみ
+      let dateKey: string;
+      if (dateRange.length > 0) {
+        const year = saleDate.getFullYear();
+        const month = String(saleDate.getMonth() + 1).padStart(2, '0');
+        const day = String(saleDate.getDate()).padStart(2, '0');
+        dateKey = `${year}-${month}-${day}`;
+      } else {
+        dateKey = saleDate.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+      }
+      if (!salesByDate[dateKey]) {
+        salesByDate[dateKey] = { reservation: 0, product: 0, total: 0 };
       }
       if (sale.type === 'reservation') {
-        salesByDate[date].reservation += sale.price;
+        salesByDate[dateKey].reservation += sale.price;
       } else {
-        salesByDate[date].product += sale.price;
+        salesByDate[dateKey].product += sale.price;
       }
-      salesByDate[date].total += sale.price;
+      salesByDate[dateKey].total += sale.price;
     });
 
     // スタッフ別の売上を集計
@@ -453,18 +508,49 @@ export default function SalesManagement() {
     });
 
     // 日付をソート
-    const sortedDates = Object.keys(salesByDate).sort((a, b) => {
-      const dateA = new Date(a.replace(/\//g, '-'));
-      const dateB = new Date(b.replace(/\//g, '-'));
-      return dateA.getTime() - dateB.getTime();
-    });
+    let sortedDates: string[];
+    let dateLabels: string[]; // 表示用のラベル
+    if (dateRange.length > 0) {
+      // 期間指定の場合は、生成した日付範囲を使用
+      sortedDates = dateRange.map(date => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      });
+      // 表示用ラベルは月/日のみ
+      dateLabels = dateRange.map(date => 
+        date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
+      );
+    } else {
+      // それ以外の場合は、データがある日付をソート
+      sortedDates = Object.keys(salesByDate).sort((a, b) => {
+        // YYYY-MM-DD形式の場合は直接比較
+        if (a.includes('-') && b.includes('-')) {
+          return a.localeCompare(b);
+        }
+        // 月/日形式の場合は現在の年を使用して比較
+        const currentYear = new Date().getFullYear();
+        const dateA = new Date(`${currentYear}/${a}`);
+        const dateB = new Date(`${currentYear}/${b}`);
+        return dateA.getTime() - dateB.getTime();
+      });
+      dateLabels = sortedDates.map(date => {
+        // YYYY-MM-DD形式の場合は月/日に変換
+        if (date.includes('-')) {
+          const [year, month, day] = date.split('-');
+          return `${parseInt(month)}/${parseInt(day)}`;
+        }
+        return date;
+      });
+    }
 
     return {
       byDate: {
-        labels: sortedDates,
-        reservationData: sortedDates.map(date => salesByDate[date].reservation),
-        productData: sortedDates.map(date => salesByDate[date].product),
-        totalData: sortedDates.map(date => salesByDate[date].total)
+        labels: dateLabels,
+        reservationData: sortedDates.map(date => salesByDate[date]?.reservation || 0),
+        productData: sortedDates.map(date => salesByDate[date]?.product || 0),
+        totalData: sortedDates.map(date => salesByDate[date]?.total || 0)
       },
       byStaff: {
         labels: Object.keys(salesByStaff),
