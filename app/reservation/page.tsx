@@ -608,56 +608,6 @@ function ReservationPageContent() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* 日付選択 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      予約日を選択（今日から1ヶ月先まで）
-                    </label>
-                    <div className="grid grid-cols-7 gap-2 mb-4">
-                      {getDateOptions().map((date) => {
-                        const dateObj = new Date(date);
-                        const dayName = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-                        const isHoliday = dayName === '日' || dayName === '土';
-                        const isNewYear = dateObj.getMonth() === 0 && dateObj.getDate() <= 3;
-                        const isSelected = selectedDate === date;
-                        const hasAvailableSlots = availableSlotsByDate[date] && availableSlotsByDate[date].length > 0;
-                        
-                        return (
-                          <button
-                            key={date}
-                            onClick={() => {
-                              setSelectedDate(date);
-                              setSelectedTime('');
-                            }}
-                            className={`p-3 rounded-lg border-2 transition-all ${
-                              isSelected
-                                ? 'border-pink-500 bg-pink-50 shadow-md'
-                                : hasAvailableSlots
-                                ? 'border-gray-200 hover:border-pink-300 hover:bg-pink-50'
-                                : 'border-gray-100 bg-gray-50 opacity-50'
-                            }`}
-                            disabled={!hasAvailableSlots}
-                          >
-                            <div className={`text-xs font-medium ${isHoliday || isNewYear ? 'text-red-600' : 'text-gray-700'}`}>
-                              {dayName}
-                            </div>
-                            <div className={`text-lg font-semibold mt-1 ${isHoliday || isNewYear ? 'text-red-600' : 'text-gray-900'}`}>
-                              {dateObj.getDate()}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {dateObj.getMonth() + 1}月
-                            </div>
-                            {hasAvailableSlots && (
-                              <div className="text-xs text-pink-600 mt-1 font-semibold">
-                                {availableSlotsByDate[date].length}件
-                              </div>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  
                   {/* 時間選択 - 2週間カレンダー形式（画像と同じ表記） */}
                   {selectedMenus.length > 0 && (
                     <div>
