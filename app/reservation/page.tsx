@@ -575,35 +575,101 @@ function ReservationPageContent() {
                     </div>
                   </div>
                   
-                  {/* 時間選択 */}
+                  {/* 時間選択 - タイムライン形式 */}
                   {selectedDate && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-3">
                         時間を選択
                       </label>
-                      {availableSlotsByDate[selectedDate] && availableSlotsByDate[selectedDate].length > 0 ? (
-                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
-                          {availableSlotsByDate[selectedDate].map((time) => {
-                            const isSelected = selectedTime === time;
-                            return (
-                              <button
-                                key={time}
-                                onClick={() => handleDateTimeSelect(selectedDate, time)}
-                                className={`px-4 py-2 rounded-lg border-2 transition-all ${
-                                  isSelected
-                                    ? 'border-pink-500 bg-pink-500 text-white shadow-md'
-                                    : 'border-gray-200 hover:border-pink-300 hover:bg-pink-50 text-gray-900'
-                                }`}
-                              >
-                                {time}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-gray-500">
-                          <p>この日は利用可能な時間がありません</p>
-                          <p className="text-sm mt-2">別の日付を選択してください</p>
+                      {(() => {
+                        // 営業時間の全30分スロットを生成（9:00-20:00）
+                        const timeSlots: string[] = [];
+                        for (let hour = 9; hour < 20; hour++) {
+                          timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
+                          timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
+                        }
+                        
+                        const availableSlots = availableSlotsByDate[selectedDate] || [];
+                        
+                        return (
+                          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                            <div className="flex">
+                              {/* 時間列 */}
+                              <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+                                <div className="h-12 border-b border-gray-200 flex items-center justify-center">
+                                  <span className="text-xs font-semibold text-gray-700">時間</span>
+                                </div>
+                                {timeSlots.map((time) => (
+                                  <div
+                                    key={time}
+                                    className="h-10 border-b border-gray-100 text-xs text-gray-600 px-2 flex items-center"
+                                    style={{ height: '40px' }}
+                                  >
+                                    {time}
+                                  </div>
+                                ))}
+                              </div>
+                              
+                              {/* 選択可能/不可能の表示列 */}
+                              <div className="flex-1 relative">
+                                <div className="h-12 border-b border-gray-200 bg-gray-50 flex items-center justify-center">
+                                  <span className="text-xs font-semibold text-gray-700">予約可能</span>
+                                </div>
+                                <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
+                                  {timeSlots.map((time) => {
+                                    const isAvailable = availableSlots.includes(time);
+                                    const isSelected = selectedTime === time;
+                                    
+                                    return (
+                                      <div
+                                        key={time}
+                                        className={`h-10 border-b border-gray-100 flex items-center justify-center cursor-pointer transition-colors ${
+                                          isSelected
+                                            ? 'bg-pink-100'
+                                            : isAvailable
+                                            ? 'hover:bg-pink-50'
+                                            : 'bg-gray-50 opacity-50 cursor-not-allowed'
+                                        }`}
+                                        style={{ height: '40px' }}
+                                        onClick={() => {
+                                          if (isAvailable) {
+                                            setSelectedTime(time);
+                                          }
+                                        }}
+                                      >
+                                        {isAvailable ? (
+                                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                            isSelected
+                                              ? 'bg-pink-500 text-white'
+                                              : 'bg-green-500 text-white'
+                                          }`}>
+                                            <span className="text-lg">○</span>
+                                          </div>
+                                        ) : (
+                                          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-red-100 text-red-600">
+                                            <span className="text-lg font-bold">×</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {selectedTime && (
+                        <div className="mt-4 p-3 bg-pink-50 border border-pink-200 rounded-lg">
+                          <p className="text-sm text-gray-700">
+                            選択された時間: <span className="font-semibold text-pink-600">{selectedDate} {selectedTime}</span>
+                          </p>
+                          <button
+                            onClick={() => handleDateTimeSelect(selectedDate, selectedTime)}
+                            className="mt-2 w-full px-4 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors font-medium"
+                          >
+                            この時間で予約を確定
+                          </button>
                         </div>
                       )}
                     </div>
