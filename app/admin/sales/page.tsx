@@ -9,8 +9,35 @@ import {
   CurrencyYenIcon,
   XMarkIcon,
   CalendarDaysIcon,
-  PrinterIcon
+  PrinterIcon,
+  ChartBarIcon,
+  TableCellsIcon
 } from '@heroicons/react/24/outline';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+} from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+);
 
 interface SalesDetail {
   id: number;
@@ -57,6 +84,8 @@ export default function SalesManagement() {
   const [sortBy, setSortBy] = useState<'date' | 'staff' | 'customer' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [error, setError] = useState('');
+  const [viewMode, setViewMode] = useState<'table' | 'chart'>('table');
+  const [chartType, setChartType] = useState<'bar' | 'line'>('bar');
 
   useEffect(() => {
     loadSummary();
@@ -394,6 +423,56 @@ export default function SalesManagement() {
       .reduce((sum, sale) => sum + sale.price, 0);
   };
 
+  // チャート用のデータを準備
+  const prepareChartData = () => {
+    const sales = getFilteredSales();
+    
+    // 日付別の売上を集計
+    const salesByDate: Record<string, { reservation: number; product: number; total: number }> = {};
+    sales.forEach(sale => {
+      const date = new Date(sale.date).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+      if (!salesByDate[date]) {
+        salesByDate[date] = { reservation: 0, product: 0, total: 0 };
+      }
+      if (sale.type === 'reservation') {
+        salesByDate[date].reservation += sale.price;
+      } else {
+        salesByDate[date].product += sale.price;
+      }
+      salesByDate[date].total += sale.price;
+    });
+
+    // スタッフ別の売上を集計
+    const salesByStaff: Record<string, number> = {};
+    sales.forEach(sale => {
+      const staffName = sale.staff_name || '未指定';
+      if (!salesByStaff[staffName]) {
+        salesByStaff[staffName] = 0;
+      }
+      salesByStaff[staffName] += sale.price;
+    });
+
+    // 日付をソート
+    const sortedDates = Object.keys(salesByDate).sort((a, b) => {
+      const dateA = new Date(a.replace(/\//g, '-'));
+      const dateB = new Date(b.replace(/\//g, '-'));
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    return {
+      byDate: {
+        labels: sortedDates,
+        reservationData: sortedDates.map(date => salesByDate[date].reservation),
+        productData: sortedDates.map(date => salesByDate[date].product),
+        totalData: sortedDates.map(date => salesByDate[date].total)
+      },
+      byStaff: {
+        labels: Object.keys(salesByStaff),
+        data: Object.values(salesByStaff)
+      }
+    };
+  };
+
   const handleLogout = async () => {
     try {
       await fetch('/api/admin/logout', {
@@ -414,10 +493,96 @@ export default function SalesManagement() {
     );
   }
 
+  // データを準備
   const filteredSales = getFilteredSales();
   const totalSales = getTotalSales();
   const reservationSales = getReservationSales();
   const productSales = getProductSales();
+
+  // チャート用のデータを準備
+  const chartData = prepareChartData();
+
+  // 日付別チャートのデータ
+  const dateChartData = {
+    labels: chartData.byDate.labels,
+    datasets: [
+      {
+        label: '予約売上',
+        data: chartData.byDate.reservationData,
+        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+      },
+      {
+        label: '物販売上',
+        data: chartData.byDate.productData,
+        backgroundColor: 'rgba(16, 185, 129, 0.5)',
+        borderColor: 'rgba(16, 185, 129, 1)',
+        borderWidth: 1,
+      },
+      {
+        label: '総売上',
+        data: chartData.byDate.totalData,
+        backgroundColor: 'rgba(139, 92, 246, 0.5)',
+        borderColor: 'rgba(139, 92, 246, 1)',
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // スタッフ別チャートのデータ
+  const staffChartData = {
+    labels: chartData.byStaff.labels,
+    datasets: [
+      {
+        label: '売上',
+        data: chartData.byStaff.data,
+        backgroundColor: [
+          'rgba(59, 130, 246, 0.5)',
+          'rgba(16, 185, 129, 0.5)',
+          'rgba(139, 92, 246, 0.5)',
+          'rgba(236, 72, 153, 0.5)',
+          'rgba(251, 191, 36, 0.5)',
+          'rgba(239, 68, 68, 0.5)',
+        ],
+        borderColor: [
+          'rgba(59, 130, 246, 1)',
+          'rgba(16, 185, 129, 1)',
+          'rgba(139, 92, 246, 1)',
+          'rgba(236, 72, 153, 1)',
+          'rgba(251, 191, 36, 1)',
+          'rgba(239, 68, 68, 1)',
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // チャートオプション
+  const chartOptions: any = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+      },
+      title: {
+        display: true,
+        text: '売上推移',
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          callback: (value: string | number) => {
+            const numValue = typeof value === 'string' ? parseFloat(value) : value;
+            return '¥' + numValue.toLocaleString();
+          },
+        },
+      },
+    },
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -541,6 +706,49 @@ export default function SalesManagement() {
                   期間指定
                 </button>
               </nav>
+            </div>
+
+            {/* 表示モード切り替え */}
+            <div className="p-4 border-b border-gray-200 print:hidden">
+              <div className="flex justify-between items-center mb-4">
+                <nav className="flex space-x-4">
+                  <button
+                    onClick={() => setViewMode('table')}
+                    className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md ${
+                      viewMode === 'table'
+                        ? 'bg-pink-100 text-pink-700 border-2 border-pink-500'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <TableCellsIcon className="w-5 h-5 mr-2" />
+                    テーブル表示
+                  </button>
+                  <button
+                    onClick={() => setViewMode('chart')}
+                    className={`inline-flex items-center px-4 py-2 text-sm font-medium rounded-md ${
+                      viewMode === 'chart'
+                        ? 'bg-pink-100 text-pink-700 border-2 border-pink-500'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <ChartBarIcon className="w-5 h-5 mr-2" />
+                    チャート表示
+                  </button>
+                </nav>
+                {viewMode === 'chart' && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">グラフタイプ:</label>
+                    <select
+                      value={chartType}
+                      onChange={(e) => setChartType(e.target.value as 'bar' | 'line')}
+                      className="px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    >
+                      <option value="bar">棒グラフ</option>
+                      <option value="line">折れ線グラフ</option>
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* 期間指定とフィルター */}
@@ -697,6 +905,56 @@ export default function SalesManagement() {
             </div>
 
             <div className="p-6">
+              {/* チャート表示 */}
+              {viewMode === 'chart' && (
+                <div className="space-y-6">
+                  {/* 日付別売上チャート */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">日付別売上推移</h3>
+                    <div style={{ height: '400px' }}>
+                      {chartType === 'bar' ? (
+                        <Bar data={dateChartData} options={chartOptions} />
+                      ) : (
+                        <Line data={dateChartData} options={chartOptions} />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* スタッフ別売上チャート */}
+                  {chartData.byStaff.labels.length > 0 && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-4">スタッフ別売上</h3>
+                      <div style={{ height: '400px' }}>
+                        {chartType === 'bar' ? (
+                          <Bar data={staffChartData} options={chartOptions} />
+                        ) : (
+                          <Line data={staffChartData} options={chartOptions} />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* サマリーカード */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="text-sm font-medium text-blue-800 mb-1">総売上（予約+物販）</div>
+                      <div className="text-2xl font-bold text-blue-900">¥{totalSales.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <div className="text-sm font-medium text-green-800 mb-1">予約売上</div>
+                      <div className="text-2xl font-bold text-green-900">¥{reservationSales.toLocaleString()}</div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <div className="text-sm font-medium text-purple-800 mb-1">物販売上</div>
+                      <div className="text-2xl font-bold text-purple-900">¥{productSales.toLocaleString()}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* テーブル表示 */}
+              {viewMode === 'table' && (
+                <div>
               {/* 印刷用ヘッダー */}
               <div className="hidden print:block mb-4 pb-4 border-b-2 border-gray-400">
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">売上管理</h1>
@@ -891,6 +1149,8 @@ export default function SalesManagement() {
                     </table>
                   </div>
                 </>
+              )}
+                </div>
               )}
             </div>
           </div>
