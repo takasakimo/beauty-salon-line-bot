@@ -30,7 +30,7 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
 
   const navigation = [
     { name: 'ダッシュボード', href: '/admin/dashboard' },
-    { name: '予約管理', href: '/admin/reservations' },
+    { name: 'スケジュール管理', href: '/admin/reservations' },
     { name: '顧客管理', href: '/admin/customers' },
     { name: 'メニュー管理', href: '/admin/menus' },
     { name: '商品管理', href: '/admin/products' },

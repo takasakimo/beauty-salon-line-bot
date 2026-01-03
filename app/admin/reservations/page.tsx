@@ -941,12 +941,12 @@ export default function ReservationManagement() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <AdminNav currentPath="/admin/reservations" title="予約管理" />
+      <AdminNav currentPath="/admin/reservations" title="スケジュール管理" />
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">予約一覧</h2>
+            <h2 className="text-2xl font-bold text-gray-900">スケジュール一覧</h2>
             <button
               onClick={() => handleOpenModal()}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
