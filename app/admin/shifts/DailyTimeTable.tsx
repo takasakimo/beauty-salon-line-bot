@@ -155,8 +155,16 @@ export default function DailyTimeTable({
         const shiftsMap: Record<number, Shift> = {};
         
         data.forEach(shift => {
-          shiftsMap[shift.staff_id] = shift;
+          // 時間フォーマットを正規化（HH:MM:SS -> HH:MM）
+          const normalizedShift = {
+            ...shift,
+            start_time: shift.start_time ? shift.start_time.substring(0, 5) : null,
+            end_time: shift.end_time ? shift.end_time.substring(0, 5) : null,
+          };
+          shiftsMap[shift.staff_id] = normalizedShift;
         });
+        
+        console.log('Loaded shifts:', shiftsMap); // デバッグ用
 
         // シフトがない従業員も含める
         staff.forEach(s => {
@@ -182,9 +190,12 @@ export default function DailyTimeTable({
     }
   };
 
-  // 時間を分に変換
+  // 時間を分に変換（HH:MM:SS形式にも対応）
   const timeToMinutes = (time: string) => {
-    const [hour, minute] = time.split(':').map(Number);
+    if (!time) return 0;
+    const parts = time.split(':');
+    const hour = parseInt(parts[0] || '0', 10);
+    const minute = parseInt(parts[1] || '0', 10);
     return hour * 60 + minute;
   };
 
@@ -245,31 +256,39 @@ export default function DailyTimeTable({
     
     // 終了時間がどのセルに該当するかを計算
     // 終了時間がセルの開始時間と一致する場合も含める
-    const endSlotIndex = timeSlots.findIndex(time => {
+    let endSlotIndex = timeSlots.findIndex(time => {
       const timeMinutes = timeToMinutes(time);
       const nextTimeMinutes = timeMinutes + 60;
       return timeMinutes <= endMinutes && nextTimeMinutes > endMinutes;
     });
+    
+    // 終了時間が時間スロットの範囲外の場合、最後のセルを使用
+    if (endSlotIndex === -1) {
+      const lastSlotMinutes = timeToMinutes(timeSlots[timeSlots.length - 1]);
+      if (endMinutes >= lastSlotMinutes) {
+        endSlotIndex = timeSlots.length - 1;
+      } else {
+        // 終了時間が最初のセルより前の場合
+        endSlotIndex = 0;
+      }
+    }
     
     // セル幅（80px）を基準に計算
     const cellWidth = 80; // 各セルの幅（px）
     const offsetPx = (offsetInCell / 60) * cellWidth; // セル内でのオフセット（px）
     
     // ブロックがまたがるセル数
-    // 終了時間がセルの開始時間と一致する場合、そのセルを含める
-    const spanCells = endSlotIndex !== -1 
-      ? endSlotIndex - startSlotIndex + 1 
-      : Math.ceil((endMinutes - startSlotMinutes) / 60);
+    const spanCells = endSlotIndex - startSlotIndex + 1;
     
     // 終了セル内での位置
-    const endSlotMinutes = endSlotIndex !== -1 
-      ? timeToMinutes(timeSlots[endSlotIndex]) 
-      : timeToMinutes(timeSlots[timeSlots.length - 1]) + 60;
+    const endSlotMinutes = timeToMinutes(timeSlots[endSlotIndex]);
     const endOffsetInCell = endMinutes - endSlotMinutes;
+    
     // 終了時間がセルの開始位置と一致する場合、そのセル全体を含める
-    const endOffsetPx = endOffsetInCell === 0 
-      ? cellWidth 
-      : (endOffsetInCell / 60) * cellWidth;
+    // 終了時間がセル内にある場合、その位置まで表示
+    const endOffsetPx = endOffsetInCell <= 0 
+      ? cellWidth  // 終了時間がセルの開始位置以下の場合、セル全体を含める
+      : Math.min((endOffsetInCell / 60) * cellWidth, cellWidth); // セル内の位置
     
     // 左位置: セル内でのオフセット（tdを基準）
     const leftPx = offsetPx;
