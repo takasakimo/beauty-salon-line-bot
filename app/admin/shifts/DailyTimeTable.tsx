@@ -212,7 +212,6 @@ export default function DailyTimeTable({
     if (!tableRef.current || timeSlots.length === 0) return null;
     const rect = tableRef.current.getBoundingClientRect();
     const employeeColumnWidth = 120; // 従業員名列の幅
-    const headerHeight = 60; // ヘッダーの高さ
     
     // テーブル内の相対X座標（従業員名列を除く）
     const relativeX = x - rect.left - employeeColumnWidth;
@@ -224,7 +223,6 @@ export default function DailyTimeTable({
     
     // 時間列内での位置を計算
     const positionPercent = relativeX / totalWidth;
-    if (positionPercent < 0 || positionPercent > 1) return null;
     
     // 最初と最後の時間スロットを取得
     const firstSlot = timeSlots[0];
@@ -232,13 +230,29 @@ export default function DailyTimeTable({
     const [firstHour] = firstSlot.split(':').map(Number);
     const [lastHour] = lastSlot.split(':').map(Number);
     
+    // 範囲外の場合は、最初または最後の時間を返す
+    if (positionPercent < 0) {
+      return firstSlot;
+    }
+    if (positionPercent > 1) {
+      // 最後の時間スロットの1時間後まで許容
+      return minutesToTime((lastHour + 1) * 60);
+    }
+    
     const totalMinutes = (lastHour - firstHour + 1) * 60; // 時間スロットの範囲
     const minutes = firstHour * 60 + (positionPercent * totalMinutes);
     
     const hour = Math.floor(minutes / 60);
     const minute = Math.floor((minutes % 60) / 30) * 30; // 30分刻み
     
-    if (hour < firstHour || hour > lastHour + 1) return null;
+    // 範囲を超える場合は、最後の時間スロットの1時間後まで許容
+    if (hour < firstHour) {
+      return firstSlot;
+    }
+    if (hour > lastHour + 1) {
+      return minutesToTime((lastHour + 1) * 60);
+    }
+    
     return minutesToTime(hour * 60 + minute);
   };
 
@@ -336,7 +350,12 @@ export default function DailyTimeTable({
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const time = getTimeFromX(moveEvent.clientX);
-      if (!time || !shift.start_time || !shift.end_time) return;
+      if (!time) {
+        // 時間が取得できない場合は、現在のシフトを維持
+        return;
+      }
+      
+      if (!shift.start_time || !shift.end_time) return;
 
       const updatedShift = { ...shift };
       const breakTimes = typeof updatedShift.break_times === 'string' 
@@ -346,21 +365,24 @@ export default function DailyTimeTable({
       if (edge === 'start') {
         const endMinutes = timeToMinutes(shift.end_time);
         const newStartMinutes = timeToMinutes(time);
-        if (newStartMinutes < endMinutes) {
+        if (newStartMinutes < endMinutes && newStartMinutes >= 0) {
           updatedShift.start_time = time;
         }
       } else if (edge === 'end') {
         const startMinutes = timeToMinutes(shift.start_time);
         const newEndMinutes = timeToMinutes(time);
-        if (newEndMinutes > startMinutes) {
+        if (newEndMinutes > startMinutes && newEndMinutes <= 24 * 60) {
           updatedShift.end_time = time;
         }
       }
 
-      setShifts(prev => ({
-        ...prev,
-        [staffId]: updatedShift
-      }));
+      // 開始時間と終了時間が両方設定されている場合のみ更新
+      if (updatedShift.start_time && updatedShift.end_time) {
+        setShifts(prev => ({
+          ...prev,
+          [staffId]: updatedShift
+        }));
+      }
     };
 
     const handleMouseUp = () => {
@@ -442,6 +464,12 @@ export default function DailyTimeTable({
     const shift = shifts[staffId];
     if (!shift) return;
 
+    // 開始時間と終了時間が両方ある場合のみ保存
+    if (!shift.start_time || !shift.end_time) {
+      console.warn('シフトの開始時間または終了時間が設定されていません');
+      return;
+    }
+
     try {
       const dateStr = selectedDate.toISOString().split('T')[0];
       const breakTimes = typeof shift.break_times === 'string' 
@@ -468,10 +496,18 @@ export default function DailyTimeTable({
       });
 
       if (!response.ok) {
-        console.error('シフト保存エラー');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('シフト保存エラー:', errorData);
+        // エラーが発生した場合、シフトデータを再読み込み
+        await loadShifts();
+      } else {
+        // 保存成功後、シフトデータを再読み込みして最新の状態を反映
+        await loadShifts();
       }
     } catch (error) {
       console.error('シフト保存エラー:', error);
+      // エラーが発生した場合、シフトデータを再読み込み
+      await loadShifts();
     }
   };
 
