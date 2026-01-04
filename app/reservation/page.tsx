@@ -63,6 +63,11 @@ function ReservationPageContent() {
         const data = await response.json();
         setBusinessHours(data.business_hours || {});
         setSpecialBusinessHours(data.special_business_hours || {});
+        // 臨時休業日と定休日を設定
+        setClosedDaysInfo({
+          closedDays: Array.isArray(data.closed_days) ? data.closed_days : [],
+          temporaryClosedDays: Array.isArray(data.temporary_closed_days) ? data.temporary_closed_days : []
+        });
       }
     } catch (error) {
       console.error('テナント情報取得エラー:', error);
@@ -109,37 +114,49 @@ function ReservationPageContent() {
     }
   }, [selectedMenus, selectedStaff, weekStartDate]);
   
-  // 空きスロットが更新されたら休業日情報も更新
+  // 空きスロットが更新されたら休業日情報も更新（データベースの情報を優先し、空きスロットがない日を補完）
   useEffect(() => {
     if (Object.keys(availableSlotsByDate).length > 0) {
-      const dates = getTwoWeekDates();
-      const closedDays: number[] = [];
-      const temporaryClosedDays: string[] = [];
-      
-      // 各日付をチェック
-      for (const date of dates) {
-        const dateStr = date.toISOString().split('T')[0];
-        const availableSlots = availableSlotsByDate[dateStr] || [];
+      setClosedDaysInfo(prev => {
+        const dates = getTwoWeekDates();
+        // 既存のclosedDaysInfoを保持（データベースから取得した情報を優先）
+        const currentClosedDays = [...prev.closedDays];
+        const currentTemporaryClosedDays = [...prev.temporaryClosedDays];
         
-        // 空きスロットが0件の場合、休業日として扱う
-        if (availableSlots.length === 0) {
+        // 各日付をチェック（空きスロットがない日を補完的に追加）
+        for (const date of dates) {
+          const dateStr = date.toISOString().split('T')[0];
+          const availableSlots = availableSlotsByDate[dateStr] || [];
           const dayOfWeek = date.getDay();
-          // 曜日ベースの定休日かどうかをチェック
-          // 同じ曜日が複数回出現する場合は定休日として扱う
-          const sameDayOfWeekCount = dates.filter(d => d.getDay() === dayOfWeek && (availableSlotsByDate[d.toISOString().split('T')[0]] || []).length === 0).length;
-          if (sameDayOfWeekCount >= 2) {
-            // 同じ曜日が2回以上休業の場合は定休日として扱う
-            if (!closedDays.includes(dayOfWeek)) {
-              closedDays.push(dayOfWeek);
+          
+          // 空きスロットが0件で、かつ既に臨時休業日や定休日に含まれていない場合のみ追加
+          if (availableSlots.length === 0) {
+            // 定休日に含まれているかチェック
+            const isClosedDay = currentClosedDays.includes(dayOfWeek);
+            // 臨時休業日に含まれているかチェック
+            const isTemporaryClosedDay = currentTemporaryClosedDays.includes(dateStr);
+            
+            if (!isClosedDay && !isTemporaryClosedDay) {
+              // 同じ曜日が複数回出現する場合は定休日として扱う
+              const sameDayOfWeekCount = dates.filter(d => d.getDay() === dayOfWeek && (availableSlotsByDate[d.toISOString().split('T')[0]] || []).length === 0).length;
+              if (sameDayOfWeekCount >= 2) {
+                // 同じ曜日が2回以上休業の場合は定休日として扱う
+                if (!currentClosedDays.includes(dayOfWeek)) {
+                  currentClosedDays.push(dayOfWeek);
+                }
+              } else {
+                // 臨時休業日として扱う
+                currentTemporaryClosedDays.push(dateStr);
+              }
             }
-          } else {
-            // 臨時休業日として扱う
-            temporaryClosedDays.push(dateStr);
           }
         }
-      }
-      
-      setClosedDaysInfo({ closedDays, temporaryClosedDays });
+        
+        return { 
+          closedDays: currentClosedDays, 
+          temporaryClosedDays: currentTemporaryClosedDays 
+        };
+      });
     }
   }, [availableSlotsByDate, weekStartDate]);
 
