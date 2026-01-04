@@ -35,23 +35,92 @@ export default function DailyTimeTable({
   const [loading, setLoading] = useState(true);
   const [draggingShift, setDraggingShift] = useState<{ staffId: number; edge: 'start' | 'end' } | null>(null);
   const [draggingBreak, setDraggingBreak] = useState<{ staffId: number; breakIndex: number; edge: 'start' | 'end' } | null>(null);
+  const [businessHours, setBusinessHours] = useState<Record<string, { open: string; close: string; isOpen?: boolean }>>({});
+  const [specialBusinessHours, setSpecialBusinessHours] = useState<Record<string, { open: string; close: string }>>({});
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // 時間スロット（6:00-22:00、1時間刻み）
-  const timeSlots: string[] = [];
-  for (let hour = 6; hour <= 22; hour++) {
-    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
-  }
+  // 営業時間を取得
+  useEffect(() => {
+    loadBusinessHours();
+  }, []);
+
+  // 営業時間と日付が変更されたら時間スロットを再計算
+  useEffect(() => {
+    calculateTimeSlots();
+  }, [selectedDate, businessHours, specialBusinessHours]);
 
   useEffect(() => {
     loadStaff();
   }, []);
 
   useEffect(() => {
-    if (staff.length > 0) {
+    if (staff.length > 0 && timeSlots.length > 0) {
       loadShifts();
     }
-  }, [selectedDate, staff]);
+  }, [selectedDate, staff, timeSlots]);
+
+  // 営業時間を取得
+  const loadBusinessHours = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/settings');
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBusinessHours(data.business_hours || {});
+        setSpecialBusinessHours(data.special_business_hours || {});
+      }
+    } catch (error) {
+      console.error('営業時間取得エラー:', error);
+      // デフォルト値を設定
+      setBusinessHours({});
+      setSpecialBusinessHours({});
+    }
+  };
+
+  // 選択された日付の営業時間を取得
+  const getDayBusinessHours = () => {
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dayOfWeek = selectedDate.getDay();
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayName = dayNames[dayOfWeek];
+
+    // 特別営業時間があればそれを使用
+    if (specialBusinessHours[dateStr]) {
+      return specialBusinessHours[dateStr];
+    }
+
+    // 曜日の営業時間を使用
+    const dayHours = businessHours[dayName] || businessHours[dayOfWeek.toString()] || businessHours['default'];
+    
+    if (dayHours && dayHours.isOpen !== false) {
+      return { open: dayHours.open || '10:00', close: dayHours.close || '19:00' };
+    }
+
+    // デフォルト値
+    return { open: '10:00', close: '19:00' };
+  };
+
+  // 営業時間に基づいて時間スロットを計算
+  const calculateTimeSlots = () => {
+    const dayHours = getDayBusinessHours();
+    const [openHour, openMinute] = dayHours.open.split(':').map(Number);
+    const [closeHour, closeMinute] = dayHours.close.split(':').map(Number);
+    
+    // 開始時間を1時間前に、終了時間を1時間後に拡張（余裕を持たせる）
+    const startHour = Math.max(0, openHour - 1);
+    const endHour = Math.min(23, closeHour + 1);
+    
+    const slots: string[] = [];
+    for (let hour = startHour; hour <= endHour; hour++) {
+      slots.push(`${hour.toString().padStart(2, '0')}:00`);
+    }
+    
+    setTimeSlots(slots);
+  };
 
   const loadStaff = async () => {
     try {
@@ -128,7 +197,7 @@ export default function DailyTimeTable({
 
   // X座標から時間を取得（横軸のタイムテーブル用）
   const getTimeFromX = (x: number) => {
-    if (!tableRef.current) return null;
+    if (!tableRef.current || timeSlots.length === 0) return null;
     const rect = tableRef.current.getBoundingClientRect();
     const employeeColumnWidth = 120; // 従業員名列の幅
     const headerHeight = 60; // ヘッダーの高さ
@@ -141,17 +210,23 @@ export default function DailyTimeTable({
     const timeSlotWidth = 80; // 各時間セルの幅（min-w-[80px]）
     const totalWidth = timeSlots.length * timeSlotWidth;
     
-    // 時間列内での位置を計算（6:00-22:00の範囲）
+    // 時間列内での位置を計算
     const positionPercent = relativeX / totalWidth;
     if (positionPercent < 0 || positionPercent > 1) return null;
     
-    const totalMinutes = (22 - 6) * 60; // 6:00-22:00の16時間
-    const minutes = 6 * 60 + (positionPercent * totalMinutes); // 6:00を基準
+    // 最初と最後の時間スロットを取得
+    const firstSlot = timeSlots[0];
+    const lastSlot = timeSlots[timeSlots.length - 1];
+    const [firstHour] = firstSlot.split(':').map(Number);
+    const [lastHour] = lastSlot.split(':').map(Number);
+    
+    const totalMinutes = (lastHour - firstHour + 1) * 60; // 時間スロットの範囲
+    const minutes = firstHour * 60 + (positionPercent * totalMinutes);
     
     const hour = Math.floor(minutes / 60);
     const minute = Math.floor((minutes % 60) / 30) * 30; // 30分刻み
     
-    if (hour < 6 || hour > 22) return null;
+    if (hour < firstHour || hour > lastHour + 1) return null;
     return minutesToTime(hour * 60 + minute);
   };
 
@@ -493,7 +568,7 @@ export default function DailyTimeTable({
     return shift && shift.start_time && shift.end_time && !shift.is_off;
   });
 
-  if (loading) {
+  if (loading || timeSlots.length === 0) {
     return (
       <div className="text-center py-8">
         <p className="text-gray-600">読み込み中...</p>
