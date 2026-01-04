@@ -86,13 +86,35 @@ export async function GET(request: NextRequest) {
     }
     
     try {
-      if (row.temporary_closed_days) {
-        temporaryClosedDays = typeof row.temporary_closed_days === 'string' 
-          ? JSON.parse(row.temporary_closed_days) 
-          : row.temporary_closed_days;
+      const rawValue = row.temporary_closed_days;
+      // null、undefined、空文字列の場合は空配列を返す
+      if (rawValue === null || rawValue === undefined || rawValue === '') {
+        temporaryClosedDays = [];
+      } else if (typeof rawValue === 'string') {
+        const trimmed = rawValue.trim();
+        if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null' || trimmed === 'NULL') {
+          temporaryClosedDays = [];
+        } else {
+          try {
+            const parsed = JSON.parse(rawValue);
+            temporaryClosedDays = Array.isArray(parsed) ? parsed : [];
+          } catch (parseError) {
+            console.error('temporary_closed_daysのJSONパースエラー:', parseError);
+            temporaryClosedDays = [];
+          }
+        }
+      } else if (Array.isArray(rawValue)) {
+        temporaryClosedDays = rawValue;
+      } else {
+        temporaryClosedDays = [];
+      }
+      // 最終的に配列でない場合は空配列にする
+      if (!Array.isArray(temporaryClosedDays)) {
+        temporaryClosedDays = [];
       }
     } catch (e) {
       console.error('temporary_closed_daysのパースエラー:', e);
+      temporaryClosedDays = [];
     }
     
     try {
@@ -291,13 +313,35 @@ export async function PUT(request: NextRequest) {
     }
     
     try {
-      if (row.temporary_closed_days) {
-        temporaryClosedDays = typeof row.temporary_closed_days === 'string' 
-          ? JSON.parse(row.temporary_closed_days) 
-          : row.temporary_closed_days;
+      const rawValue = row.temporary_closed_days;
+      // null、undefined、空文字列の場合は空配列を返す
+      if (rawValue === null || rawValue === undefined || rawValue === '') {
+        temporaryClosedDays = [];
+      } else if (typeof rawValue === 'string') {
+        const trimmed = rawValue.trim();
+        if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null' || trimmed === 'NULL') {
+          temporaryClosedDays = [];
+        } else {
+          try {
+            const parsed = JSON.parse(rawValue);
+            temporaryClosedDays = Array.isArray(parsed) ? parsed : [];
+          } catch (parseError) {
+            console.error('temporary_closed_daysのJSONパースエラー:', parseError);
+            temporaryClosedDays = [];
+          }
+        }
+      } else if (Array.isArray(rawValue)) {
+        temporaryClosedDays = rawValue;
+      } else {
+        temporaryClosedDays = [];
+      }
+      // 最終的に配列でない場合は空配列にする
+      if (!Array.isArray(temporaryClosedDays)) {
+        temporaryClosedDays = [];
       }
     } catch (e) {
       console.error('temporary_closed_daysのパースエラー:', e);
+      temporaryClosedDays = [];
     }
     
     try {

@@ -112,25 +112,38 @@ export async function GET(request: NextRequest) {
     let temporaryClosedDays: string[] = [];
     try {
       const rawValue = tenantResult.rows[0]?.temporary_closed_days;
-      if (rawValue) {
-        if (typeof rawValue === 'string') {
-          // 空文字列やnullの場合は空配列を返す
-          const trimmed = rawValue.trim();
-          if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null') {
-            temporaryClosedDays = [];
-          } else {
-            temporaryClosedDays = JSON.parse(rawValue);
-          }
-        } else if (Array.isArray(rawValue)) {
-          temporaryClosedDays = rawValue;
+      // null、undefined、空文字列の場合は空配列を返す
+      if (rawValue === null || rawValue === undefined || rawValue === '') {
+        temporaryClosedDays = [];
+      } else if (typeof rawValue === 'string') {
+        // 文字列の場合はパースを試みる
+        const trimmed = rawValue.trim();
+        if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null' || trimmed === 'NULL') {
+          temporaryClosedDays = [];
         } else {
-          temporaryClosedDays = [];
+          try {
+            const parsed = JSON.parse(rawValue);
+            temporaryClosedDays = Array.isArray(parsed) ? parsed : [];
+          } catch (parseError) {
+            console.error('temporary_closed_daysのJSONパースエラー:', parseError);
+            temporaryClosedDays = [];
+          }
         }
-        // 配列でない場合は空配列にする
-        if (!Array.isArray(temporaryClosedDays)) {
-          temporaryClosedDays = [];
-        }
+      } else if (Array.isArray(rawValue)) {
+        temporaryClosedDays = rawValue;
+      } else {
+        temporaryClosedDays = [];
       }
+      // 最終的に配列でない場合は空配列にする
+      if (!Array.isArray(temporaryClosedDays)) {
+        temporaryClosedDays = [];
+      }
+      console.log('臨時休業日の取得結果:', { 
+        rawValue, 
+        temporaryClosedDays, 
+        length: temporaryClosedDays.length,
+        type: typeof rawValue
+      });
     } catch (e) {
       console.error('temporary_closed_daysのパースエラー:', e);
       temporaryClosedDays = [];
