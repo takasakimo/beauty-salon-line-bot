@@ -444,13 +444,19 @@ export default function DailyTimeTable({
     e.stopPropagation();
     
     const shift = shifts[staffId];
-    if (!shift || !shift.start_time || !shift.end_time) return;
+    if (!shift || !shift.start_time || !shift.end_time) {
+      console.log('handleBreakDrag: shift not found or incomplete', { staffId, shift });
+      return;
+    }
 
     const breakTimes = typeof shift.break_times === 'string' 
       ? JSON.parse(shift.break_times) 
       : (shift.break_times || []);
     
-    if (!breakTimes[breakIndex]) return;
+    if (!breakTimes[breakIndex]) {
+      console.log('handleBreakDrag: breakTime not found', { breakIndex, breakTimes });
+      return;
+    }
 
     const breakTime = breakTimes[breakIndex];
     const initialBreakStartMinutes = timeToMinutes(breakTime.start);
@@ -458,10 +464,28 @@ export default function DailyTimeTable({
     const breakDuration = initialBreakEndMinutes - initialBreakStartMinutes;
     const initialX = e.clientX;
     const initialTime = getTimeFromX(initialX);
-    if (!initialTime) return;
+    if (!initialTime) {
+      console.log('handleBreakDrag: initialTime not found', { initialX, tableRef: tableRef.current });
+      return;
+    }
     const initialTimeMinutes = timeToMinutes(initialTime);
 
+    console.log('handleBreakDrag: start', { 
+      staffId, 
+      breakIndex, 
+      initialBreakStartMinutes, 
+      initialTimeMinutes,
+      breakDuration 
+    });
+
+    let isDragging = true;
+
     const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDragging) return;
+      
+      moveEvent.preventDefault();
+      moveEvent.stopPropagation();
+      
       const currentTime = getTimeFromX(moveEvent.clientX);
       if (!currentTime) return;
 
@@ -492,6 +516,12 @@ export default function DailyTimeTable({
             end: minutesToTime(newEndMinutes)
           };
 
+          console.log('handleBreakDrag: updating', { 
+            newStartMinutes, 
+            newEndMinutes, 
+            updatedBreakTimes 
+          });
+
           return {
             ...prev,
             [staffId]: {
@@ -504,19 +534,26 @@ export default function DailyTimeTable({
       });
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (upEvent: MouseEvent) => {
+      upEvent.preventDefault();
+      upEvent.stopPropagation();
+      
+      isDragging = false;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       setDraggingBreak(null);
       setDraggingBreakOffset(0);
+      
+      console.log('handleBreakDrag: end, saving');
+      
       // 最新の状態を保存
       setTimeout(() => {
         saveShift(staffId);
-      }, 0);
+      }, 100);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', handleMouseMove, { passive: false });
+    document.addEventListener('mouseup', handleMouseUp, { passive: false });
     setDraggingBreak({ staffId, breakIndex, edge: 'move' });
   };
 
@@ -868,7 +905,14 @@ export default function DailyTimeTable({
                           isWorkingTime ? 'bg-blue-50' : 'bg-white'
                         }`}
                         style={{ height: '120px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
-                        onClick={() => handleCellClick(s.staff_id, time)}
+                        onClick={(e) => {
+                          // 休憩時間ブロックやリサイズハンドルをクリックした場合はセルクリックを無視
+                          const target = e.target as HTMLElement;
+                          if (target.closest('.group\\/break') || target.closest('.break-resize-handle')) {
+                            return;
+                          }
+                          handleCellClick(s.staff_id, time);
+                        }}
                       >
                         {/* シフト開始時間のセルにシフトブロックを表示 */}
                         {isStartCell && (
@@ -910,9 +954,13 @@ export default function DailyTimeTable({
                                   className="absolute bg-gradient-to-r from-orange-400 to-orange-500 text-white text-xs rounded z-30 group/break border-2 border-white shadow-md cursor-move"
                                   style={getBreakBlockStyle(breakTime.start, breakTime.end, shift.start_time, shift.end_time)}
                                   onMouseDown={(e) => {
-                                    // リサイズハンドル以外をクリックした場合はドラッグ
+                                    // リサイズハンドル、削除ボタン以外をクリックした場合はドラッグ
                                     const target = e.target as HTMLElement;
-                                    if (!target.closest('.break-resize-handle')) {
+                                    if (!target.closest('.break-resize-handle') && 
+                                        !target.closest('button') &&
+                                        target.closest('.group\\/break')) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
                                       handleBreakDrag(s.staff_id, idx, e);
                                     }
                                   }}
