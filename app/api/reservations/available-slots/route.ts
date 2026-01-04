@@ -303,11 +303,13 @@ export async function GET(request: NextRequest) {
             COALESCE(ss.break_times, '[]'::jsonb) as break_times,
             s.working_hours
           FROM staff s
-          LEFT JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
+          INNER JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
             AND ss.tenant_id = $1 
             AND ss.shift_date = $2
           WHERE s.tenant_id = $1
-          AND (ss.is_off IS NULL OR ss.is_off = false)`,
+          AND ss.is_off = false
+          AND ss.start_time IS NOT NULL
+          AND ss.end_time IS NOT NULL`,
           [tenantId, date]
         );
         
@@ -325,27 +327,59 @@ export async function GET(request: NextRequest) {
         });
         
         for (const row of allStaffShiftsResult.rows) {
-          if (row.break_times) {
-            try {
-              const breaks = typeof row.break_times === 'string' 
-                ? JSON.parse(row.break_times) 
-                : (row.break_times || []);
-              console.log('休憩時間をパース:', {
-                rawBreakTimes: row.break_times,
-                parsedBreaks: breaks,
-                isArray: Array.isArray(breaks)
-              });
-              if (Array.isArray(breaks) && breaks.length > 0) {
-                allBreakTimes.push(...breaks);
+          // break_timesがnull、undefined、空文字列、空配列の場合はスキップ
+          if (row.break_times === null || row.break_times === undefined || row.break_times === '') {
+            console.log('休憩時間がnull、undefined、または空文字列:', {
+              breakTimes: row.break_times,
+              shiftStart: row.shift_start_time,
+              shiftEnd: row.shift_end_time
+            });
+            continue;
+          }
+          
+          try {
+            let breaks: Array<{ start: string; end: string }> = [];
+            
+            if (typeof row.break_times === 'string') {
+              const trimmed = row.break_times.trim();
+              if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null' || trimmed === 'NULL') {
+                console.log('休憩時間が空の文字列:', {
+                  rawBreakTimes: row.break_times,
+                  shiftStart: row.shift_start_time,
+                  shiftEnd: row.shift_end_time
+                });
+                continue;
               }
-            } catch (e) {
-              console.error('休憩時間のパースエラー:', e, {
-                rawBreakTimes: row.break_times
+              breaks = JSON.parse(row.break_times);
+            } else if (Array.isArray(row.break_times)) {
+              breaks = row.break_times;
+            } else {
+              console.log('休憩時間が予期しない型:', {
+                breakTimes: row.break_times,
+                type: typeof row.break_times,
+                shiftStart: row.shift_start_time,
+                shiftEnd: row.shift_end_time
               });
+              continue;
             }
-          } else {
-            console.log('休憩時間がnullまたはundefined:', {
-              breakTimes: row.break_times
+            
+            console.log('休憩時間をパース:', {
+              rawBreakTimes: row.break_times,
+              parsedBreaks: breaks,
+              isArray: Array.isArray(breaks),
+              length: Array.isArray(breaks) ? breaks.length : 0,
+              shiftStart: row.shift_start_time,
+              shiftEnd: row.shift_end_time
+            });
+            
+            if (Array.isArray(breaks) && breaks.length > 0) {
+              allBreakTimes.push(...breaks);
+            }
+          } catch (e) {
+            console.error('休憩時間のパースエラー:', e, {
+              rawBreakTimes: row.break_times,
+              shiftStart: row.shift_start_time,
+              shiftEnd: row.shift_end_time
             });
           }
         }
