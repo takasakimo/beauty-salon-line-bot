@@ -225,6 +225,13 @@ export async function GET(request: NextRequest) {
               staffBreakTimes = typeof shift.break_times === 'string' 
                 ? JSON.parse(shift.break_times) 
                 : (shift.break_times || []);
+              console.log('スタッフの休憩時間を取得:', {
+                staffId,
+                date,
+                breakTimes: staffBreakTimes,
+                shiftStart: staffWorkingHours.start,
+                shiftEnd: staffWorkingHours.end
+              });
             } catch (e) {
               console.error('休憩時間のパースエラー:', e);
               staffBreakTimes = [];
@@ -692,6 +699,15 @@ export async function GET(request: NextRequest) {
     }
 
     // 空きスロットを返す（閉店時間と休憩時間を考慮）
+    console.log('スロットフィルタリング前:', {
+      totalSlots: slots.length,
+      slotsSample: slots.slice(0, 10),
+      staffBreakTimes,
+      closeTimeInMinutes,
+      duration,
+      unavailableSlotsCount: unavailableSlots.size
+    });
+    
     const availableSlots = slots.filter(slot => {
       // 既に予約済みのスロットは除外
       if (unavailableSlots.has(slot)) {
@@ -720,7 +736,7 @@ export async function GET(request: NextRequest) {
         // 注意: 休憩終了時刻ちょうど（例: 19:00）のスロットは予約可能とする
         const overlapsWithBreak = slotTimeInMinutes < breakEndTimeInMinutes && slotEndTimeInMinutes > breakStartTimeInMinutes;
         if (overlapsWithBreak) {
-          console.log('スロットが休憩時間と重複:', {
+          console.log('スロットが休憩時間と重複（除外）:', {
             slot,
             slotTimeInMinutes,
             slotEndTimeInMinutes,
@@ -733,6 +749,11 @@ export async function GET(request: NextRequest) {
       }
       
       return true;
+    });
+    
+    console.log('スロットフィルタリング後:', {
+      availableSlotsCount: availableSlots.length,
+      availableSlotsSample: availableSlots.slice(0, 10)
     });
     
     // デバッグログ（問題特定のため本番環境でも出力）
