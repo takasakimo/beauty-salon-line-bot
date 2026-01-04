@@ -15,7 +15,16 @@ export async function GET(request: NextRequest) {
 
     const date = request.nextUrl.searchParams.get('date');
     const menuIdParam = request.nextUrl.searchParams.get('menu_id');
-    const staffId = request.nextUrl.searchParams.get('staff_id');
+    const staffIdParam = request.nextUrl.searchParams.get('staff_id');
+    const staffId = staffIdParam ? parseInt(staffIdParam) : null;
+    
+    console.log('available-slots API呼び出し:', {
+      date,
+      menuIdParam,
+      staffIdParam,
+      staffId,
+      staffIdType: typeof staffId
+    });
 
     if (!date) {
       return NextResponse.json(
