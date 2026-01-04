@@ -250,6 +250,13 @@ function ReservationPageContent() {
       // staff_idパラメータを追加（スタッフが選択されている場合）
       const staffParam = selectedStaff ? `&staff_id=${selectedStaff.staff_id}` : '';
       
+      console.log('loadAvailableSlotsForAllDates:', {
+        selectedStaff: selectedStaff ? { staff_id: selectedStaff.staff_id, name: selectedStaff.name } : null,
+        staffParam,
+        menuIds,
+        totalDuration
+      });
+      
       // すべての日付の空き時間を取得（1ヶ月分 + 2週間カレンダー用）
       const dates = getDateOptions();
       const twoWeekDates = getTwoWeekDates().map(d => d.toISOString().split('T')[0]);
@@ -260,9 +267,9 @@ function ReservationPageContent() {
       await Promise.all(
         allDates.map(async (date) => {
           try {
-      const response = await fetch(
-              `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`
-      );
+            const url = `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`;
+            console.log('available-slots API呼び出し:', { date, url });
+            const response = await fetch(url);
             if (response.ok) {
       const data = await response.json();
               slotsByDate[date] = data;
