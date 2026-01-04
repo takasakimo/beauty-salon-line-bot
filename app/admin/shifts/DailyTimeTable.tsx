@@ -735,7 +735,7 @@ export default function DailyTimeTable({
               }) : -1;
               
               return (
-                <tr key={s.staff_id} className="border-b border-gray-200 relative" style={{ height: '180px', position: 'relative' }}>
+                <tr key={s.staff_id} className="border-b border-gray-200 relative" style={{ height: '120px', position: 'relative' }}>
                   <td className="border-r border-gray-300 p-3 bg-gray-50 sticky left-0 z-10 font-medium shadow-md" style={{ minWidth: '150px', width: '150px' }}>
                     {s.name}
                   </td>
@@ -755,7 +755,7 @@ export default function DailyTimeTable({
                         className={`border-r border-gray-200 p-0 ${
                           isWorkingTime ? 'bg-blue-50' : 'bg-white'
                         }`}
-                        style={{ height: '180px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
+                        style={{ height: '120px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
                         onClick={() => handleCellClick(s.staff_id, time)}
                       >
                         {/* シフト開始時間のセルにシフトブロックを表示 */}
@@ -774,12 +774,9 @@ export default function DailyTimeTable({
                             />
                             
                             {/* シフト内容 */}
-                            <div className="p-2 h-full flex flex-col justify-between items-start">
-                              <div className="font-semibold text-sm text-white whitespace-nowrap">
-                                開始 {shift.start_time}
-                              </div>
-                              <div className="font-semibold text-sm text-white whitespace-nowrap">
-                                終了 {shift.end_time}
+                            <div className="p-1 h-full flex flex-col justify-center items-start pl-2">
+                              <div className="font-semibold text-xs text-white whitespace-nowrap">
+                                {shift.start_time} - {shift.end_time}
                               </div>
                             </div>
 
@@ -807,25 +804,19 @@ export default function DailyTimeTable({
                                     onMouseDown={(e) => handleBreakResize(s.staff_id, idx, 'start', e)}
                                   />
                                   
-                                  <div className="p-1 h-full flex flex-col justify-center items-start pl-2 relative">
-                                    <div className="text-xs text-white whitespace-nowrap">
-                                      休憩 開始 {breakTime.start}
-                                    </div>
-                                    <div className="text-xs text-white whitespace-nowrap mt-0.5">
-                                      休憩 {breakTime.start}-{breakTime.end}
+                                  <div className="p-1 h-full flex items-center justify-center relative">
+                                    <div className="text-xs text-white whitespace-nowrap font-semibold">
+                                      {breakTime.start}-{breakTime.end}
                                     </div>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteBreak(s.staff_id, idx);
                                       }}
-                                      className="absolute top-1 right-1 text-white hover:text-red-200 opacity-0 group-hover/break:opacity-100 transition-opacity p-1"
+                                      className="absolute top-0.5 right-0.5 text-white hover:text-red-200 opacity-0 group-hover/break:opacity-100 transition-opacity p-0.5"
                                     >
                                       <XMarkIcon className="h-3 w-3" />
                                     </button>
-                                    <div className="text-xs text-white whitespace-nowrap mt-0.5 absolute bottom-1 left-2">
-                                      休憩 終了 {breakTime.end}
-                                    </div>
                                   </div>
                                   
                                   {/* 休憩終了時間リサイズハンドル */}
