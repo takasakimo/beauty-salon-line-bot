@@ -34,7 +34,8 @@ export default function DailyTimeTable({
   const [shifts, setShifts] = useState<Record<number, Shift>>({});
   const [loading, setLoading] = useState(true);
   const [draggingShift, setDraggingShift] = useState<{ staffId: number; edge: 'start' | 'end' } | null>(null);
-  const [draggingBreak, setDraggingBreak] = useState<{ staffId: number; breakIndex: number; edge: 'start' | 'end' } | null>(null);
+  const [draggingBreak, setDraggingBreak] = useState<{ staffId: number; breakIndex: number; edge: 'start' | 'end' | 'move' } | null>(null);
+  const [draggingBreakOffset, setDraggingBreakOffset] = useState<number>(0);
   const [businessHours, setBusinessHours] = useState<Record<string, { open: string; close: string; isOpen?: boolean }>>({});
   const [specialBusinessHours, setSpecialBusinessHours] = useState<Record<string, { open: string; close: string }>>({});
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
@@ -243,7 +244,8 @@ export default function DailyTimeTable({
     const minutes = firstHour * 60 + (positionPercent * totalMinutes);
     
     const hour = Math.floor(minutes / 60);
-    const minute = Math.floor((minutes % 60) / 30) * 30; // 30分刻み
+    // 15分刻みで時間を取得（より細かい精度）
+    const minute = Math.floor((minutes % 60) / 15) * 15;
     
     // 範囲を超える場合は、最後の時間スロットの1時間後まで許容
     if (hour < firstHour) {
@@ -436,6 +438,88 @@ export default function DailyTimeTable({
     setDraggingShift({ staffId, edge });
   };
 
+  // 休憩時間のドラッグ（移動）
+  const handleBreakDrag = (staffId: number, breakIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const shift = shifts[staffId];
+    if (!shift || !shift.start_time || !shift.end_time) return;
+
+    const breakTimes = typeof shift.break_times === 'string' 
+      ? JSON.parse(shift.break_times) 
+      : (shift.break_times || []);
+    
+    if (!breakTimes[breakIndex]) return;
+
+    const breakTime = breakTimes[breakIndex];
+    const initialBreakStartMinutes = timeToMinutes(breakTime.start);
+    const initialBreakEndMinutes = timeToMinutes(breakTime.end);
+    const breakDuration = initialBreakEndMinutes - initialBreakStartMinutes;
+    const initialX = e.clientX;
+    const initialTime = getTimeFromX(initialX);
+    if (!initialTime) return;
+    const initialTimeMinutes = timeToMinutes(initialTime);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const currentTime = getTimeFromX(moveEvent.clientX);
+      if (!currentTime) return;
+
+      const currentTimeMinutes = timeToMinutes(currentTime);
+      const offsetMinutes = currentTimeMinutes - initialTimeMinutes;
+      const newStartMinutes = initialBreakStartMinutes + offsetMinutes;
+      const newEndMinutes = newStartMinutes + breakDuration;
+
+      // 最新のシフト状態を取得
+      setShifts(prev => {
+        const currentShift = prev[staffId];
+        if (!currentShift || !currentShift.start_time || !currentShift.end_time) {
+          return prev;
+        }
+
+        const shiftStartMinutes = timeToMinutes(currentShift.start_time);
+        const shiftEndMinutes = timeToMinutes(currentShift.end_time);
+
+        // シフト時間内に収まるように調整
+        if (newStartMinutes >= shiftStartMinutes && newEndMinutes <= shiftEndMinutes) {
+          const currentBreakTimes = typeof currentShift.break_times === 'string' 
+            ? JSON.parse(currentShift.break_times) 
+            : (currentShift.break_times || []);
+          
+          const updatedBreakTimes = [...currentBreakTimes];
+          updatedBreakTimes[breakIndex] = {
+            start: minutesToTime(newStartMinutes),
+            end: minutesToTime(newEndMinutes)
+          };
+
+          return {
+            ...prev,
+            [staffId]: {
+              ...currentShift,
+              break_times: updatedBreakTimes
+            }
+          };
+        }
+        return prev;
+      });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      setDraggingBreak(null);
+      setDraggingBreakOffset(0);
+      // 最新の状態を保存
+      setTimeout(() => {
+        saveShift(staffId);
+      }, 0);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    setDraggingBreak({ staffId, breakIndex, edge: 'move' });
+  };
+
   // 休憩時間の開始/終了時間をリサイズ
   const handleBreakResize = (staffId: number, breakIndex: number, edge: 'start' | 'end', e: React.MouseEvent) => {
     e.preventDefault();
@@ -454,43 +538,68 @@ export default function DailyTimeTable({
       const time = getTimeFromX(moveEvent.clientX);
       if (!time) return;
 
-      const updatedBreakTimes = [...breakTimes];
-      const breakTime = updatedBreakTimes[breakIndex];
-      
-      if (edge === 'start') {
-        const endMinutes = timeToMinutes(breakTime.end);
-        const newStartMinutes = timeToMinutes(time);
-        if (newStartMinutes < endMinutes) {
-          updatedBreakTimes[breakIndex] = {
-            ...breakTime,
-            start: time
-          };
+      // 最新のシフト状態を取得
+      setShifts(prev => {
+        const currentShift = prev[staffId];
+        if (!currentShift || !currentShift.start_time || !currentShift.end_time) {
+          return prev;
         }
-      } else if (edge === 'end') {
-        const startMinutes = timeToMinutes(breakTime.start);
-        const newEndMinutes = timeToMinutes(time);
-        if (newEndMinutes > startMinutes) {
-          updatedBreakTimes[breakIndex] = {
-            ...breakTime,
-            end: time
-          };
-        }
-      }
 
-      setShifts(prev => ({
-        ...prev,
-        [staffId]: {
-          ...prev[staffId],
-          break_times: updatedBreakTimes
+        const currentBreakTimes = typeof currentShift.break_times === 'string' 
+          ? JSON.parse(currentShift.break_times) 
+          : (currentShift.break_times || []);
+        
+        if (!currentBreakTimes[breakIndex]) {
+          return prev;
         }
-      }));
+
+        const updatedBreakTimes = [...currentBreakTimes];
+        const breakTime = updatedBreakTimes[breakIndex];
+        const shiftStartMinutes = timeToMinutes(currentShift.start_time);
+        const shiftEndMinutes = timeToMinutes(currentShift.end_time);
+        
+        if (edge === 'start') {
+          const endMinutes = timeToMinutes(breakTime.end);
+          const newStartMinutes = timeToMinutes(time);
+          if (newStartMinutes < endMinutes && newStartMinutes >= shiftStartMinutes) {
+            updatedBreakTimes[breakIndex] = {
+              ...breakTime,
+              start: time
+            };
+          } else {
+            return prev;
+          }
+        } else if (edge === 'end') {
+          const startMinutes = timeToMinutes(breakTime.start);
+          const newEndMinutes = timeToMinutes(time);
+          if (newEndMinutes > startMinutes && newEndMinutes <= shiftEndMinutes) {
+            updatedBreakTimes[breakIndex] = {
+              ...breakTime,
+              end: time
+            };
+          } else {
+            return prev;
+          }
+        }
+
+        return {
+          ...prev,
+          [staffId]: {
+            ...currentShift,
+            break_times: updatedBreakTimes
+          }
+        };
+      });
     };
 
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       setDraggingBreak(null);
-      saveShift(staffId);
+      // 最新の状態を保存
+      setTimeout(() => {
+        saveShift(staffId);
+      }, 0);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -798,17 +907,27 @@ export default function DailyTimeTable({
                               return (
                                 <div
                                   key={idx}
-                                  className="absolute bg-gradient-to-r from-orange-400 to-orange-500 text-white text-xs rounded z-30 group/break border-2 border-white shadow-md"
+                                  className="absolute bg-gradient-to-r from-orange-400 to-orange-500 text-white text-xs rounded z-30 group/break border-2 border-white shadow-md cursor-move"
                                   style={getBreakBlockStyle(breakTime.start, breakTime.end, shift.start_time, shift.end_time)}
+                                  onMouseDown={(e) => {
+                                    // リサイズハンドル以外をクリックした場合はドラッグ
+                                    const target = e.target as HTMLElement;
+                                    if (!target.closest('.break-resize-handle')) {
+                                      handleBreakDrag(s.staff_id, idx, e);
+                                    }
+                                  }}
                                 >
                                   {/* 休憩開始時間リサイズハンドル */}
                                   <div
-                                    className="absolute top-0 bottom-0 left-0 w-1 bg-orange-600 cursor-ew-resize hover:bg-orange-700 opacity-0 group-hover/break:opacity-100"
-                                    onMouseDown={(e) => handleBreakResize(s.staff_id, idx, 'start', e)}
+                                    className="break-resize-handle absolute top-0 bottom-0 left-0 w-2 bg-orange-600 cursor-ew-resize hover:bg-orange-700 z-40"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      handleBreakResize(s.staff_id, idx, 'start', e);
+                                    }}
                                   />
                                   
                                   <div className="p-1 h-full flex items-center justify-center relative">
-                                    <div className="text-xs text-white whitespace-nowrap font-semibold">
+                                    <div className="text-xs text-white whitespace-nowrap font-semibold pointer-events-none">
                                       {breakTime.start}-{breakTime.end}
                                     </div>
                                     <button
@@ -816,7 +935,7 @@ export default function DailyTimeTable({
                                         e.stopPropagation();
                                         handleDeleteBreak(s.staff_id, idx);
                                       }}
-                                      className="absolute top-0.5 right-0.5 text-white hover:text-red-200 opacity-0 group-hover/break:opacity-100 transition-opacity p-0.5"
+                                      className="absolute top-0.5 right-0.5 text-white hover:text-red-200 opacity-0 group-hover/break:opacity-100 transition-opacity p-0.5 z-50"
                                     >
                                       <XMarkIcon className="h-3 w-3" />
                                     </button>
@@ -824,8 +943,11 @@ export default function DailyTimeTable({
                                   
                                   {/* 休憩終了時間リサイズハンドル */}
                                   <div
-                                    className="absolute top-0 bottom-0 right-0 w-1 bg-orange-600 cursor-ew-resize hover:bg-orange-700 opacity-0 group-hover/break:opacity-100"
-                                    onMouseDown={(e) => handleBreakResize(s.staff_id, idx, 'end', e)}
+                                    className="break-resize-handle absolute top-0 bottom-0 right-0 w-2 bg-orange-600 cursor-ew-resize hover:bg-orange-700 z-40"
+                                    onMouseDown={(e) => {
+                                      e.stopPropagation();
+                                      handleBreakResize(s.staff_id, idx, 'end', e);
+                                    }}
                                   />
                                 </div>
                               );
