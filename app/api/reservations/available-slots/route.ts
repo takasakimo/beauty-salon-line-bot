@@ -364,7 +364,7 @@ export async function GET(request: NextRequest) {
       staffId
     });
     
-    // 営業時間のスロットを生成（30分間隔）
+    // 営業時間のスロットを生成（15分間隔）
     // メニューの所要時間を考慮して、シフト終了時間を超えないスロットのみを生成
     const slots: string[] = [];
     // 営業時間が有効な場合のみスロットを生成
@@ -383,9 +383,9 @@ export async function GET(request: NextRequest) {
         maxEndTimeFormatted: `${Math.floor(closeTimeInMinutes / 60).toString().padStart(2, '0')}:${(closeTimeInMinutes % 60).toString().padStart(2, '0')}`
       });
       
-      // 最大開始時間を超えないスロットのみを生成
+      // 最大開始時間を超えないスロットのみを生成（15分間隔）
       // 例: 20:00終了、60分予約の場合、19:00までのスロットのみ生成（19:00開始なら20:00終了）
-      for (let time = openTimeInMinutes; time <= maxStartTimeInMinutes; time += 30) {
+      for (let time = openTimeInMinutes; time <= maxStartTimeInMinutes; time += 15) {
         const hour = Math.floor(time / 60);
         const minute = time % 60;
         const slotTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
@@ -717,7 +717,17 @@ export async function GET(request: NextRequest) {
         
         // スロットの時間帯が休憩時間と重複しているかチェック
         // スロット開始時間 < 休憩終了時間 && スロット終了時間 > 休憩開始時間
-        if (slotTimeInMinutes < breakEndTimeInMinutes && slotEndTimeInMinutes > breakStartTimeInMinutes) {
+        // 注意: 休憩終了時刻ちょうど（例: 19:00）のスロットは予約可能とする
+        const overlapsWithBreak = slotTimeInMinutes < breakEndTimeInMinutes && slotEndTimeInMinutes > breakStartTimeInMinutes;
+        if (overlapsWithBreak) {
+          console.log('スロットが休憩時間と重複:', {
+            slot,
+            slotTimeInMinutes,
+            slotEndTimeInMinutes,
+            breakTime: `${breakTime.start}-${breakTime.end}`,
+            breakStartTimeInMinutes,
+            breakEndTimeInMinutes
+          });
           return false;
         }
       }
