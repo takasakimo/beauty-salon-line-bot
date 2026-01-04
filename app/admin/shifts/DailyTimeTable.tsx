@@ -37,9 +37,9 @@ export default function DailyTimeTable({
   const [draggingBreak, setDraggingBreak] = useState<{ staffId: number; breakIndex: number; edge: 'start' | 'end' } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // 時間スロット（6:00-19:00、1時間刻み）
+  // 時間スロット（6:00-22:00、1時間刻み）
   const timeSlots: string[] = [];
-  for (let hour = 6; hour <= 19; hour++) {
+  for (let hour = 6; hour <= 22; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
   }
 
@@ -141,17 +141,17 @@ export default function DailyTimeTable({
     const timeSlotWidth = 80; // 各時間セルの幅（min-w-[80px]）
     const totalWidth = timeSlots.length * timeSlotWidth;
     
-    // 時間列内での位置を計算（6:00-19:00の範囲）
+    // 時間列内での位置を計算（6:00-22:00の範囲）
     const positionPercent = relativeX / totalWidth;
     if (positionPercent < 0 || positionPercent > 1) return null;
     
-    const totalMinutes = 13 * 60; // 6:00-19:00の13時間
+    const totalMinutes = (22 - 6) * 60; // 6:00-22:00の16時間
     const minutes = 6 * 60 + (positionPercent * totalMinutes); // 6:00を基準
     
     const hour = Math.floor(minutes / 60);
     const minute = Math.floor((minutes % 60) / 30) * 30; // 30分刻み
     
-    if (hour < 6 || hour > 19) return null;
+    if (hour < 6 || hour > 22) return null;
     return minutesToTime(hour * 60 + minute);
   };
 
@@ -169,10 +169,11 @@ export default function DailyTimeTable({
     const offsetInCell = startMinutes - startSlotMinutes; // セル内での分（0-60）
     
     // 終了時間がどのセルに該当するかを計算
+    // 終了時間がセルの開始時間と一致する場合も含める
     const endSlotIndex = timeSlots.findIndex(time => {
       const timeMinutes = timeToMinutes(time);
       const nextTimeMinutes = timeMinutes + 60;
-      return timeMinutes < endMinutes && nextTimeMinutes >= endMinutes;
+      return timeMinutes <= endMinutes && nextTimeMinutes > endMinutes;
     });
     
     // セル幅（80px）を基準に計算
@@ -180,12 +181,20 @@ export default function DailyTimeTable({
     const offsetPx = (offsetInCell / 60) * cellWidth; // セル内でのオフセット（px）
     
     // ブロックがまたがるセル数
-    const spanCells = endSlotIndex !== -1 ? endSlotIndex - startSlotIndex + 1 : timeSlots.length - startSlotIndex;
+    // 終了時間がセルの開始時間と一致する場合、そのセルを含める
+    const spanCells = endSlotIndex !== -1 
+      ? endSlotIndex - startSlotIndex + 1 
+      : Math.ceil((endMinutes - startSlotMinutes) / 60);
     
     // 終了セル内での位置
-    const endSlotMinutes = endSlotIndex !== -1 ? timeToMinutes(timeSlots[endSlotIndex]) : timeToMinutes(timeSlots[timeSlots.length - 1]) + 60;
+    const endSlotMinutes = endSlotIndex !== -1 
+      ? timeToMinutes(timeSlots[endSlotIndex]) 
+      : timeToMinutes(timeSlots[timeSlots.length - 1]) + 60;
     const endOffsetInCell = endMinutes - endSlotMinutes;
-    const endOffsetPx = (endOffsetInCell / 60) * cellWidth;
+    // 終了時間がセルの開始位置と一致する場合、そのセル全体を含める
+    const endOffsetPx = endOffsetInCell === 0 
+      ? cellWidth 
+      : (endOffsetInCell / 60) * cellWidth;
     
     // 左位置: セル内でのオフセット（tdを基準）
     const leftPx = offsetPx;
