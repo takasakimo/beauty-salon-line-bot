@@ -299,11 +299,47 @@ export default function DailyTimeTable({
     const endSlotMinutes = timeToMinutes(timeSlots[endSlotIndex]);
     const endOffsetInCell = endMinutes - endSlotMinutes;
     
-    // 終了時間がセルの開始位置と一致する場合、そのセル全体を含める
+    // 終了時間がセルの開始位置と一致する場合、そのセルは含めない（前のセルの終了位置で終了）
     // 終了時間がセル内にある場合、その位置まで表示
-    const endOffsetPx = endOffsetInCell <= 0 
-      ? cellWidth  // 終了時間がセルの開始位置以下の場合、セル全体を含める
-      : Math.min((endOffsetInCell / 60) * cellWidth, cellWidth); // セル内の位置
+    if (endOffsetInCell === 0) {
+      // 終了時間がセルの開始位置と一致する場合、そのセルは含めない
+      // endSlotIndexを1つ前にずらす
+      if (endSlotIndex > startSlotIndex) {
+        endSlotIndex = endSlotIndex - 1;
+        const prevEndSlotMinutes = timeToMinutes(timeSlots[endSlotIndex]);
+        const prevEndOffsetInCell = endMinutes - prevEndSlotMinutes;
+        // 前のセルの終了位置（セル全体）で終了
+        const endOffsetPx = cellWidth;
+        
+        // ブロックがまたがるセル数を再計算
+        const spanCells = endSlotIndex - startSlotIndex + 1;
+        
+        // 左位置: セル内でのオフセット（tdを基準）
+        const leftPx = offsetPx;
+        
+        // 幅: またがるセル数 * セル幅 - 開始オフセット + 終了オフセット
+        const widthPx = (spanCells * cellWidth) - offsetPx + endOffsetPx;
+        
+        return {
+          left: `${leftPx}px`,
+          width: `${widthPx}px`,
+          minWidth: '40px'
+        };
+      } else {
+        // 開始セルと終了セルが同じ場合、セル内の位置で終了
+        const endOffsetPx = 0;
+        const widthPx = cellWidth - offsetPx + endOffsetPx;
+        
+        return {
+          left: `${offsetPx}px`,
+          width: `${widthPx}px`,
+          minWidth: '40px'
+        };
+      }
+    }
+    
+    // 終了時間がセル内にある場合、その位置まで表示
+    const endOffsetPx = Math.min((endOffsetInCell / 60) * cellWidth, cellWidth);
     
     // 左位置: セル内でのオフセット（tdを基準）
     const leftPx = offsetPx;
