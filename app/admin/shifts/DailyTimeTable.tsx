@@ -111,8 +111,9 @@ export default function DailyTimeTable({
     const [closeHour, closeMinute] = dayHours.close.split(':').map(Number);
     
     // 開始時間を1時間前に、終了時間を1時間後に拡張（余裕を持たせる）
+    // また、シフトの終了時間が営業時間を超える場合にも対応できるように、最大22時まで表示
     const startHour = Math.max(0, openHour - 1);
-    const endHour = Math.min(23, closeHour + 1);
+    const endHour = Math.max(Math.min(23, closeHour + 1), 22); // 最低でも22時まで表示
     
     const slots: string[] = [];
     for (let hour = startHour; hour <= endHour; hour++) {
