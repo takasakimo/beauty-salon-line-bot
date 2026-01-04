@@ -218,7 +218,7 @@ export default function DailyTimeTable({
     if (relativeX < 0) return null;
     
     // 時間列の幅を計算（各時間セルの幅）
-    const timeSlotWidth = 80; // 各時間セルの幅（min-w-[80px]）
+    const timeSlotWidth = 120; // 各時間セルの幅
     const totalWidth = timeSlots.length * timeSlotWidth;
     
     // 時間列内での位置を計算
@@ -288,8 +288,8 @@ export default function DailyTimeTable({
       }
     }
     
-    // セル幅（80px）を基準に計算
-    const cellWidth = 80; // 各セルの幅（px）
+    // セル幅（120px）を基準に計算
+    const cellWidth = 120; // 各セルの幅（px）
     const offsetPx = (offsetInCell / 60) * cellWidth; // セル内でのオフセット（px）
     
     // ブロックがまたがるセル数
@@ -700,16 +700,17 @@ export default function DailyTimeTable({
 
       {/* タイムテーブル */}
       <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-        <table className="min-w-full border-collapse">
+        <table className="w-full border-collapse" style={{ minWidth: `${120 + timeSlots.length * 120}px` }}>
           <thead>
             <tr className="bg-blue-600 border-b border-blue-700">
-              <th className="border-r border-blue-700 p-3 text-left font-semibold bg-blue-600 text-white sticky left-0 z-20 shadow-lg min-w-[120px]">
+              <th className="border-r border-blue-700 p-3 text-left font-semibold bg-blue-600 text-white sticky left-0 z-20 shadow-lg" style={{ minWidth: '150px', width: '150px' }}>
                 従業員名
               </th>
               {timeSlots.map((time) => (
                 <th
                   key={time}
-                  className="border-r border-blue-700 p-2 text-center font-semibold text-white text-xs min-w-[80px] bg-blue-600"
+                  className="border-r border-blue-700 p-2 text-center font-semibold text-white text-sm bg-blue-600"
+                  style={{ minWidth: '120px', width: '120px' }}
                 >
                   {time}
                 </th>
@@ -735,7 +736,7 @@ export default function DailyTimeTable({
               
               return (
                 <tr key={s.staff_id} className="border-b border-gray-200 relative" style={{ height: '80px', position: 'relative' }}>
-                  <td className="border-r border-gray-300 p-3 bg-gray-50 sticky left-0 z-10 font-medium shadow-md min-w-[120px]">
+                  <td className="border-r border-gray-300 p-3 bg-gray-50 sticky left-0 z-10 font-medium shadow-md" style={{ minWidth: '150px', width: '150px' }}>
                     {s.name}
                   </td>
                   {timeSlots.map((time, timeIndex) => {
@@ -754,7 +755,7 @@ export default function DailyTimeTable({
                         className={`border-r border-gray-200 p-0 ${
                           isWorkingTime ? 'bg-blue-50' : 'bg-white'
                         }`}
-                        style={{ height: '80px', minWidth: '80px', position: 'relative', overflow: 'visible' }}
+                        style={{ height: '80px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
                         onClick={() => handleCellClick(s.staff_id, time)}
                       >
                         {/* シフト開始時間のセルにシフトブロックを表示 */}
