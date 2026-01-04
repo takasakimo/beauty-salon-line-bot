@@ -200,8 +200,18 @@ export async function PUT(request: NextRequest) {
     // temporary_closed_daysカラムが存在する場合のみ更新
     if (temporary_closed_days !== undefined && temporaryClosedDaysColumnExists) {
       updates.push(`temporary_closed_days = $${paramIndex}`);
-      values.push(JSON.stringify(temporary_closed_days));
+      // 空の配列の場合は明示的に空配列として保存
+      const valueToSave = Array.isArray(temporary_closed_days) && temporary_closed_days.length === 0
+        ? '[]'
+        : JSON.stringify(temporary_closed_days);
+      values.push(valueToSave);
       paramIndex++;
+      console.log('temporary_closed_daysを更新:', { 
+        temporary_closed_days, 
+        valueToSave,
+        isArray: Array.isArray(temporary_closed_days),
+        length: Array.isArray(temporary_closed_days) ? temporary_closed_days.length : 'N/A'
+      });
     } else if (temporary_closed_days !== undefined && !temporaryClosedDaysColumnExists) {
       console.log('temporary_closed_daysカラムが存在しないため、スキップします');
     }

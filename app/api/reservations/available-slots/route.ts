@@ -111,13 +111,29 @@ export async function GET(request: NextRequest) {
     // 臨時休業日を取得
     let temporaryClosedDays: string[] = [];
     try {
-      if (tenantResult.rows[0]?.temporary_closed_days) {
-        temporaryClosedDays = typeof tenantResult.rows[0].temporary_closed_days === 'string'
-          ? JSON.parse(tenantResult.rows[0].temporary_closed_days)
-          : tenantResult.rows[0].temporary_closed_days;
+      const rawValue = tenantResult.rows[0]?.temporary_closed_days;
+      if (rawValue) {
+        if (typeof rawValue === 'string') {
+          // 空文字列やnullの場合は空配列を返す
+          const trimmed = rawValue.trim();
+          if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null') {
+            temporaryClosedDays = [];
+          } else {
+            temporaryClosedDays = JSON.parse(rawValue);
+          }
+        } else if (Array.isArray(rawValue)) {
+          temporaryClosedDays = rawValue;
+        } else {
+          temporaryClosedDays = [];
+        }
+        // 配列でない場合は空配列にする
+        if (!Array.isArray(temporaryClosedDays)) {
+          temporaryClosedDays = [];
+        }
       }
     } catch (e) {
       console.error('temporary_closed_daysのパースエラー:', e);
+      temporaryClosedDays = [];
     }
     
     // 特別営業時間を取得
@@ -138,8 +154,26 @@ export async function GET(request: NextRequest) {
     const dayOfWeek = dateObj.getDay();
     
     // 臨時休業日の場合は空のスロットを返す
-    if (temporaryClosedDays.includes(date)) {
-      return NextResponse.json([]);
+    // 日付のフォーマットを正規化して比較（YYYY-MM-DD形式に統一、時刻部分があれば除去）
+    const normalizedDate = date.split('T')[0].split(' ')[0]; // 時刻部分や時刻情報があれば除去
+    if (Array.isArray(temporaryClosedDays) && temporaryClosedDays.length > 0) {
+      // 各日付を正規化して比較
+      const normalizedClosedDays = temporaryClosedDays.map(d => {
+        if (typeof d === 'string') {
+          return d.split('T')[0].split(' ')[0]; // 時刻部分があれば除去
+        }
+        return String(d).split('T')[0].split(' ')[0];
+      });
+      
+      if (normalizedClosedDays.includes(normalizedDate)) {
+        console.log('臨時休業日のため空のスロットを返します:', { 
+          date, 
+          normalizedDate, 
+          temporaryClosedDays,
+          normalizedClosedDays 
+        });
+        return NextResponse.json([]);
+      }
     }
     
     // 曜日ベースの定休日チェック（closed_daysに含まれている曜日の場合は空のスロットを返す）

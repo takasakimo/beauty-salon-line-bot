@@ -265,13 +265,29 @@ export async function POST(request: NextRequest) {
     // 臨時休業日を取得
     let temporaryClosedDays: string[] = [];
     try {
-      if (tenantResult.rows[0]?.temporary_closed_days) {
-        temporaryClosedDays = typeof tenantResult.rows[0].temporary_closed_days === 'string'
-          ? JSON.parse(tenantResult.rows[0].temporary_closed_days)
-          : tenantResult.rows[0].temporary_closed_days;
+      const rawValue = tenantResult.rows[0]?.temporary_closed_days;
+      if (rawValue) {
+        if (typeof rawValue === 'string') {
+          // 空文字列やnullの場合は空配列を返す
+          const trimmed = rawValue.trim();
+          if (trimmed === '' || trimmed === 'null' || trimmed === '[]' || trimmed === 'null') {
+            temporaryClosedDays = [];
+          } else {
+            temporaryClosedDays = JSON.parse(rawValue);
+          }
+        } else if (Array.isArray(rawValue)) {
+          temporaryClosedDays = rawValue;
+        } else {
+          temporaryClosedDays = [];
+        }
+        // 配列でない場合は空配列にする
+        if (!Array.isArray(temporaryClosedDays)) {
+          temporaryClosedDays = [];
+        }
       }
     } catch (e) {
       console.error('temporary_closed_daysのパースエラー:', e);
+      temporaryClosedDays = [];
     }
 
     // 予約日時を計算（合計時間を使用）
@@ -304,11 +320,29 @@ export async function POST(request: NextRequest) {
     const dayOfWeek = new Date(year, month - 1, day).getDay();
     
     // 臨時休業日のチェック
-    if (Array.isArray(temporaryClosedDays) && temporaryClosedDays.includes(reservationDateStr)) {
-      return NextResponse.json(
-        { success: false, error: '選択された日付は臨時休業日のため、予約できません。別の日付を選択してください。' },
-        { status: 400 }
-      );
+    // 日付のフォーマットを正規化して比較（YYYY-MM-DD形式に統一、時刻部分があれば除去）
+    const normalizedReservationDate = reservationDateStr.split('T')[0].split(' ')[0];
+    if (Array.isArray(temporaryClosedDays) && temporaryClosedDays.length > 0) {
+      // 各日付を正規化して比較
+      const normalizedClosedDays = temporaryClosedDays.map(d => {
+        if (typeof d === 'string') {
+          return d.split('T')[0].split(' ')[0]; // 時刻部分があれば除去
+        }
+        return String(d).split('T')[0].split(' ')[0];
+      });
+      
+      if (normalizedClosedDays.includes(normalizedReservationDate)) {
+        console.log('臨時休業日のため予約不可（管理画面）:', { 
+          reservationDateStr, 
+          normalizedReservationDate, 
+          temporaryClosedDays,
+          normalizedClosedDays 
+        });
+        return NextResponse.json(
+          { success: false, error: '選択された日付は臨時休業日のため、予約できません。別の日付を選択してください。' },
+          { status: 400 }
+        );
+      }
     }
     
     // 曜日ベースの定休日チェック
