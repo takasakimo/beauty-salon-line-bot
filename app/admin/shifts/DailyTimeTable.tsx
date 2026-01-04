@@ -40,6 +40,7 @@ export default function DailyTimeTable({
   const [specialBusinessHours, setSpecialBusinessHours] = useState<Record<string, { open: string; close: string }>>({});
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const tableRef = useRef<HTMLDivElement>(null);
+  const shiftsRef = useRef<Record<number, Shift>>({});
 
   // 営業時間を取得
   useEffect(() => {
@@ -60,6 +61,11 @@ export default function DailyTimeTable({
       loadShifts();
     }
   }, [selectedDate, staff, timeSlots]);
+
+  // shiftsの変更をshiftsRefに同期
+  useEffect(() => {
+    shiftsRef.current = shifts;
+  }, [shifts]);
 
   // 営業時間を取得
   const loadBusinessHours = async () => {
@@ -646,20 +652,27 @@ export default function DailyTimeTable({
 
   // シフトを保存
   const saveShift = async (staffId: number) => {
-    const shift = shifts[staffId];
-    if (!shift) return;
+    // 最新の状態を取得（useRefから）
+    const currentShift = shiftsRef.current[staffId];
+
+    if (!currentShift) {
+      console.warn('シフトが見つかりません');
+      return;
+    }
 
     // 開始時間と終了時間が両方ある場合のみ保存
-    if (!shift.start_time || !shift.end_time) {
+    if (!currentShift.start_time || !currentShift.end_time) {
       console.warn('シフトの開始時間または終了時間が設定されていません');
       return;
     }
 
     try {
       const dateStr = selectedDate.toISOString().split('T')[0];
-      const breakTimes = typeof shift.break_times === 'string' 
-        ? JSON.parse(shift.break_times) 
-        : (shift.break_times || []);
+      const breakTimes = typeof currentShift.break_times === 'string' 
+        ? JSON.parse(currentShift.break_times) 
+        : (currentShift.break_times || []);
+
+      console.log('saveShift: saving', { staffId, dateStr, breakTimes });
 
       const url = getApiUrlWithTenantId('/api/admin/shifts');
       const response = await fetch(url, {
@@ -672,9 +685,9 @@ export default function DailyTimeTable({
           shifts: [{
             staff_id: staffId,
             shift_date: dateStr,
-            start_time: shift.start_time,
-            end_time: shift.end_time,
-            is_off: shift.is_off,
+            start_time: currentShift.start_time,
+            end_time: currentShift.end_time,
+            is_off: currentShift.is_off,
             break_times: breakTimes
           }]
         }),
@@ -683,15 +696,16 @@ export default function DailyTimeTable({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('シフト保存エラー:', errorData);
-        // エラーが発生した場合、シフトデータを再読み込み
+        // エラーが発生した場合のみ、シフトデータを再読み込み
         await loadShifts();
       } else {
-        // 保存成功後、シフトデータを再読み込みして最新の状態を反映
-        await loadShifts();
+        console.log('saveShift: saved successfully');
+        // 保存成功後は再読み込みしない（状態を保持）
+        // 必要に応じて、保存されたデータを確認するだけ
       }
     } catch (error) {
       console.error('シフト保存エラー:', error);
-      // エラーが発生した場合、シフトデータを再読み込み
+      // エラーが発生した場合のみ、シフトデータを再読み込み
       await loadShifts();
     }
   };
