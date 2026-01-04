@@ -200,6 +200,7 @@ export async function GET(request: NextRequest) {
     let staffBreakTimes: Array<{ start: string; end: string }> = []; // 休憩時間を保持
     
     if (staffId) {
+      console.log('スタッフ指定時の処理開始:', { staffId, date, tenantId });
       try {
         // まずシフトを確認（break_timesも取得）
         const shiftResult = await query(
@@ -209,11 +210,23 @@ export async function GET(request: NextRequest) {
           [staffId, tenantId, date]
         );
         
+        console.log('スタッフシフト取得結果:', {
+          rowCount: shiftResult.rows.length,
+          rows: shiftResult.rows.map((row: any) => ({
+            startTime: row.start_time,
+            endTime: row.end_time,
+            isOff: row.is_off,
+            breakTimes: row.break_times,
+            breakTimesType: typeof row.break_times
+          }))
+        });
+        
         if (shiftResult.rows.length > 0) {
           const shift = shiftResult.rows[0];
           if (shift.is_off) {
             // 休みの場合は空き時間を返さない
             isStaffOff = true;
+            console.log('スタッフは休みです:', { staffId, date });
           } else if (shift.start_time && shift.end_time) {
             // シフトが設定されている場合はそれを使用
             staffWorkingHours = {
@@ -222,6 +235,10 @@ export async function GET(request: NextRequest) {
             };
             // 休憩時間を取得
             try {
+              console.log('休憩時間のパース前:', {
+                rawBreakTimes: shift.break_times,
+                type: typeof shift.break_times
+              });
               staffBreakTimes = typeof shift.break_times === 'string' 
                 ? JSON.parse(shift.break_times) 
                 : (shift.break_times || []);
@@ -230,14 +247,24 @@ export async function GET(request: NextRequest) {
                 date,
                 breakTimes: staffBreakTimes,
                 shiftStart: staffWorkingHours.start,
-                shiftEnd: staffWorkingHours.end
+                shiftEnd: staffWorkingHours.end,
+                isArray: Array.isArray(staffBreakTimes),
+                length: Array.isArray(staffBreakTimes) ? staffBreakTimes.length : 0
               });
             } catch (e) {
-              console.error('休憩時間のパースエラー:', e);
+              console.error('休憩時間のパースエラー:', e, {
+                rawBreakTimes: shift.break_times
+              });
               staffBreakTimes = [];
             }
+          } else {
+            console.log('シフトの開始時間または終了時間が設定されていません:', {
+              startTime: shift.start_time,
+              endTime: shift.end_time
+            });
           }
         } else {
+          console.log('シフトが設定されていません。デフォルトの勤務時間を使用します:', { staffId, date });
           // シフトが設定されていない場合は、デフォルトの勤務時間を使用
           const staffResult = await query(
             'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
@@ -248,6 +275,7 @@ export async function GET(request: NextRequest) {
             const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
             if (match) {
               staffWorkingHours = { start: match[1], end: match[2] };
+              console.log('デフォルトの勤務時間を使用:', staffWorkingHours);
             }
           }
         }
@@ -276,19 +304,47 @@ export async function GET(request: NextRequest) {
         
         // 全スタッフの休憩時間を統合（スタッフ未指定の場合は全スタッフの休憩時間を除外）
         const allBreakTimes: Array<{ start: string; end: string }> = [];
+        console.log('全スタッフのシフト取得結果:', {
+          rowCount: allStaffShiftsResult.rows.length,
+          rows: allStaffShiftsResult.rows.map((row: any) => ({
+            shiftStart: row.shift_start_time,
+            shiftEnd: row.shift_end_time,
+            isOff: row.is_off,
+            breakTimes: row.break_times,
+            breakTimesType: typeof row.break_times
+          }))
+        });
+        
         for (const row of allStaffShiftsResult.rows) {
           if (row.break_times) {
             try {
               const breaks = typeof row.break_times === 'string' 
                 ? JSON.parse(row.break_times) 
                 : (row.break_times || []);
-              allBreakTimes.push(...breaks);
+              console.log('休憩時間をパース:', {
+                rawBreakTimes: row.break_times,
+                parsedBreaks: breaks,
+                isArray: Array.isArray(breaks)
+              });
+              if (Array.isArray(breaks) && breaks.length > 0) {
+                allBreakTimes.push(...breaks);
+              }
             } catch (e) {
-              console.error('休憩時間のパースエラー:', e);
+              console.error('休憩時間のパースエラー:', e, {
+                rawBreakTimes: row.break_times
+              });
             }
+          } else {
+            console.log('休憩時間がnullまたはundefined:', {
+              breakTimes: row.break_times
+            });
           }
         }
         staffBreakTimes = allBreakTimes;
+        console.log('全スタッフの休憩時間統合結果:', {
+          totalBreakTimes: staffBreakTimes.length,
+          breakTimes: staffBreakTimes
+        });
         
         // 最も早いシフト開始時間と最も遅いシフト終了時間を取得
         let earliestStartTime: string | null = null;
