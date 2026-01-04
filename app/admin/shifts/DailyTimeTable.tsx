@@ -372,6 +372,9 @@ export default function DailyTimeTable({
     return {
       left: `${leftPercent}%`,
       width: `${widthPercent}%`,
+      top: '8px',
+      bottom: '8px',
+      height: 'auto',
       minWidth: '20px'
     };
   };
