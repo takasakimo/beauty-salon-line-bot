@@ -338,10 +338,10 @@ export async function POST(request: NextRequest) {
     
     // スタッフが指定されている場合、シフトを確認してから時間の重複チェック
     if (staff_id) {
-      // まずシフトを確認
+      // まずシフトを確認（break_timesも取得）
       try {
         const shiftResult = await query(
-          `SELECT start_time, end_time, is_off 
+          `SELECT start_time, end_time, is_off, COALESCE(break_times, '[]'::jsonb) as break_times
            FROM staff_shifts 
            WHERE staff_id = $1 AND tenant_id = $2 AND shift_date = $3`,
           [staff_id, tenantId, reservationDateStr]
@@ -377,6 +377,30 @@ export async function POST(request: NextRequest) {
                 { error: `予約終了時間がスタッフのシフト終了時間（${shiftEndTime}）を超えるため、予約できません。別の時間を選択してください。` },
                 { status: 400 }
               );
+            }
+            
+            // 休憩時間と重複していないかチェック
+            try {
+              const breakTimes = typeof shift.break_times === 'string' 
+                ? JSON.parse(shift.break_times) 
+                : (shift.break_times || []);
+              
+              for (const breakTime of breakTimes) {
+                const [breakStartHour, breakStartMinute] = breakTime.start.split(':').map(Number);
+                const [breakEndHour, breakEndMinute] = breakTime.end.split(':').map(Number);
+                const breakStartTimeInMinutes = breakStartHour * 60 + breakStartMinute;
+                const breakEndTimeInMinutes = breakEndHour * 60 + breakEndMinute;
+                
+                // 予約時間帯が休憩時間と重複しているかチェック
+                if (reservationStartTimeInMinutes < breakEndTimeInMinutes && reservationEndTimeInMinutes > breakStartTimeInMinutes) {
+                  return NextResponse.json(
+                    { error: `この時間帯はスタッフの休憩時間（${breakTime.start}～${breakTime.end}）と重複しているため、予約できません。別の時間を選択してください。` },
+                    { status: 400 }
+                  );
+                }
+              }
+            } catch (e) {
+              console.error('休憩時間のパースエラー:', e);
             }
           }
         }
@@ -478,13 +502,14 @@ export async function POST(request: NextRequest) {
     } else {
       // スタッフが指定されていない場合：その時間帯に勤務しているスタッフがいるか、予約可能かをチェック
       try {
-        // その日付に勤務しているスタッフを取得（シフトまたはデフォルト勤務時間）
+        // その日付に勤務しているスタッフを取得（シフトまたはデフォルト勤務時間、休憩時間も取得）
         const workingStaffResult = await query(
           `SELECT 
             s.staff_id,
             COALESCE(ss.start_time, NULL) as shift_start_time,
             COALESCE(ss.end_time, NULL) as shift_end_time,
             COALESCE(ss.is_off, false) as is_off,
+            COALESCE(ss.break_times, '[]'::jsonb) as break_times,
             s.working_hours
           FROM staff s
           LEFT JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
@@ -550,11 +575,37 @@ export async function POST(request: NextRequest) {
             });
             
             if (isWithinWorkingHours) {
-              availableStaff.push({
-                staff_id: staffRow.staff_id,
-                start_time: staffStartTimeInMinutes,
-                end_time: staffEndTimeInMinutes
-              });
+              // 休憩時間と重複していないかチェック
+              let hasBreakConflict = false;
+              try {
+                const breakTimes = typeof staffRow.break_times === 'string' 
+                  ? JSON.parse(staffRow.break_times) 
+                  : (staffRow.break_times || []);
+                
+                for (const breakTime of breakTimes) {
+                  const [breakStartHour, breakStartMinute] = breakTime.start.split(':').map(Number);
+                  const [breakEndHour, breakEndMinute] = breakTime.end.split(':').map(Number);
+                  const breakStartTimeInMinutes = breakStartHour * 60 + breakStartMinute;
+                  const breakEndTimeInMinutes = breakEndHour * 60 + breakEndMinute;
+                  
+                  // 予約時間帯が休憩時間と重複しているかチェック
+                  if (reservationStartTimeInMinutes < breakEndTimeInMinutes && reservationEndTimeInMinutes > breakStartTimeInMinutes) {
+                    hasBreakConflict = true;
+                    break;
+                  }
+                }
+              } catch (e) {
+                console.error('休憩時間のパースエラー:', e);
+              }
+              
+              // 休憩時間と重複していない場合のみ利用可能なスタッフに追加
+              if (!hasBreakConflict) {
+                availableStaff.push({
+                  staff_id: staffRow.staff_id,
+                  start_time: staffStartTimeInMinutes,
+                  end_time: staffEndTimeInMinutes
+                });
+              }
             }
           } else {
             // 勤務時間が設定されていないスタッフも利用可能として扱う（後方互換性のため）
