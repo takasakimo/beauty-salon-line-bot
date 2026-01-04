@@ -669,7 +669,7 @@ export default function DailyTimeTable({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6" ref={tableRef}>
+    <div className="bg-white rounded-lg shadow-lg p-6 w-full" ref={tableRef} style={{ maxWidth: '100%', overflow: 'visible' }}>
       {/* ヘッダー */}
       <div className="mb-4">
         <div className="bg-blue-600 text-white px-4 py-2 rounded-t-lg">
@@ -699,8 +699,8 @@ export default function DailyTimeTable({
       </div>
 
       {/* タイムテーブル */}
-      <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-        <table className="w-full border-collapse" style={{ minWidth: `${120 + timeSlots.length * 120}px` }}>
+      <div className="overflow-x-auto bg-white rounded-lg shadow-lg w-full">
+        <table className="border-collapse" style={{ minWidth: `${150 + timeSlots.length * 120}px`, width: 'auto' }}>
           <thead>
             <tr className="bg-blue-600 border-b border-blue-700">
               <th className="border-r border-blue-700 p-3 text-left font-semibold bg-blue-600 text-white sticky left-0 z-20 shadow-lg" style={{ minWidth: '150px', width: '150px' }}>
@@ -735,7 +735,7 @@ export default function DailyTimeTable({
               }) : -1;
               
               return (
-                <tr key={s.staff_id} className="border-b border-gray-200 relative" style={{ height: '80px', position: 'relative' }}>
+                <tr key={s.staff_id} className="border-b border-gray-200 relative" style={{ height: '180px', position: 'relative' }}>
                   <td className="border-r border-gray-300 p-3 bg-gray-50 sticky left-0 z-10 font-medium shadow-md" style={{ minWidth: '150px', width: '150px' }}>
                     {s.name}
                   </td>
@@ -755,7 +755,7 @@ export default function DailyTimeTable({
                         className={`border-r border-gray-200 p-0 ${
                           isWorkingTime ? 'bg-blue-50' : 'bg-white'
                         }`}
-                        style={{ height: '80px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
+                        style={{ height: '180px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
                         onClick={() => handleCellClick(s.staff_id, time)}
                       >
                         {/* シフト開始時間のセルにシフトブロックを表示 */}
@@ -774,11 +774,11 @@ export default function DailyTimeTable({
                             />
                             
                             {/* シフト内容 */}
-                            <div className="p-1 h-full flex flex-col justify-center items-start pl-2">
-                              <div className="font-semibold text-xs text-white whitespace-nowrap">
+                            <div className="p-2 h-full flex flex-col justify-between items-start">
+                              <div className="font-semibold text-sm text-white whitespace-nowrap">
                                 開始 {shift.start_time}
                               </div>
-                              <div className="font-semibold text-xs text-white whitespace-nowrap mt-1 absolute bottom-1 left-2">
+                              <div className="font-semibold text-sm text-white whitespace-nowrap">
                                 終了 {shift.end_time}
                               </div>
                             </div>

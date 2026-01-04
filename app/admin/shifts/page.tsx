@@ -338,9 +338,9 @@ export default function ShiftManagement() {
     <div className="min-h-screen bg-gray-100">
       <AdminNav currentPath="/admin/shifts" title="シフト管理" />
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="w-full mx-auto py-6 sm:px-6 lg:px-8" style={{ maxWidth: '100%' }}>
         <div className="px-4 py-6 sm:px-0">
-          <div className="bg-white shadow rounded-lg p-6">
+          <div className="bg-white shadow rounded-lg p-6 w-full" style={{ maxWidth: '100%' }}>
             {/* ヘッダー */}
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold text-gray-900">シフト管理</h2>
