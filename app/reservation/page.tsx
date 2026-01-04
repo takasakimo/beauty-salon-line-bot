@@ -38,6 +38,8 @@ function ReservationPageContent() {
     closedDays: number[];
     temporaryClosedDays: string[];
   }>({ closedDays: [], temporaryClosedDays: [] });
+  // データベースから取得した臨時休業日を保持（上書きされないように）
+  const [dbTemporaryClosedDays, setDbTemporaryClosedDays] = useState<string[]>([]);
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     email: '',
@@ -63,11 +65,15 @@ function ReservationPageContent() {
         const data = await response.json();
         setBusinessHours(data.business_hours || {});
         setSpecialBusinessHours(data.special_business_hours || {});
+        // データベースから取得した臨時休業日を保持
+        const dbTemporaryClosedDays = Array.isArray(data.temporary_closed_days) ? data.temporary_closed_days : [];
+        setDbTemporaryClosedDays(dbTemporaryClosedDays);
         // 臨時休業日と定休日を設定
         setClosedDaysInfo({
           closedDays: Array.isArray(data.closed_days) ? data.closed_days : [],
-          temporaryClosedDays: Array.isArray(data.temporary_closed_days) ? data.temporary_closed_days : []
+          temporaryClosedDays: dbTemporaryClosedDays
         });
+        console.log('データベースから取得した臨時休業日:', dbTemporaryClosedDays);
       }
     } catch (error) {
       console.error('テナント情報取得エラー:', error);
@@ -119,11 +125,15 @@ function ReservationPageContent() {
     if (Object.keys(availableSlotsByDate).length > 0) {
       setClosedDaysInfo(prev => {
         const dates = getTwoWeekDates();
-        // 既存のclosedDaysInfoを保持（データベースから取得した情報を優先）
+        // データベースから取得した臨時休業日を基準にする
         const currentClosedDays = [...prev.closedDays];
-        const currentTemporaryClosedDays = [...prev.temporaryClosedDays];
+        // データベースから取得した臨時休業日をコピー（カレンダーに表示されている日付のみを保持）
+        const currentTemporaryClosedDays = dbTemporaryClosedDays.filter(dateStr => {
+          return dates.some(d => d.toISOString().split('T')[0] === dateStr);
+        });
         
         // 各日付をチェック（空きスロットがない日を補完的に追加）
+        // ただし、データベースから取得した臨時休業日リストに含まれていない日付は追加しない
         for (const date of dates) {
           const dateStr = date.toISOString().split('T')[0];
           const availableSlots = availableSlotsByDate[dateStr] || [];
@@ -144,10 +154,8 @@ function ReservationPageContent() {
                 if (!currentClosedDays.includes(dayOfWeek)) {
                   currentClosedDays.push(dayOfWeek);
                 }
-              } else {
-                // 臨時休業日として扱う
-                currentTemporaryClosedDays.push(dateStr);
               }
+              // 臨時休業日として追加する処理は削除（データベースの情報のみを使用）
             }
           }
         }
@@ -158,7 +166,7 @@ function ReservationPageContent() {
         };
       });
     }
-  }, [availableSlotsByDate, weekStartDate]);
+  }, [availableSlotsByDate, weekStartDate, dbTemporaryClosedDays]);
 
   const loadMenus = async () => {
     try {
