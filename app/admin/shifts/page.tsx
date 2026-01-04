@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import AdminNav from '@/app/components/AdminNav';
 import TimeTable from './TimeTable';
+import DailyTimeTable from './DailyTimeTable';
 import { 
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -58,7 +59,8 @@ export default function ShiftManagement() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState<'table' | 'timetable'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'timetable' | 'daily'>('table');
+  const [selectedDailyDate, setSelectedDailyDate] = useState<Date | null>(null);
   
   // 基本設定
   const [basicStartTime, setBasicStartTime] = useState('10:00');
@@ -402,6 +404,24 @@ export default function ShiftManagement() {
                     タイムテーブル表示
                   </div>
                 </button>
+                <button
+                  onClick={() => {
+                    setViewMode('daily');
+                    if (!selectedDailyDate) {
+                      setSelectedDailyDate(new Date());
+                    }
+                  }}
+                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                    viewMode === 'daily'
+                      ? 'border-pink-500 text-pink-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CalendarDaysIcon className="h-5 w-5" />
+                    日別タイムテーブル
+                  </div>
+                </button>
               </nav>
             </div>
 
@@ -493,41 +513,78 @@ export default function ShiftManagement() {
               <div className="text-center py-8">
                 <p className="text-gray-600">読み込み中...</p>
               </div>
-            ) : selectedStaffId ? (
+            ) : (
               <>
-                {viewMode === 'timetable' ? (
-                  /* タイムテーブル表示 */
-                  selectedStaffId ? (
-                    <TimeTable
-                      shifts={timeTableShifts}
-                      onUpdate={(date, shift) => {
-                        setTimeTableShifts(prev => ({
-                          ...prev,
-                          [date]: shift
-                        }));
-                        // テーブル表示用データも更新
-                        setShiftRows(prev => ({
-                          ...prev,
-                          [date]: {
-                            ...prev[date],
-                            startTime: shift.startTime,
-                            endTime: shift.endTime,
-                            isOff: shift.isOff,
-                            breakTimes: shift.breakTimes
+                {viewMode === 'daily' ? (
+                  /* 日別タイムテーブル表示 */
+                  selectedDailyDate ? (
+                    <div className="mb-4">
+                      <div className="flex items-center gap-4 mb-4">
+                        <label className="block text-sm font-medium text-gray-700">
+                          表示日付
+                        </label>
+                        <input
+                          type="date"
+                          value={selectedDailyDate.toISOString().split('T')[0]}
+                          onChange={(e) => setSelectedDailyDate(new Date(e.target.value))}
+                          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                        />
+                      </div>
+                      <DailyTimeTable
+                        selectedDate={selectedDailyDate}
+                        onDateChange={(date) => {
+                          setSelectedDailyDate(date);
+                          if (date.getTime() === new Date().getTime()) {
+                            setViewMode('table');
+                            setSelectedDailyDate(null);
                           }
-                        }));
-                      }}
-                      currentDate={currentDate}
-                      selectedStaffId={selectedStaffId}
-                    />
+                        }}
+                        getApiUrlWithTenantId={getApiUrlWithTenantId}
+                      />
+                    </div>
                   ) : (
                     <div className="text-center py-8">
-                      <p className="text-gray-600">従業員を選択してください</p>
+                      <p className="text-gray-600 mb-4">日付を選択してください</p>
+                      <input
+                        type="date"
+                        value={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => {
+                          setSelectedDailyDate(new Date(e.target.value));
+                          setViewMode('daily');
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      />
                     </div>
                   )
-                ) : (
-                  /* テーブル表示 */
+                ) : selectedStaffId ? (
                   <>
+                    {viewMode === 'timetable' ? (
+                      /* タイムテーブル表示 */
+                      <TimeTable
+                        shifts={timeTableShifts}
+                        onUpdate={(date, shift) => {
+                          setTimeTableShifts(prev => ({
+                            ...prev,
+                            [date]: shift
+                          }));
+                          // テーブル表示用データも更新
+                          setShiftRows(prev => ({
+                            ...prev,
+                            [date]: {
+                              ...prev[date],
+                              startTime: shift.startTime,
+                              endTime: shift.endTime,
+                              isOff: shift.isOff,
+                              breakTimes: shift.breakTimes
+                            }
+                          }));
+                        }}
+                        currentDate={currentDate}
+                        selectedStaffId={selectedStaffId}
+                      />
+                    ) : (
+                      /* テーブル表示 */
+                      <>
                     {/* シフト表 */}
                 <div className="overflow-x-auto">
                   <table className="min-w-full border-collapse border border-gray-300 text-sm">
@@ -639,27 +696,29 @@ export default function ShiftManagement() {
                       >
                         {saving ? '保存中...' : '変更を保存'}
                       </button>
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* 保存ボタン（タイムテーブル表示時も表示） */}
+                  {viewMode === 'timetable' && (
+                    <div className="mt-6 flex justify-end">
+                      <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="px-6 py-2 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {saving ? '保存中...' : '変更を保存'}
+                      </button>
                     </div>
+                  )}
                   </>
-                )}
-                
-                {/* 保存ボタン（タイムテーブル表示時も表示） */}
-                {viewMode === 'timetable' && (
-                  <div className="mt-6 flex justify-end">
-                    <button
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="px-6 py-2 bg-pink-600 text-white rounded-lg font-semibold hover:bg-pink-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {saving ? '保存中...' : '変更を保存'}
-                    </button>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-gray-600">従業員を選択してください</p>
                   </div>
                 )}
               </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-600">従業員を選択してください</p>
-              </div>
             )}
           </div>
         </div>

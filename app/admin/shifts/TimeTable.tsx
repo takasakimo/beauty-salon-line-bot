@@ -88,7 +88,8 @@ export default function TimeTable({ shifts, onUpdate, currentDate, selectedStaff
     const slotHeight = 30;
     const minutesPerSlot = 30;
     
-    const top = ((startMinutes / minutesPerSlot) * slotHeight);
+    // 開始時間を基準にした位置（0:00からの分を計算）
+    const top = (startMinutes / minutesPerSlot) * slotHeight;
     const height = ((endMinutes - startMinutes) / minutesPerSlot) * slotHeight;
     
     return {
