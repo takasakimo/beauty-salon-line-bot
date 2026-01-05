@@ -138,8 +138,12 @@ function TimelineScheduleView({
       }
 
       // 成功したら親コンポーネントに通知（リロードなしで状態更新）
+      // 非同期でデータを再取得して、画面のリセットを防ぐ
       if (onReservationUpdate) {
-        onReservationUpdate();
+        // 少し遅延を入れて、APIの更新が確実に反映されるようにする
+        setTimeout(() => {
+          onReservationUpdate();
+        }, 100);
       }
     } catch (error: any) {
       alert(error.message || 'スタッフ割り当てに失敗しました');
@@ -638,9 +642,11 @@ export default function ReservationManagement() {
     ]);
   };
 
-  const loadReservations = async () => {
+  const loadReservations = async (showLoading: boolean = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       let baseUrl = '/api/admin/reservations';
       const params = new URLSearchParams();
       // filterDateが空文字列の場合は、今日の日付を使用
@@ -676,7 +682,9 @@ export default function ReservationManagement() {
       console.error('予約取得エラー:', error);
       setError('予約の取得に失敗しました');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1341,7 +1349,14 @@ export default function ReservationManagement() {
                   予約が登録されていません
                 </div>
               ) : (
-                <TimelineScheduleView reservations={getFilteredReservations()} staff={staff} onEdit={handleOpenModal} onStatusChange={handleStatusChange} onCancel={handleCancel} onReservationUpdate={loadReservations} />
+                <TimelineScheduleView 
+                  reservations={getFilteredReservations()} 
+                  staff={staff} 
+                  onEdit={handleOpenModal} 
+                  onStatusChange={handleStatusChange} 
+                  onCancel={handleCancel} 
+                  onReservationUpdate={() => loadReservations(false)} 
+                />
               )}
             </div>
           )}
