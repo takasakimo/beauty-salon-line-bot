@@ -74,6 +74,109 @@ function TimelineScheduleView({
   onStatusChange: (id: number, status: string) => void;
   onCancel: (id: number) => void;
 }) {
+  const [draggedReservation, setDraggedReservation] = useState<Reservation | null>(null);
+  const [dragOverStaffId, setDragOverStaffId] = useState<number | null>(null);
+
+  // 予約をスタッフに割り当てる関数
+  const handleAssignToStaff = async (reservation: Reservation, staffId: number) => {
+    try {
+      // reservation_dateをJST時刻として取得（顧客側や管理画面の予約作成と同じ形式で送信）
+      // APIレスポンスでは既にYYYY-MM-DDTHH:mm:ss+09:00形式で返されているが、
+      // 念のため様々な形式に対応
+      let dateStr = reservation.reservation_date;
+      let reservationDateTime: string;
+      
+      // reservation_dateは文字列として返される（APIレスポンスでYYYY-MM-DDTHH:mm:ss+09:00形式に変換済み）
+      // 既に+09:00が付いている場合はそのまま使用
+      if (dateStr.includes('+09:00')) {
+        reservationDateTime = dateStr;
+      } else {
+        // タイムゾーン情報を除去（+09:00以外のタイムゾーンやZを除去）
+        const dateStrWithoutTz = dateStr.replace(/[+-]\d{2}:\d{2}$/, '').replace(/Z$/, '');
+        
+        // Tをスペースに変換してから、再度Tに変換して+09:00を追加
+        // YYYY-MM-DD HH:mm:ss形式またはYYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DDTHH:mm:ss+09:00形式に変換
+        if (dateStrWithoutTz.includes(' ')) {
+          // スペース区切りの場合
+          reservationDateTime = dateStrWithoutTz.replace(' ', 'T') + '+09:00';
+        } else if (dateStrWithoutTz.includes('T')) {
+          // T区切りの場合
+          reservationDateTime = dateStrWithoutTz + '+09:00';
+        } else {
+          // 日付のみの場合（通常は発生しないが念のため）
+          reservationDateTime = dateStrWithoutTz + 'T00:00:00+09:00';
+        }
+      }
+
+      // 複数メニューの場合はmenu_idsを配列で送信、そうでなければmenu_idを送信
+      const menuIds = reservation.menus && reservation.menus.length > 0
+        ? reservation.menus.map(m => m.menu_id)
+        : [reservation.menu_id];
+
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservation.reservation_id}`);
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          menu_ids: menuIds,
+          menu_id: reservation.menu_id, // 後方互換性のため
+          staff_id: staffId,
+          reservation_date: reservationDateTime,
+          status: reservation.status,
+          notes: reservation.notes
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'スタッフ割り当てに失敗しました' }));
+        throw new Error(errorData.error || 'スタッフ割り当てに失敗しました');
+      }
+
+      // 成功したら親コンポーネントに通知（リロード）
+      window.location.reload();
+    } catch (error: any) {
+      alert(error.message || 'スタッフ割り当てに失敗しました');
+    }
+  };
+
+  // ドラッグ開始
+  const handleDragStart = (e: React.DragEvent, reservation: Reservation) => {
+    setDraggedReservation(reservation);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', ''); // 一部のブラウザで必要
+  };
+
+  // ドラッグ終了
+  const handleDragEnd = () => {
+    setDraggedReservation(null);
+    setDragOverStaffId(null);
+  };
+
+  // ドラッグオーバー（スタッフ列上）
+  const handleDragOver = (e: React.DragEvent, staffId: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverStaffId(staffId);
+  };
+
+  // ドラッグリーブ（スタッフ列から離れる）
+  const handleDragLeave = () => {
+    setDragOverStaffId(null);
+  };
+
+  // ドロップ（スタッフ列にドロップ）
+  const handleDrop = (e: React.DragEvent, staffId: number) => {
+    e.preventDefault();
+    if (draggedReservation) {
+      handleAssignToStaff(draggedReservation, staffId);
+    }
+    setDraggedReservation(null);
+    setDragOverStaffId(null);
+  };
+
   // 時間をフォーマット（HH:MM）
   const formatTime = (dateString: string) => {
     // reservation_dateをJSTとして解釈
@@ -176,8 +279,53 @@ function TimelineScheduleView({
     return { startMinutes, endMinutes, start, duration };
   };
 
+  // 同じ時間帯の予約をグループ化して列を割り当てる
+  const assignColumnsToReservations = (reservations: Reservation[]) => {
+    if (reservations.length === 0) return [];
+    
+    // 予約を開始時間でソート
+    const sorted = [...reservations].sort((a, b) => {
+      const aTime = getReservationTimeRange(a).startMinutes;
+      const bTime = getReservationTimeRange(b).startMinutes;
+      return aTime - bTime;
+    });
+    
+    // 各予約に列番号を割り当て
+    const assigned: Array<{ reservation: Reservation; column: number; totalColumns: number }> = [];
+    const columns: Array<{ endTime: number }> = [];
+    
+    for (const reservation of sorted) {
+      const { startMinutes, endMinutes } = getReservationTimeRange(reservation);
+      
+      // 利用可能な列を探す
+      let columnIndex = -1;
+      for (let i = 0; i < columns.length; i++) {
+        if (columns[i].endTime <= startMinutes) {
+          columnIndex = i;
+          break;
+        }
+      }
+      
+      // 利用可能な列がない場合は新しい列を作成
+      if (columnIndex === -1) {
+        columnIndex = columns.length;
+        columns.push({ endTime: endMinutes });
+      } else {
+        columns[columnIndex].endTime = endMinutes;
+      }
+      
+      assigned.push({
+        reservation,
+        column: columnIndex,
+        totalColumns: columns.length
+      });
+    }
+    
+    return assigned;
+  };
+
   // 予約の位置と高さを計算
-  const getReservationStyle = (reservation: Reservation) => {
+  const getReservationStyle = (reservation: Reservation, column: number, totalColumns: number) => {
     const { startMinutes, duration } = getReservationTimeRange(reservation);
     const slotHeight = 40; // 各時間スロットの高さ（px）
     const minutesPerSlot = 30;
@@ -185,10 +333,16 @@ function TimelineScheduleView({
     const top = ((startMinutes - timeToMinutes('09:00')) / minutesPerSlot) * slotHeight;
     const height = Math.max((duration / minutesPerSlot) * slotHeight, 60);
     
+    // 列の幅を計算（複数列の場合は均等に分割）
+    const columnWidth = totalColumns > 1 ? 100 / totalColumns : 100;
+    const left = column * columnWidth;
+    
     return {
       top: `${top}px`,
       height: `${height}px`,
-      minHeight: '60px'
+      minHeight: '60px',
+      left: `${left}%`,
+      width: `${columnWidth}%`
     };
   };
 
@@ -223,23 +377,33 @@ function TimelineScheduleView({
             const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
             const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
             
+            // 店舗全体の予約を列に割り当て
+            const storeReservationsWithColumns = assignColumnsToReservations(dayData.all);
+            
             // 予約ブロックをレンダリングする関数
-            const renderReservationBlock = (reservation: Reservation) => {
-              const style = getReservationStyle(reservation);
+            const renderReservationBlock = (reservation: Reservation, column: number = 0, totalColumns: number = 1, isDraggable: boolean = false) => {
+              const style = getReservationStyle(reservation, column, totalColumns);
               const isCancelled = reservation.status === 'cancelled';
+              const isDragging = draggedReservation?.reservation_id === reservation.reservation_id;
               
               return (
                 <div
                   key={reservation.reservation_id}
+                  draggable={isDraggable && !isCancelled}
+                  onDragStart={(e) => isDraggable && !isCancelled && handleDragStart(e, reservation)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => !isCancelled && onEdit(reservation)}
-                  className={`absolute left-0.5 right-0.5 rounded p-1 shadow-sm border-l-2 ${
-                    isCancelled
+                  className={`absolute rounded p-1 shadow-sm border-l-2 ${
+                    isDragging
+                      ? 'opacity-50'
+                      : isCancelled
                       ? 'bg-gray-100 border-gray-300 opacity-60'
                       : reservation.status === 'completed'
-                      ? 'bg-green-50 border-green-400 cursor-pointer hover:bg-green-100'
-                      : 'bg-pink-50 border-pink-400 cursor-pointer hover:bg-pink-100'
-                  } transition-colors`}
-                  style={style}
+                      ? 'bg-green-50 border-green-400 cursor-move hover:bg-green-100'
+                      : 'bg-pink-50 border-pink-400 cursor-move hover:bg-pink-100'
+                  } transition-colors ${isDraggable && !isCancelled ? 'hover:shadow-md' : ''}`}
+                  style={{ ...style, marginLeft: column > 0 ? '2px' : '2px', marginRight: '2px' }}
+                  title={isDraggable && !isCancelled ? 'ドラッグしてスタッフに割り当て' : ''}
                 >
                   <div className="text-xs font-semibold text-gray-900 mb-0.5 leading-tight">
                     {formatTime(reservation.reservation_date)}
@@ -337,20 +501,39 @@ function TimelineScheduleView({
                       ></div>
                     ))}
                     
-                    {/* 予約ブロック（店舗全体） */}
-                    {dayData.all.map(renderReservationBlock)}
+                    {/* 予約ブロック（店舗全体） - 列に割り当てて表示（ドラッグ可能） */}
+                    {storeReservationsWithColumns.map(({ reservation, column, totalColumns }) => 
+                      renderReservationBlock(reservation, column, totalColumns, true)
+                    )}
                   </div>
                 </div>
                 
                 {/* 各スタッフの列 */}
                 {staff.map((s) => {
                   const staffReservations = dayData.byStaff[s.staff_id] || [];
+                  // スタッフ別の予約も列に割り当て
+                  const staffReservationsWithColumns = assignColumnsToReservations(staffReservations);
+                  const isDragOver = dragOverStaffId === s.staff_id;
+                  
                   return (
-                    <div key={s.staff_id} className="flex-1 min-w-[100px] border-r border-gray-200 relative">
+                    <div 
+                      key={s.staff_id} 
+                      className={`flex-1 min-w-[100px] border-r border-gray-200 relative transition-colors ${
+                        isDragOver ? 'bg-purple-100' : ''
+                      }`}
+                      onDragOver={(e) => handleDragOver(e, s.staff_id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, s.staff_id)}
+                    >
                       {/* 列ヘッダー */}
-                      <div className="h-10 border-b border-gray-200 bg-purple-50 px-2 py-1 flex items-center">
+                      <div className={`h-10 border-b border-gray-200 px-2 py-1 flex items-center transition-colors ${
+                        isDragOver ? 'bg-purple-200' : 'bg-purple-50'
+                      }`}>
                         <span className="text-xs font-semibold text-gray-900">{s.name}</span>
                         <span className="ml-1 text-xs text-gray-500">({staffReservations.length})</span>
+                        {isDragOver && (
+                          <span className="ml-2 text-xs text-purple-600 font-bold">← ここにドロップ</span>
+                        )}
                       </div>
                       
                       {/* 時間スロット */}
@@ -363,8 +546,10 @@ function TimelineScheduleView({
                           ></div>
                         ))}
                         
-                        {/* 予約ブロック（スタッフ別） */}
-                        {staffReservations.map(renderReservationBlock)}
+                        {/* 予約ブロック（スタッフ別） - 列に割り当てて表示（ドラッグ可能） */}
+                        {staffReservationsWithColumns.map(({ reservation, column, totalColumns }) => 
+                          renderReservationBlock(reservation, column, totalColumns, true)
+                        )}
                       </div>
                     </div>
                   );
