@@ -66,13 +66,15 @@ function TimelineScheduleView({
   staff,
   onEdit, 
   onStatusChange, 
-  onCancel 
+  onCancel,
+  onReservationUpdate
 }: { 
   reservations: Reservation[];
   staff: Staff[];
   onEdit: (reservation: Reservation) => void;
   onStatusChange: (id: number, status: string) => void;
   onCancel: (id: number) => void;
+  onReservationUpdate?: () => void;
 }) {
   const [draggedReservation, setDraggedReservation] = useState<Reservation | null>(null);
   const [dragOverStaffId, setDragOverStaffId] = useState<number | null>(null);
@@ -135,8 +137,10 @@ function TimelineScheduleView({
         throw new Error(errorData.error || 'スタッフ割り当てに失敗しました');
       }
 
-      // 成功したら親コンポーネントに通知（リロード）
-      window.location.reload();
+      // 成功したら親コンポーネントに通知（リロードなしで状態更新）
+      if (onReservationUpdate) {
+        onReservationUpdate();
+      }
     } catch (error: any) {
       alert(error.message || 'スタッフ割り当てに失敗しました');
     }
@@ -1337,7 +1341,7 @@ export default function ReservationManagement() {
                   予約が登録されていません
                 </div>
               ) : (
-                <TimelineScheduleView reservations={getFilteredReservations()} staff={staff} onEdit={handleOpenModal} onStatusChange={handleStatusChange} onCancel={handleCancel} />
+                <TimelineScheduleView reservations={getFilteredReservations()} staff={staff} onEdit={handleOpenModal} onStatusChange={handleStatusChange} onCancel={handleCancel} onReservationUpdate={loadReservations} />
               )}
             </div>
           )}
