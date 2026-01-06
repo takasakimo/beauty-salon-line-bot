@@ -1418,9 +1418,11 @@ export default function ReservationManagement() {
                               </span>
                             )}
                           </div>
-                          <div>
-                            <strong>スタッフ:</strong> {reservation.staff_name || 'スタッフ選択なし'}
-                          </div>
+                          {reservation.staff_name && (
+                            <div>
+                              <strong>スタッフ:</strong> {reservation.staff_name}
+                            </div>
+                          )}
                           {reservation.notes && (
                             <div className="col-span-full text-gray-400">
                               📝 {reservation.notes}
