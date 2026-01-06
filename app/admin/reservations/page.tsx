@@ -533,6 +533,19 @@ function TimelineScheduleView({
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, s.staff_id)}
                     >
+                      {/* 日付ヘッダー */}
+                      <div className="h-12 border-b border-gray-200 bg-gray-50 px-2 py-1 flex items-center justify-between">
+                        <div className="flex items-center">
+                          <CalendarDaysIcon className="h-3 w-3 text-pink-600 mr-1" />
+                          <span className="text-xs font-semibold text-gray-900">
+                            {formatDate(date)}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          ({totalCount})
+                        </span>
+                      </div>
+                      
                       {/* 列ヘッダー */}
                       <div className={`h-10 border-b border-gray-200 px-2 py-1 flex items-center transition-colors ${
                         isDragOver ? 'bg-purple-200' : 'bg-purple-50'
