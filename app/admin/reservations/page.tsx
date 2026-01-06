@@ -1102,7 +1102,31 @@ export default function ReservationManagement() {
       const reservation = reservations.find(r => r.reservation_id === reservationId);
       if (!reservation) return;
 
-      const reservationDateTime = new Date(reservation.reservation_date).toISOString();
+      // reservation_dateをJST時刻として取得（UTCに変換せず、JST形式を維持）
+      let dateStr = reservation.reservation_date;
+      let reservationDateTime: string;
+      
+      // reservation_dateは文字列として返される（APIレスポンスでYYYY-MM-DDTHH:mm:ss+09:00形式に変換済み）
+      // 既に+09:00が付いている場合はそのまま使用
+      if (dateStr.includes('+09:00')) {
+        reservationDateTime = dateStr;
+      } else {
+        // タイムゾーン情報を除去（+09:00以外のタイムゾーンやZを除去）
+        const dateStrWithoutTz = dateStr.replace(/[+-]\d{2}:\d{2}$/, '').replace(/Z$/, '');
+        
+        // Tをスペースに変換してから、再度Tに変換して+09:00を追加
+        // YYYY-MM-DD HH:mm:ss形式またはYYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DDTHH:mm:ss+09:00形式に変換
+        if (dateStrWithoutTz.includes(' ')) {
+          // スペース区切りの場合
+          reservationDateTime = dateStrWithoutTz.replace(' ', 'T') + '+09:00';
+        } else if (dateStrWithoutTz.includes('T')) {
+          // T区切りの場合
+          reservationDateTime = dateStrWithoutTz + '+09:00';
+        } else {
+          // 日付のみの場合（通常は発生しないが念のため）
+          reservationDateTime = dateStrWithoutTz + 'T00:00:00+09:00';
+        }
+      }
 
       // 複数メニューの場合はmenu_idsを配列で送信、そうでなければmenu_idを送信
       const menuIds = reservation.menus && reservation.menus.length > 0
