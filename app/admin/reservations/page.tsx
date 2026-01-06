@@ -78,7 +78,7 @@ function TimelineScheduleView({
 }) {
   const [draggedReservation, setDraggedReservation] = useState<Reservation | null>(null);
   const [dragOverStaffId, setDragOverStaffId] = useState<number | null>(null);
-  const [dragOverStore, setDragOverStore] = useState<boolean>(false);
+  const [dragOverStoreDate, setDragOverStoreDate] = useState<string | null>(null);
 
   // 予約をスタッフに割り当てる関数（staffIdがnullの場合は店舗全体に戻す）
   const handleAssignToStaff = async (reservation: Reservation, staffId: number | null) => {
@@ -164,23 +164,23 @@ function TimelineScheduleView({
     setDragOverStaffId(null);
   };
 
-  // ドラッグオーバー（スタッフ列上）
-  const handleDragOver = (e: React.DragEvent, staffId: number | null) => {
+  // ドラッグオーバー（スタッフ列上または店舗全体）
+  const handleDragOver = (e: React.DragEvent, staffId: number | null, dateKey?: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (staffId === null) {
-      setDragOverStore(true);
+      setDragOverStoreDate(dateKey || null);
       setDragOverStaffId(null);
     } else {
       setDragOverStaffId(staffId);
-      setDragOverStore(false);
+      setDragOverStoreDate(null);
     }
   };
 
   // ドラッグリーブ（スタッフ列から離れる）
   const handleDragLeave = () => {
     setDragOverStaffId(null);
-    setDragOverStore(false);
+    setDragOverStoreDate(null);
   };
 
   // ドロップ（スタッフ列または店舗全体にドロップ）
@@ -191,7 +191,7 @@ function TimelineScheduleView({
     }
     setDraggedReservation(null);
     setDragOverStaffId(null);
-    setDragOverStore(false);
+    setDragOverStoreDate(null);
   };
 
   // 時間をフォーマット（HH:MM）
@@ -532,19 +532,19 @@ function TimelineScheduleView({
                 {/* 店舗全体の列 */}
                 <div 
                   className={`flex-1 min-w-[100px] border-r border-gray-200 relative transition-colors ${
-                    dragOverStore ? 'bg-blue-100' : ''
+                    dragOverStoreDate === dateKey ? 'bg-blue-100' : ''
                   }`}
-                  onDragOver={(e) => handleDragOver(e, null)}
+                  onDragOver={(e) => handleDragOver(e, null, dateKey)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, null)}
                 >
                   {/* 列ヘッダー */}
                   <div className={`h-10 border-b border-gray-200 px-2 py-1 flex items-center transition-colors ${
-                    dragOverStore ? 'bg-blue-200' : 'bg-blue-50'
+                    dragOverStoreDate === dateKey ? 'bg-blue-200' : 'bg-blue-50'
                   }`}>
                     <span className="text-xs font-semibold text-gray-900">店舗全体</span>
                     <span className="ml-1 text-xs text-gray-500">({dayData.all.length})</span>
-                    {dragOverStore && (
+                    {dragOverStoreDate === dateKey && (
                       <span className="ml-2 text-xs text-blue-600 font-bold">← ここにドロップ</span>
                     )}
                   </div>
