@@ -79,6 +79,7 @@ function TimelineScheduleView({
   const [draggedReservation, setDraggedReservation] = useState<Reservation | null>(null);
   const [dragOverStaffId, setDragOverStaffId] = useState<number | null>(null);
   const [dragOverStoreDate, setDragOverStoreDate] = useState<string | null>(null);
+  const [shiftsByDate, setShiftsByDate] = useState<Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>>>({});
 
   // 予約をスタッフに割り当てる関数（staffIdがnullの場合は店舗全体に戻す）
   const handleAssignToStaff = async (reservation: Reservation, staffId: number | null) => {
@@ -226,6 +227,50 @@ function TimelineScheduleView({
   };
 
   const weekDates = getWeekDates();
+  
+  // 各日付のシフトデータを取得
+  useEffect(() => {
+    const loadShifts = async () => {
+      const shiftsMap: Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>> = {};
+      
+      for (const date of weekDates) {
+        const dateKey = date.toISOString().split('T')[0];
+        try {
+          const url = getApiUrlWithTenantId(`/api/admin/shifts?start_date=${dateKey}&end_date=${dateKey}`);
+          const response = await fetch(url, {
+            credentials: 'include',
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            shiftsMap[dateKey] = data.map((shift: any) => ({
+              staff_id: shift.staff_id,
+              start_time: shift.start_time,
+              end_time: shift.end_time,
+              is_off: shift.is_off
+            }));
+          }
+        } catch (error) {
+          console.error(`シフト取得エラー (${dateKey}):`, error);
+          shiftsMap[dateKey] = [];
+        }
+      }
+      
+      setShiftsByDate(shiftsMap);
+    };
+    
+    loadShifts();
+  }, [weekDates, reservations]);
+  
+  // 各日付で出勤しているスタッフをフィルタリング
+  const getWorkingStaffForDate = (dateKey: string): Staff[] => {
+    const shifts = shiftsByDate[dateKey] || [];
+    const workingStaffIds = shifts
+      .filter(shift => !shift.is_off && shift.start_time && shift.end_time)
+      .map(shift => shift.staff_id);
+    
+    return staff.filter(s => workingStaffIds.includes(s.staff_id));
+  };
   
   // 時間スロット（9:00-20:00、30分間隔）
   const timeSlots: string[] = [];
@@ -385,8 +430,10 @@ function TimelineScheduleView({
             const dateKey = date.toISOString().split('T')[0];
             const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
             const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
-            // 列数: 店舗全体(1) + スタッフ数
-            const columnCount = 1 + staff.length;
+            // 出勤しているスタッフを取得
+            const workingStaff = getWorkingStaffForDate(dateKey);
+            // 列数: 店舗全体(1) + 出勤しているスタッフ数
+            const columnCount = 1 + workingStaff.length;
             
             return (
               <div 
@@ -566,8 +613,8 @@ function TimelineScheduleView({
                   </div>
                 </div>
                 
-                {/* 各スタッフの列 */}
-                {staff.map((s) => {
+                {/* 各スタッフの列（出勤しているスタッフのみ） */}
+                {getWorkingStaffForDate(dateKey).map((s) => {
                   const staffReservations = dayData.byStaff[s.staff_id] || [];
                   // スタッフ別の予約も列に割り当て
                   const staffReservationsWithColumns = assignColumnsToReservations(staffReservations);
