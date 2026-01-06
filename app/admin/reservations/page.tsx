@@ -364,10 +364,52 @@ function TimelineScheduleView({
   return (
     <div className="overflow-x-auto">
       <div className="inline-block min-w-full">
+        {/* 日付ヘッダー行 */}
+        <div className="flex border-b border-gray-200">
+          {/* 時間列のヘッダー部分 */}
+          <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
+            <div className="h-12 border-b border-gray-200"></div>
+          </div>
+          
+          {/* 各日付のヘッダー（結合セル） */}
+          {weekDates.map((date) => {
+            const dateKey = date.toISOString().split('T')[0];
+            const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
+            const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
+            // 列数: 店舗全体(1) + スタッフ数
+            const columnCount = 1 + staff.length;
+            
+            return (
+              <div 
+                key={dateKey}
+                className="border-r border-gray-200 bg-gray-50"
+                style={{ 
+                  flex: `0 0 ${columnCount * 100}px`,
+                  minWidth: `${columnCount * 100}px`,
+                  width: `${columnCount * 100}px`
+                }}
+              >
+                <div className="h-12 border-b border-gray-200 px-2 py-1 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <CalendarDaysIcon className="h-3 w-3 text-pink-600 mr-1" />
+                    <span className="text-xs font-semibold text-gray-900">
+                      {formatDate(date)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    ({totalCount})
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* 列ヘッダー行 */}
         <div className="flex border-b border-gray-200">
           {/* 時間列 */}
           <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
-            <div className="h-12 border-b border-gray-200"></div>
+            <div className="h-10 border-b border-gray-200"></div>
             {timeSlots.map((time) => (
               <div
                 key={time}
@@ -480,19 +522,6 @@ function TimelineScheduleView({
               <div key={dateKey} className="flex border-r border-gray-200">
                 {/* 店舗全体の列 */}
                 <div className="flex-1 min-w-[100px] border-r border-gray-200 relative">
-                  {/* 日付ヘッダー */}
-                  <div className="h-12 border-b border-gray-200 bg-gray-50 px-2 py-1 flex items-center justify-between">
-                    <div className="flex items-center">
-                      <CalendarDaysIcon className="h-3 w-3 text-pink-600 mr-1" />
-                      <span className="text-xs font-semibold text-gray-900">
-                        {formatDate(date)}
-                      </span>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      ({totalCount})
-                    </span>
-                  </div>
-                  
                   {/* 列ヘッダー */}
                   <div className="h-10 border-b border-gray-200 bg-blue-50 px-2 py-1 flex items-center">
                     <span className="text-xs font-semibold text-gray-900">店舗全体</span>
@@ -533,19 +562,6 @@ function TimelineScheduleView({
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, s.staff_id)}
                     >
-                      {/* 日付ヘッダー */}
-                      <div className="h-12 border-b border-gray-200 bg-gray-50 px-2 py-1 flex items-center justify-between">
-                        <div className="flex items-center">
-                          <CalendarDaysIcon className="h-3 w-3 text-pink-600 mr-1" />
-                          <span className="text-xs font-semibold text-gray-900">
-                            {formatDate(date)}
-                          </span>
-                        </div>
-                        <span className="text-xs text-gray-500">
-                          ({totalCount})
-                        </span>
-                      </div>
-                      
                       {/* 列ヘッダー */}
                       <div className={`h-10 border-b border-gray-200 px-2 py-1 flex items-center transition-colors ${
                         isDragOver ? 'bg-purple-200' : 'bg-purple-50'
