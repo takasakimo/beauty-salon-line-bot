@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -18,6 +18,14 @@ interface Staff {
   name: string;
   image_url?: string | null;
 }
+
+// ローカル時間で日付文字列を生成（YYYY-MM-DD形式）
+const formatDateString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 function ReservationPageContent() {
   const searchParams = useSearchParams();
@@ -58,6 +66,22 @@ function ReservationPageContent() {
     loadTenantInfo();
   }, []);
 
+  // URLパラメータからメニューIDを取得して自動選択
+  useEffect(() => {
+    const menuIdsParam = searchParams.get('menu_ids');
+    if (menuIdsParam && menus.length > 0) {
+      const menuIds = menuIdsParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (menuIds.length > 0) {
+        const menusToSelect = menus.filter(m => menuIds.includes(m.menu_id));
+        if (menusToSelect.length > 0) {
+          setSelectedMenus(menusToSelect);
+          // メニューが選択されたら次のステップに進む
+          setStep('staff');
+        }
+      }
+    }
+  }, [searchParams, menus]);
+
   const loadTenantInfo = async () => {
     try {
       const response = await fetch(`/api/tenants/info?tenant=${tenantCode}`);
@@ -85,6 +109,77 @@ function ReservationPageContent() {
       loadStaff();
     }
   }, [selectedMenus]);
+
+  const loadAvailableSlotsForAllDates = useCallback(async () => {
+    if (selectedMenus.length === 0) return;
+    
+    setLoadingSlots(true);
+    try {
+      // 複数メニューの合計時間を計算
+      const totalDuration = selectedMenus.reduce((sum, m) => sum + m.duration, 0);
+      // 複数メニューIDをカンマ区切りで渡す
+      const menuIds = selectedMenus.map(m => m.menu_id).join(',');
+      
+      // staff_idパラメータを追加（スタッフが選択されている場合）
+      const staffParam = selectedStaff ? `&staff_id=${selectedStaff.staff_id}` : '';
+      
+      console.log('loadAvailableSlotsForAllDates:', {
+        selectedStaff: selectedStaff ? { staff_id: selectedStaff.staff_id, name: selectedStaff.name } : null,
+        staffParam,
+        menuIds,
+        totalDuration
+      });
+      
+      // すべての日付の空き時間を取得（1ヶ月分 + 2週間カレンダー用）
+      const dates = getDateOptions();
+      const twoWeekDates = getTwoWeekDates().map(d => formatDateString(d));
+      // 重複を除去して結合
+      const allDates = Array.from(new Set([...dates, ...twoWeekDates]));
+      const slotsByDate: Record<string, string[]> = {};
+      
+      await Promise.all(
+        allDates.map(async (date) => {
+          try {
+            const url = `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`;
+            console.log('available-slots API呼び出し:', { date, url });
+            const response = await fetch(url);
+            if (response.ok) {
+              const data = await response.json();
+              slotsByDate[date] = data;
+              console.log('スロット取得成功:', { date, slotCount: data.length, slots: data.slice(0, 5) });
+            } else {
+              console.error(`空き時間取得エラー (${date}):`, response.status, response.statusText);
+              slotsByDate[date] = [];
+            }
+          } catch (error) {
+            console.error(`空き時間取得エラー (${date}):`, error);
+            slotsByDate[date] = [];
+          }
+        })
+      );
+      
+      console.log('loadAvailableSlotsForAllDates 完了:', {
+        slotsByDateKeys: Object.keys(slotsByDate),
+        slotsByDateSample: Object.keys(slotsByDate).slice(0, 5).reduce((acc, key) => {
+          acc[key] = slotsByDate[key].slice(0, 5);
+          return acc;
+        }, {} as Record<string, string[]>),
+        totalDates: Object.keys(slotsByDate).length,
+        datesWithSlots: Object.keys(slotsByDate).filter(key => slotsByDate[key].length > 0).length
+      });
+      
+      console.log('setAvailableSlotsByDate 実行前:', {
+        currentAvailableSlotsByDateKeys: Object.keys(availableSlotsByDate),
+        newSlotsByDateKeys: Object.keys(slotsByDate)
+      });
+      
+      setAvailableSlotsByDate(slotsByDate);
+    } catch (error) {
+      console.error('空き時間取得エラー:', error);
+    } finally {
+      setLoadingSlots(false);
+    }
+  }, [selectedMenus, selectedStaff, weekStartDate, tenantCode]);
 
   const checkAuth = async () => {
     try {
@@ -118,7 +213,20 @@ function ReservationPageContent() {
     if (selectedMenus.length > 0 && selectedStaff !== undefined) {
       loadAvailableSlotsForAllDates();
     }
-  }, [selectedMenus, selectedStaff, weekStartDate]);
+  }, [selectedMenus, selectedStaff, weekStartDate, loadAvailableSlotsForAllDates]);
+
+  // availableSlotsByDateの変更を監視
+  useEffect(() => {
+    console.log('availableSlotsByDate 変更検知:', {
+      keys: Object.keys(availableSlotsByDate),
+      keyCount: Object.keys(availableSlotsByDate).length,
+      sampleKeys: Object.keys(availableSlotsByDate).slice(0, 5),
+      sampleValues: Object.keys(availableSlotsByDate).slice(0, 5).reduce((acc, key) => {
+        acc[key] = availableSlotsByDate[key].length;
+        return acc;
+      }, {} as Record<string, number>)
+    });
+  }, [availableSlotsByDate]);
   
   // 空きスロットが更新されたら休業日情報も更新（データベースの情報を優先し、空きスロットがない日を補完）
   useEffect(() => {
@@ -129,13 +237,13 @@ function ReservationPageContent() {
         const currentClosedDays = [...prev.closedDays];
         // データベースから取得した臨時休業日をコピー（カレンダーに表示されている日付のみを保持）
         const currentTemporaryClosedDays = dbTemporaryClosedDays.filter(dateStr => {
-          return dates.some(d => d.toISOString().split('T')[0] === dateStr);
+          return dates.some(d => formatDateString(d) === dateStr);
         });
         
         // 各日付をチェック（空きスロットがない日を補完的に追加）
         // ただし、データベースから取得した臨時休業日リストに含まれていない日付は追加しない
         for (const date of dates) {
-          const dateStr = date.toISOString().split('T')[0];
+          const dateStr = formatDateString(date);
           const availableSlots = availableSlotsByDate[dateStr] || [];
           const dayOfWeek = date.getDay();
           
@@ -148,7 +256,7 @@ function ReservationPageContent() {
             
             if (!isClosedDay && !isTemporaryClosedDay) {
               // 同じ曜日が複数回出現する場合は定休日として扱う
-              const sameDayOfWeekCount = dates.filter(d => d.getDay() === dayOfWeek && (availableSlotsByDate[d.toISOString().split('T')[0]] || []).length === 0).length;
+              const sameDayOfWeekCount = dates.filter(d => d.getDay() === dayOfWeek && (availableSlotsByDate[formatDateString(d)] || []).length === 0).length;
               if (sameDayOfWeekCount >= 2) {
                 // 同じ曜日が2回以上休業の場合は定休日として扱う
                 if (!currentClosedDays.includes(dayOfWeek)) {
@@ -237,58 +345,6 @@ function ReservationPageContent() {
     }
   };
 
-  const loadAvailableSlotsForAllDates = async () => {
-    if (selectedMenus.length === 0) return;
-    
-    setLoadingSlots(true);
-    try {
-      // 複数メニューの合計時間を計算
-      const totalDuration = selectedMenus.reduce((sum, m) => sum + m.duration, 0);
-      // 複数メニューIDをカンマ区切りで渡す
-      const menuIds = selectedMenus.map(m => m.menu_id).join(',');
-      
-      // staff_idパラメータを追加（スタッフが選択されている場合）
-      const staffParam = selectedStaff ? `&staff_id=${selectedStaff.staff_id}` : '';
-      
-      console.log('loadAvailableSlotsForAllDates:', {
-        selectedStaff: selectedStaff ? { staff_id: selectedStaff.staff_id, name: selectedStaff.name } : null,
-        staffParam,
-        menuIds,
-        totalDuration
-      });
-      
-      // すべての日付の空き時間を取得（1ヶ月分 + 2週間カレンダー用）
-      const dates = getDateOptions();
-      const twoWeekDates = getTwoWeekDates().map(d => d.toISOString().split('T')[0]);
-      // 重複を除去して結合
-      const allDates = Array.from(new Set([...dates, ...twoWeekDates]));
-      const slotsByDate: Record<string, string[]> = {};
-      
-      await Promise.all(
-        allDates.map(async (date) => {
-          try {
-            const url = `/api/reservations/available-slots?tenant=${tenantCode}&date=${date}&menu_id=${menuIds}&duration=${totalDuration}${staffParam}`;
-            console.log('available-slots API呼び出し:', { date, url });
-            const response = await fetch(url);
-            if (response.ok) {
-      const data = await response.json();
-              slotsByDate[date] = data;
-            }
-          } catch (error) {
-            console.error(`空き時間取得エラー (${date}):`, error);
-            slotsByDate[date] = [];
-          }
-        })
-      );
-      
-      setAvailableSlotsByDate(slotsByDate);
-    } catch (error) {
-      console.error('空き時間取得エラー:', error);
-    } finally {
-      setLoadingSlots(false);
-    }
-  };
-
   const handleMenuToggle = (menu: Menu) => {
     setSelectedMenus(prev => {
       const exists = prev.find(m => m.menu_id === menu.menu_id);
@@ -367,7 +423,7 @@ function ReservationPageContent() {
     for (let i = 0; i <= 30; i++) {
       const date = new Date();
       date.setDate(date.getDate() + i);
-      dates.push(date.toISOString().split('T')[0]);
+      dates.push(formatDateString(date));
     }
     return dates;
   };
@@ -390,7 +446,7 @@ function ReservationPageContent() {
     const day = date.getDate();
     const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
     const dayName = dayNames[date.getDay()];
-    return { month, day, dayName, dateStr: date.toISOString().split('T')[0] };
+    return { month, day, dayName, dateStr: formatDateString(date) };
   };
 
   // 前の一週間へ
@@ -787,6 +843,19 @@ function ReservationPageContent() {
                                   {twoWeekDates.map((date) => {
                                     const { month, day, dayName, dateStr } = formatDateForCalendar(date);
                                     const availableSlots = availableSlotsByDate[dateStr] || [];
+                                    
+                                    // デバッグログ（すべての日付で確認）
+                                    if (availableSlots.length > 0 || Object.keys(availableSlotsByDate).length > 0) {
+                                      console.log('デバッグ: 日付スロット確認', {
+                                        dateStr,
+                                        availableSlots,
+                                        availableSlotsLength: availableSlots.length,
+                                        availableSlotsByDateKeys: Object.keys(availableSlotsByDate),
+                                        availableSlotsByDateValue: availableSlotsByDate[dateStr],
+                                        availableSlotsByDateSize: Object.keys(availableSlotsByDate).length
+                                      });
+                                    }
+                                    
                                     const dayOfWeek = date.getDay();
                                     const isClosed = availableSlots.length === 0 && (closedDaysInfo.closedDays.includes(dayOfWeek) || closedDaysInfo.temporaryClosedDays.includes(dateStr));
                                     
@@ -816,7 +885,32 @@ function ReservationPageContent() {
                                         {/* 時間スロット */}
                                         <div className="relative" style={{ height: `${timeSlots.length * 32}px` }}>
                                           {timeSlots.map((time) => {
-                                            const isAvailable = availableSlots.includes(time);
+                                            // 30分間隔のスロットが利用可能かどうかを判定
+                                            // APIは15分間隔でスロットを返すので、その時間または15分前のスロットが利用可能かどうかをチェック
+                                            const [hour, minute] = time.split(':').map(Number);
+                                            const timeInMinutes = hour * 60 + minute;
+                                            
+                                            // その時間自体が利用可能か、または15分前のスロットが利用可能かチェック
+                                            const time15Before = timeInMinutes >= 15 
+                                              ? `${Math.floor((timeInMinutes - 15) / 60).toString().padStart(2, '0')}:${((timeInMinutes - 15) % 60).toString().padStart(2, '0')}`
+                                              : null;
+                                            
+                                            // デバッグログ（最初の数回のみ）
+                                            if (dateStr === '2026-01-06' && (time === '09:00' || time === '09:30' || time === '10:00')) {
+                                              console.log('スロット判定デバッグ:', {
+                                                dateStr,
+                                                time,
+                                                availableSlotsLength: availableSlots.length,
+                                                availableSlotsSample: availableSlots.slice(0, 10),
+                                                time15Before,
+                                                includesTime: availableSlots.includes(time),
+                                                includesTime15Before: time15Before !== null && availableSlots.includes(time15Before)
+                                              });
+                                            }
+                                            
+                                            const isAvailable = availableSlots.includes(time) || 
+                                              (time15Before !== null && availableSlots.includes(time15Before));
+                                            
                                             const isSelected = selectedDate === dateStr && selectedTime === time;
                                             
                                             return (
@@ -832,8 +926,14 @@ function ReservationPageContent() {
                                                 style={{ height: '32px' }}
                                                 onClick={() => {
                                                   if (isAvailable) {
-                                                    setSelectedDate(dateStr);
-                                                    setSelectedTime(time);
+                                                    // 利用可能なスロットから最も近い時間を選択
+                                                    const actualTime = availableSlots.includes(time) 
+                                                      ? time 
+                                                      : (time15Before && availableSlots.includes(time15Before) ? time15Before : null);
+                                                    if (actualTime) {
+                                                      setSelectedDate(dateStr);
+                                                      setSelectedTime(actualTime);
+                                                    }
                                                   }
                                                 }}
                                               >

@@ -527,22 +527,37 @@ function MyPageContent() {
                       </p>
                       <p className="text-gray-900 font-medium mb-1">¥{(reservation.total_price || reservation.price || 0).toLocaleString()}</p>
                       <p className="text-sm text-gray-500 mb-3">ステータス: {reservation.status === 'confirmed' ? '予約確定' : reservation.status === 'cancelled' ? 'キャンセル' : reservation.status}</p>
-                      {canModify && (
-                        <div className="flex gap-2 mt-3">
-                          <button
-                            onClick={() => handleEdit(reservation)}
-                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                          >
-                            変更
-                          </button>
-                          <button
-                            onClick={() => handleCancel(reservation.reservation_id)}
-                            className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
-                          >
-                            キャンセル
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        {/* 同じメニューで予約するボタン */}
+                        <button
+                          onClick={() => {
+                            // メニューIDを取得（複数メニューの場合はカンマ区切り）
+                            const menuIds = reservation.menus && reservation.menus.length > 0
+                              ? reservation.menus.map(m => m.menu_id).join(',')
+                              : reservation.menu_id.toString();
+                            router.push(`/reservation?tenant=${tenantCode}&menu_ids=${menuIds}`);
+                          }}
+                          className="px-4 py-2 bg-pink-600 text-white text-sm rounded-lg hover:bg-pink-700 transition-colors"
+                        >
+                          同じメニューで予約する
+                        </button>
+                        {canModify && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(reservation)}
+                              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                              変更
+                            </button>
+                            <button
+                              onClick={() => handleCancel(reservation.reservation_id)}
+                              className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                            >
+                              キャンセル
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
