@@ -78,9 +78,10 @@ function TimelineScheduleView({
 }) {
   const [draggedReservation, setDraggedReservation] = useState<Reservation | null>(null);
   const [dragOverStaffId, setDragOverStaffId] = useState<number | null>(null);
+  const [dragOverStore, setDragOverStore] = useState<boolean>(false);
 
-  // 予約をスタッフに割り当てる関数
-  const handleAssignToStaff = async (reservation: Reservation, staffId: number) => {
+  // 予約をスタッフに割り当てる関数（staffIdがnullの場合は店舗全体に戻す）
+  const handleAssignToStaff = async (reservation: Reservation, staffId: number | null) => {
     try {
       // reservation_dateをJST時刻として取得（顧客側や管理画面の予約作成と同じ形式で送信）
       // APIレスポンスでは既にYYYY-MM-DDTHH:mm:ss+09:00形式で返されているが、
@@ -125,7 +126,7 @@ function TimelineScheduleView({
         body: JSON.stringify({
           menu_ids: menuIds,
           menu_id: reservation.menu_id, // 後方互換性のため
-          staff_id: staffId,
+          staff_id: staffId || null, // nullの場合は店舗全体に戻す
           reservation_date: reservationDateTime,
           status: reservation.status,
           notes: reservation.notes
@@ -164,25 +165,33 @@ function TimelineScheduleView({
   };
 
   // ドラッグオーバー（スタッフ列上）
-  const handleDragOver = (e: React.DragEvent, staffId: number) => {
+  const handleDragOver = (e: React.DragEvent, staffId: number | null) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    setDragOverStaffId(staffId);
+    if (staffId === null) {
+      setDragOverStore(true);
+      setDragOverStaffId(null);
+    } else {
+      setDragOverStaffId(staffId);
+      setDragOverStore(false);
+    }
   };
 
   // ドラッグリーブ（スタッフ列から離れる）
   const handleDragLeave = () => {
     setDragOverStaffId(null);
+    setDragOverStore(false);
   };
 
-  // ドロップ（スタッフ列にドロップ）
-  const handleDrop = (e: React.DragEvent, staffId: number) => {
+  // ドロップ（スタッフ列または店舗全体にドロップ）
+  const handleDrop = (e: React.DragEvent, staffId: number | null) => {
     e.preventDefault();
     if (draggedReservation) {
       handleAssignToStaff(draggedReservation, staffId);
     }
     setDraggedReservation(null);
     setDragOverStaffId(null);
+    setDragOverStore(false);
   };
 
   // 時間をフォーマット（HH:MM）
@@ -389,16 +398,16 @@ function TimelineScheduleView({
                   width: `${columnCount * 100}px`
                 }}
               >
-                <div className="h-12 border-b border-gray-200 px-2 py-1 flex items-center justify-between">
+                <div className="h-12 border-b border-gray-200 px-2 py-1 flex items-center justify-center relative">
                   <div className="flex items-center">
                     <CalendarDaysIcon className="h-3 w-3 text-pink-600 mr-1" />
                     <span className="text-xs font-semibold text-gray-900">
                       {formatDate(date)}
                     </span>
+                    <span className="ml-2 text-xs text-gray-500">
+                      ({totalCount})
+                    </span>
                   </div>
-                  <span className="text-xs text-gray-500">
-                    ({totalCount})
-                  </span>
                 </div>
               </div>
             );
@@ -521,11 +530,23 @@ function TimelineScheduleView({
             return (
               <div key={dateKey} className="flex border-r border-gray-200">
                 {/* 店舗全体の列 */}
-                <div className="flex-1 min-w-[100px] border-r border-gray-200 relative">
+                <div 
+                  className={`flex-1 min-w-[100px] border-r border-gray-200 relative transition-colors ${
+                    dragOverStore ? 'bg-blue-100' : ''
+                  }`}
+                  onDragOver={(e) => handleDragOver(e, null)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, null)}
+                >
                   {/* 列ヘッダー */}
-                  <div className="h-10 border-b border-gray-200 bg-blue-50 px-2 py-1 flex items-center">
+                  <div className={`h-10 border-b border-gray-200 px-2 py-1 flex items-center transition-colors ${
+                    dragOverStore ? 'bg-blue-200' : 'bg-blue-50'
+                  }`}>
                     <span className="text-xs font-semibold text-gray-900">店舗全体</span>
                     <span className="ml-1 text-xs text-gray-500">({dayData.all.length})</span>
+                    {dragOverStore && (
+                      <span className="ml-2 text-xs text-blue-600 font-bold">← ここにドロップ</span>
+                    )}
                   </div>
                   
                   {/* 時間スロット */}
