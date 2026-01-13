@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import AdminNav from '@/app/components/AdminNav';
 import { 
@@ -8,7 +8,8 @@ import {
   ChevronRightIcon,
   CalendarDaysIcon,
   TableCellsIcon,
-  ClockIcon
+  ClockIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 const mockStaff = [
@@ -69,11 +70,350 @@ const generateMockShifts = () => {
 
 const mockShifts = generateMockShifts();
 
+// デモ用の日別タイムテーブルコンポーネント
+interface DemoDailyTimeTableProps {
+  selectedDate: Date;
+  onDateChange: (date: Date) => void;
+  mockShifts: Record<number, Record<string, any>>;
+  mockStaff: Array<{ staff_id: number; name: string }>;
+}
+
+function DemoDailyTimeTable({ 
+  selectedDate, 
+  onDateChange,
+  mockShifts,
+  mockStaff 
+}: DemoDailyTimeTableProps) {
+  const tableRef = useRef<HTMLDivElement>(null);
+  const dateStr = selectedDate.toISOString().split('T')[0];
+  const dateObj = new Date(selectedDate);
+  const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
+  
+  // 営業時間に基づいて時間スロットを計算（10:00-22:00）
+  const timeSlots: string[] = [];
+  for (let hour = 9; hour <= 22; hour++) {
+    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
+  }
+  
+  // 選択した日付のシフトを取得
+  const shifts: Record<number, any> = {};
+  mockStaff.forEach(staff => {
+    const shift = mockShifts[staff.staff_id]?.[dateStr];
+    if (shift && shift.startTime && shift.endTime && !shift.isOff) {
+      shifts[staff.staff_id] = {
+        staff_id: staff.staff_id,
+        shift_date: dateStr,
+        start_time: shift.startTime,
+        end_time: shift.endTime,
+        is_off: false,
+        break_times: shift.breakTimes || [],
+        staff_name: staff.name
+      };
+    }
+  });
+  
+  // シフトがある従業員のみフィルタ
+  const staffWithShifts = mockStaff.filter(s => {
+    const shift = shifts[s.staff_id];
+    return shift && shift.start_time && shift.end_time && !shift.is_off;
+  });
+  
+  const registeredCount = staffWithShifts.length;
+  
+  // 時間を分に変換
+  const timeToMinutes = (time: string) => {
+    if (!time) return 0;
+    const [hour, minute] = time.split(':').map(Number);
+    return hour * 60 + minute;
+  };
+  
+  // 分を時間文字列に変換
+  const minutesToTime = (minutes: number) => {
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  };
+  
+  // X座標から時間を取得
+  const getTimeFromX = (x: number) => {
+    if (!tableRef.current || timeSlots.length === 0) return null;
+    const rect = tableRef.current.getBoundingClientRect();
+    const employeeColumnWidth = 150;
+    const relativeX = x - rect.left - employeeColumnWidth;
+    if (relativeX < 0) return null;
+    
+    const timeSlotWidth = 120;
+    const totalWidth = timeSlots.length * timeSlotWidth;
+    const positionPercent = relativeX / totalWidth;
+    
+    const firstSlot = timeSlots[0];
+    const lastSlot = timeSlots[timeSlots.length - 1];
+    const [firstHour] = firstSlot.split(':').map(Number);
+    const [lastHour] = lastSlot.split(':').map(Number);
+    
+    if (positionPercent < 0) return firstSlot;
+    if (positionPercent > 1) return minutesToTime((lastHour + 1) * 60);
+    
+    const totalMinutes = (lastHour - firstHour + 1) * 60;
+    const minutes = firstHour * 60 + (positionPercent * totalMinutes);
+    const hour = Math.floor(minutes / 60);
+    const minute = Math.floor((minutes % 60) / 15) * 15;
+    
+    if (hour < firstHour) return firstSlot;
+    if (hour > lastHour + 1) return minutesToTime((lastHour + 1) * 60);
+    
+    return minutesToTime(hour * 60 + minute);
+  };
+  
+  // シフトブロックの位置と幅を計算
+  const getShiftBlockStyle = (startTime: string, endTime: string, startSlotIndex: number) => {
+    const startMinutes = timeToMinutes(startTime);
+    const endMinutes = timeToMinutes(endTime);
+    
+    if (startSlotIndex === -1) {
+      return { left: '0px', width: '100%', minWidth: '40px' };
+    }
+    
+    const startSlotMinutes = timeToMinutes(timeSlots[startSlotIndex]);
+    const offsetInCell = startMinutes - startSlotMinutes;
+    
+    let endSlotIndex = timeSlots.findIndex(time => {
+      const timeMinutes = timeToMinutes(time);
+      const nextTimeMinutes = timeMinutes + 60;
+      return timeMinutes <= endMinutes && nextTimeMinutes > endMinutes;
+    });
+    
+    if (endSlotIndex === -1) {
+      const lastSlotMinutes = timeToMinutes(timeSlots[timeSlots.length - 1]);
+      if (endMinutes >= lastSlotMinutes) {
+        endSlotIndex = timeSlots.length - 1;
+      } else {
+        endSlotIndex = 0;
+      }
+    }
+    
+    const cellWidth = 120;
+    const offsetPx = (offsetInCell / 60) * cellWidth;
+    const spanCells = endSlotIndex - startSlotIndex + 1;
+    
+    const endSlotMinutes = timeToMinutes(timeSlots[endSlotIndex]);
+    const endOffsetInCell = endMinutes - endSlotMinutes;
+    
+    if (endOffsetInCell === 0) {
+      if (endSlotIndex > startSlotIndex) {
+        endSlotIndex = endSlotIndex - 1;
+        const endOffsetPx = cellWidth;
+        const spanCells = endSlotIndex - startSlotIndex + 1;
+        const widthPx = (spanCells * cellWidth) - offsetPx + endOffsetPx;
+        
+        return {
+          left: `${offsetPx}px`,
+          width: `${widthPx}px`,
+          minWidth: '40px'
+        };
+      } else {
+        const widthPx = cellWidth - offsetPx;
+        return {
+          left: `${offsetPx}px`,
+          width: `${widthPx}px`,
+          minWidth: '40px'
+        };
+      }
+    }
+    
+    const endOffsetPx = Math.min((endOffsetInCell / 60) * cellWidth, cellWidth);
+    const widthPx = (spanCells * cellWidth) - offsetPx + endOffsetPx;
+    
+    return {
+      left: `${offsetPx}px`,
+      width: `${widthPx}px`,
+      minWidth: '40px'
+    };
+  };
+  
+  // 休憩ブロックの位置と幅を計算
+  const getBreakBlockStyle = (startTime: string, endTime: string, shiftStartTime: string, shiftEndTime: string) => {
+    const breakStartMinutes = timeToMinutes(startTime);
+    const breakEndMinutes = timeToMinutes(endTime);
+    const shiftStartMinutes = timeToMinutes(shiftStartTime);
+    const shiftEndMinutes = timeToMinutes(shiftEndTime);
+    
+    const startOffset = breakStartMinutes - shiftStartMinutes;
+    const duration = breakEndMinutes - breakStartMinutes;
+    const shiftDuration = shiftEndMinutes - shiftStartMinutes;
+    
+    const leftPercent = (startOffset / shiftDuration) * 100;
+    const widthPercent = (duration / shiftDuration) * 100;
+    
+    return {
+      left: `${leftPercent}%`,
+      width: `${widthPercent}%`,
+      top: '8px',
+      bottom: '8px',
+      height: 'auto',
+      minWidth: '20px'
+    };
+  };
+  
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6 w-full" ref={tableRef} style={{ maxWidth: '100%', overflow: 'visible' }}>
+      {/* ヘッダー */}
+      <div className="mb-4">
+        <div className="bg-blue-600 text-white px-4 py-2 rounded-t-lg">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-lg font-bold">
+                {dateObj.getMonth() + 1}月{dateObj.getDate()}日のシフト
+              </div>
+              <div className="text-sm mt-1">シフト登録者: {registeredCount}名</div>
+            </div>
+            <button
+              onClick={() => onDateChange(new Date())}
+              className="text-white hover:text-gray-200"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+          </div>
+        </div>
+        <div className="bg-blue-500 text-white px-4 py-2 rounded-b-lg">
+          <div className="flex justify-between items-center">
+            <div className="text-lg font-bold">
+              タイムテーブル - {dateObj.getMonth() + 1}月{dateObj.getDate()}日 ({dayOfWeek})
+            </div>
+            <div className="text-sm">シフト登録者: {registeredCount}名</div>
+          </div>
+        </div>
+      </div>
+
+      {/* タイムテーブル */}
+      <div className="overflow-x-auto bg-white rounded-lg shadow-lg w-full">
+        <table className="border-collapse" style={{ minWidth: `${150 + timeSlots.length * 120}px`, width: 'auto' }}>
+          <thead>
+            <tr className="bg-blue-600 border-b border-blue-700">
+              <th className="border-r border-blue-700 p-3 text-left font-semibold bg-blue-600 text-white sticky left-0 z-20 shadow-lg" style={{ minWidth: '150px', width: '150px' }}>
+                従業員名
+              </th>
+              {timeSlots.map((time) => (
+                <th
+                  key={time}
+                  className="border-r border-blue-700 p-2 text-center font-semibold text-white text-sm bg-blue-600"
+                  style={{ minWidth: '120px', width: '120px' }}
+                >
+                  {time}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody style={{ position: 'relative' }}>
+            {staffWithShifts.map((s, staffIndex) => {
+              const shift = shifts[s.staff_id];
+              if (!shift || !shift.start_time || !shift.end_time || shift.is_off) return null;
+
+              const breakTimes = Array.isArray(shift.break_times) ? shift.break_times : [];
+              
+              // 開始時間がどのセルに該当するかを計算
+              const startMinutes = shift.start_time ? timeToMinutes(shift.start_time) : 0;
+              const startSlotIndex = shift.start_time ? timeSlots.findIndex(time => {
+                const timeMinutes = timeToMinutes(time);
+                const nextTimeMinutes = timeMinutes + 60;
+                return timeMinutes <= startMinutes && nextTimeMinutes > startMinutes;
+              }) : -1;
+              
+              return (
+                <tr key={s.staff_id} className="border-b border-gray-200 relative" style={{ height: '120px', position: 'relative' }}>
+                  <td className="border-r border-gray-300 p-3 bg-gray-50 sticky left-0 z-10 font-medium shadow-md" style={{ minWidth: '150px', width: '150px' }}>
+                    {s.name}
+                  </td>
+                  {timeSlots.map((time, timeIndex) => {
+                    if (!shift.start_time || !shift.end_time) return null;
+                    
+                    const timeMinutes = timeToMinutes(time);
+                    const startMinutes = timeToMinutes(shift.start_time);
+                    const endMinutes = timeToMinutes(shift.end_time);
+                    const isInShift = timeMinutes >= startMinutes && timeMinutes < endMinutes;
+                    const isStartCell = startSlotIndex === timeIndex;
+                    const isWorkingTime = isInShift;
+                    
+                    return (
+                      <td
+                        key={`${s.staff_id}-${time}`}
+                        className={`border-r border-gray-200 p-0 ${
+                          isWorkingTime ? 'bg-blue-50' : 'bg-white'
+                        }`}
+                        style={{ height: '120px', minWidth: '120px', width: '120px', position: 'relative', overflow: 'visible' }}
+                      >
+                        {/* シフト開始時間のセルにシフトブロックを表示 */}
+                        {isStartCell && (
+                          <div
+                            className="absolute top-0 bottom-0 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded shadow-lg z-20 group border-2 border-white"
+                            style={{
+                              ...getShiftBlockStyle(shift.start_time, shift.end_time, startSlotIndex),
+                              position: 'absolute'
+                            }}
+                          >
+                            {/* シフト内容 */}
+                            <div className="p-1 h-full flex flex-col justify-center items-start pl-2">
+                              <div className="font-semibold text-xs text-white whitespace-nowrap">
+                                {shift.start_time} - {shift.end_time}
+                              </div>
+                            </div>
+
+                            {/* 休憩時間 */}
+                            {breakTimes.map((breakTime: { start: string; end: string }, idx: number) => {
+                              if (!shift.start_time || !shift.end_time) return null;
+                              
+                              const breakStartMinutes = timeToMinutes(breakTime.start);
+                              const breakEndMinutes = timeToMinutes(breakTime.end);
+                              
+                              if (breakStartMinutes < startMinutes || breakEndMinutes > endMinutes) {
+                                return null;
+                              }
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="absolute bg-gradient-to-r from-orange-400 to-orange-500 text-white text-xs rounded z-30 group/break border-2 border-white shadow-md"
+                                  style={getBreakBlockStyle(breakTime.start, breakTime.end, shift.start_time, shift.end_time)}
+                                >
+                                  <div className="p-1 h-full flex items-center justify-center relative">
+                                    <div className="text-xs text-white whitespace-nowrap font-semibold pointer-events-none">
+                                      {breakTime.start}-{breakTime.end}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 閉じるボタン */}
+      <div className="mt-6 flex justify-end">
+        <button
+          onClick={() => onDateChange(new Date())}
+          className="px-6 py-2 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DemoAdminShifts() {
   const currentDate = new Date();
   const [selectedStaffId, setSelectedStaffId] = useState<string>('1');
-  const [viewMode, setViewMode] = useState<'table' | 'timetable'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'timetable' | 'daily'>('table');
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDailyDate, setSelectedDailyDate] = useState<Date | null>(null);
 
   const formatMonthYear = (date: Date) => {
     return `${date.getFullYear()}年${date.getMonth() + 1}月`;
@@ -192,6 +532,24 @@ export default function DemoAdminShifts() {
                     タイムテーブル表示
                   </div>
                 </button>
+                <button
+                  onClick={() => {
+                    setViewMode('daily');
+                    if (!selectedDailyDate) {
+                      setSelectedDailyDate(new Date());
+                    }
+                  }}
+                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
+                    viewMode === 'daily'
+                      ? 'border-pink-500 text-pink-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CalendarDaysIcon className="h-5 w-5" />
+                    日別タイムテーブル
+                  </div>
+                </button>
               </nav>
             </div>
 
@@ -213,7 +571,49 @@ export default function DemoAdminShifts() {
               </select>
             </div>
 
-            {viewMode === 'table' ? (
+            {viewMode === 'daily' ? (
+              /* 日別タイムテーブル表示 */
+              selectedDailyDate ? (
+                <div className="mb-4">
+                  <div className="flex items-center gap-4 mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      表示日付
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedDailyDate.toISOString().split('T')[0]}
+                      onChange={(e) => setSelectedDailyDate(new Date(e.target.value))}
+                      className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                    />
+                  </div>
+                  <DemoDailyTimeTable
+                    selectedDate={selectedDailyDate}
+                    onDateChange={(date) => {
+                      setSelectedDailyDate(date);
+                      if (date.getTime() === new Date().getTime()) {
+                        setViewMode('table');
+                        setSelectedDailyDate(null);
+                      }
+                    }}
+                    mockShifts={mockShifts}
+                    mockStaff={mockStaff}
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-gray-600 mb-4">日付を選択してください</p>
+                  <input
+                    type="date"
+                    value={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      setSelectedDailyDate(new Date(e.target.value));
+                      setViewMode('daily');
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  />
+                </div>
+              )
+            ) : viewMode === 'table' ? (
               /* テーブル表示 */
               <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse border border-gray-300 text-sm">
