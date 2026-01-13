@@ -331,9 +331,13 @@ export default function DemoAdminShifts() {
                       
                       // 時間を分に変換（10:00を基準に0分とする）
                       const timeToMinutes = (time: string) => {
+                        if (!time) return 0;
                         const [hour, minute] = time.split(':').map(Number);
                         return (hour - 10) * 60 + minute;
                       };
+                      
+                      // breakTimesが配列でない場合は空配列にする
+                      const breakTimes = Array.isArray(shift.breakTimes) ? shift.breakTimes : [];
                       
                       return (
                         <div
@@ -379,7 +383,8 @@ export default function DemoAdminShifts() {
                                 })()}
                                 
                                 {/* 休憩時間 */}
-                                {shift.breakTimes.map((bt: any, idx: number) => {
+                                {breakTimes.map((bt: any, idx: number) => {
+                                  if (!bt || !bt.start || !bt.end) return null;
                                   const breakStartMinutes = timeToMinutes(bt.start);
                                   const breakEndMinutes = timeToMinutes(bt.end);
                                   const slotHeight = 16; // 30分 = 16px
@@ -403,7 +408,7 @@ export default function DemoAdminShifts() {
                                       </div>
                                     </div>
                                   );
-                                })()}
+                                })}
                               </>
                             )}
                             {shift.isOff && (
