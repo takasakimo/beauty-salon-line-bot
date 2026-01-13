@@ -46,8 +46,17 @@ const generateMockReservations = () => {
       usedTimes.push(time);
       
       const [hour, minute] = time.split(':').map(Number);
+      // JSTとして正しく日時を設定
       const reservationDate = new Date(date);
       reservationDate.setHours(hour, minute, 0, 0);
+      
+      // JSTとして扱うため、ISO文字列に変換せず、ローカル時間の文字列として保存
+      const year = reservationDate.getFullYear();
+      const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
+      const day = String(reservationDate.getDate()).padStart(2, '0');
+      const hours = String(reservationDate.getHours()).padStart(2, '0');
+      const minutes = String(reservationDate.getMinutes()).padStart(2, '0');
+      const reservationDateStr = `${year}-${month}-${day}T${hours}:${minutes}:00+09:00`;
       
       const menu = menus[Math.floor(Math.random() * menus.length)];
       const customer = customers[Math.floor(Math.random() * customers.length)];
@@ -77,7 +86,7 @@ const generateMockReservations = () => {
       
       reservations.push({
         reservation_id: reservationId++,
-        reservation_date: reservationDate.toISOString().replace('Z', '+09:00'),
+        reservation_date: reservationDateStr,
         customer_name: customer,
         ...menuData,
         total_price: totalPrice,
@@ -96,12 +105,12 @@ const mockReservations = generateMockReservations();
 
 export default function DemoAdminReservations() {
   const formatTime = (dateString: string) => {
+    // JSTとして解釈（+09:00が含まれている場合）
     const date = new Date(dateString);
-    return date.toLocaleTimeString('ja-JP', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Tokyo'
-    });
+    // ローカル時間として表示（既にJSTとして設定されているため）
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
   };
 
   const formatDate = (date: Date) => {
@@ -133,17 +142,28 @@ export default function DemoAdminReservations() {
 
   // 日付とスタッフをキーとして予約をグループ化
   const reservationsByDateAndStaff = weekDates.reduce((acc, date) => {
-    const dateKey = date.toISOString().split('T')[0];
+    // ローカル日付のキーを生成（YYYY-MM-DD形式）
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateKey = `${year}-${month}-${day}`;
+    
     acc[dateKey] = {
       all: mockReservations.filter(r => {
         const rDate = new Date(r.reservation_date);
-        const rDateKey = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, '0')}-${String(rDate.getDate()).padStart(2, '0')}`;
+        const rYear = rDate.getFullYear();
+        const rMonth = String(rDate.getMonth() + 1).padStart(2, '0');
+        const rDay = String(rDate.getDate()).padStart(2, '0');
+        const rDateKey = `${rYear}-${rMonth}-${rDay}`;
         return rDateKey === dateKey && (!r.staff_id || r.staff_id === null);
       }),
       byStaff: mockStaff.reduce((staffAcc, s) => {
         staffAcc[s.staff_id] = mockReservations.filter(r => {
           const rDate = new Date(r.reservation_date);
-          const rDateKey = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, '0')}-${String(rDate.getDate()).padStart(2, '0')}`;
+          const rYear = rDate.getFullYear();
+          const rMonth = String(rDate.getMonth() + 1).padStart(2, '0');
+          const rDay = String(rDate.getDate()).padStart(2, '0');
+          const rDateKey = `${rYear}-${rMonth}-${rDay}`;
           return rDateKey === dateKey && r.staff_id === s.staff_id;
         });
         return staffAcc;
@@ -154,6 +174,7 @@ export default function DemoAdminReservations() {
 
   const getReservationTimeRange = (reservation: typeof mockReservations[0]) => {
     const start = new Date(reservation.reservation_date);
+    // JSTとして設定されているため、ローカル時間として取得
     const startMinutes = start.getHours() * 60 + start.getMinutes();
     const duration = reservation.total_duration || reservation.menu_duration || 60;
     const endMinutes = startMinutes + duration;
@@ -215,7 +236,10 @@ export default function DemoAdminReservations() {
                   </div>
                   
                   {weekDates.map((date) => {
-                    const dateKey = date.toISOString().split('T')[0];
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const dateKey = `${year}-${month}-${day}`;
                     const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
                     const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
                     const columnCount = 1 + mockStaff.length;
@@ -262,7 +286,10 @@ export default function DemoAdminReservations() {
                   </div>
                   
                   {weekDates.map((date) => {
-                    const dateKey = date.toISOString().split('T')[0];
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const dateKey = `${year}-${month}-${day}`;
                     const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
                     
                     return (
