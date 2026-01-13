@@ -52,7 +52,7 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
   ];
 
   // デモモードで存在するページのみ
-  const demoAvailablePages = ['/admin/dashboard', '/admin/reservations'];
+  const demoAvailablePages = ['/admin/dashboard', '/admin/reservations', '/admin/shifts', '/admin/products'];
 
   // デモモードの場合はパスを/demo/admin/*に変換し、存在するページのみを表示
   const navigation = baseNavigation
