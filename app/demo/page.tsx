@@ -74,6 +74,18 @@ export default function DemoPage() {
               >
                 予約管理
               </Link>
+              <Link
+                href="/demo/admin/shifts"
+                className="bg-gray-700 hover:bg-gray-800 text-white font-medium py-4 px-6 rounded-lg text-center transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+              >
+                シフト管理
+              </Link>
+              <Link
+                href="/demo/admin/products"
+                className="bg-gray-700 hover:bg-gray-800 text-white font-medium py-4 px-6 rounded-lg text-center transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
+              >
+                商品管理
+              </Link>
             </div>
           </div>
 
