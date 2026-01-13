@@ -87,9 +87,9 @@ async function fixDemoReservationTimes() {
     const tenantId = tenantResult.rows[0].tenant_id;
     console.log(`テナントID: ${tenantId}`);
     
-    // 営業時間（10:00-19:00）
+    // 営業時間（10:00-20:00）
     const openMinutes = timeToMinutes('10:00');
-    const closeMinutes = timeToMinutes('19:00');
+    const closeMinutes = timeToMinutes('20:00');
     
     // 未来の予約を取得
     const reservationsResult = await client.query(

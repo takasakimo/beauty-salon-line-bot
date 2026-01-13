@@ -23,7 +23,7 @@ const generateMockReservations = () => {
     { menu_id: 5, menu_name: 'トリートメント', price: 2000, duration: 30 }
   ];
   const staffIds = [1, 2, 3, null];
-  const timeSlots = ['10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
+  const timeSlots = ['10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'];
   
   let reservationId = 1;
   
@@ -134,11 +134,11 @@ export default function DemoAdminReservations() {
 
   const weekDates = getWeekDates();
   const timeSlots: string[] = [];
-  for (let hour = 10; hour < 19; hour++) {
+  for (let hour = 10; hour < 20; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
     timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
   }
-  timeSlots.push('19:00');
+  timeSlots.push('20:00');
 
   // 日付とスタッフをキーとして予約をグループ化
   const reservationsByDateAndStaff = weekDates.reduce((acc, date) => {

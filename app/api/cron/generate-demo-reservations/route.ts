@@ -88,10 +88,10 @@ export async function GET(request: NextRequest) {
             : tenant.business_hours;
         } catch (e) {
           console.warn('営業時間のパースエラー、デフォルト値を使用:', e);
-          businessHours = { default: { open: '10:00', close: '19:00' } };
+          businessHours = { default: { open: '10:00', close: '20:00' } };
         }
       } else {
-        businessHours = { default: { open: '10:00', close: '19:00' } };
+        businessHours = { default: { open: '10:00', close: '20:00' } };
       }
       
       // 定休日をパース
@@ -226,10 +226,10 @@ export async function GET(request: NextRequest) {
           continue;
         }
         
-        // その日の営業時間を取得（デモ用に10:00-19:00に固定）
-        const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
+        // その日の営業時間を取得（デモ用に10:00-20:00に固定）
+        const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '20:00' };
         const openTime = '10:00'; // デモ用に固定
-        const closeTime = '19:00'; // デモ用に固定
+        const closeTime = '20:00'; // デモ用に固定
         
         const openMinutes = timeToMinutes(openTime);
         const closeMinutes = timeToMinutes(closeTime);
