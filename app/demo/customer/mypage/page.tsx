@@ -19,7 +19,7 @@ const mockReservations = [
   },
   {
     reservation_id: 2,
-    reservation_date: '2024-12-20T10:00:00+09:00',
+    reservation_date: '2024-12-28T11:00:00+09:00',
     menu_name: 'カット',
     price: 3000,
     menu_duration: 60,
@@ -28,12 +28,61 @@ const mockReservations = [
   },
   {
     reservation_id: 3,
-    reservation_date: '2024-12-10T15:00:00+09:00',
+    reservation_date: '2024-12-25T15:30:00+09:00',
     menu_name: 'パーマ',
     price: 8000,
     menu_duration: 120,
+    staff_name: '鈴木 美咲',
+    status: 'completed'
+  },
+  {
+    reservation_id: 4,
+    reservation_date: '2024-12-20T10:00:00+09:00',
+    menu_name: 'カットカラー',
+    menus: [
+      { menu_id: 1, menu_name: 'カット', price: 3000, duration: 60 },
+      { menu_id: 2, menu_name: 'カラー', price: 5000, duration: 90 }
+    ],
+    total_price: 8000,
+    total_duration: 150,
+    staff_name: '山田 花子',
+    status: 'completed'
+  },
+  {
+    reservation_id: 5,
+    reservation_date: '2024-12-15T13:00:00+09:00',
+    menu_name: 'トリートメント',
+    price: 2000,
+    menu_duration: 30,
+    staff_name: '佐藤 太郎',
+    status: 'completed'
+  },
+  {
+    reservation_id: 6,
+    reservation_date: '2024-12-10T16:00:00+09:00',
+    menu_name: 'カット',
+    price: 3000,
+    menu_duration: 60,
     staff_name: null,
     status: 'cancelled'
+  },
+  {
+    reservation_id: 7,
+    reservation_date: '2024-12-05T14:00:00+09:00',
+    menu_name: 'パーマ',
+    price: 8000,
+    menu_duration: 120,
+    staff_name: '鈴木 美咲',
+    status: 'completed'
+  },
+  {
+    reservation_id: 8,
+    reservation_date: '2024-11-30T10:30:00+09:00',
+    menu_name: 'カラー',
+    price: 5000,
+    menu_duration: 90,
+    staff_name: '山田 花子',
+    status: 'completed'
   }
 ];
 

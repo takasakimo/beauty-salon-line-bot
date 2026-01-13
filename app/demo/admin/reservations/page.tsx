@@ -4,52 +4,95 @@ import Link from 'next/link';
 import AdminNav from '@/app/components/AdminNav';
 import { CalendarDaysIcon } from '@heroicons/react/24/outline';
 
-// モックデータ
-const mockReservations = [
-  {
-    reservation_id: 1,
-    reservation_date: '2025-01-15T14:00:00+09:00',
-    customer_name: '山田 太郎',
-    menu_name: 'カットカラー',
-    menus: [
-      { menu_id: 1, menu_name: 'カット', price: 3000, duration: 60 },
-      { menu_id: 2, menu_name: 'カラー', price: 5000, duration: 90 }
-    ],
-    total_price: 8000,
-    total_duration: 150,
-    staff_id: 1,
-    staff_name: '山田 花子',
-    status: 'confirmed'
-  },
-  {
-    reservation_id: 2,
-    reservation_date: '2025-01-15T10:00:00+09:00',
-    customer_name: '佐藤 花子',
-    menu_name: 'カット',
-    price: 3000,
-    menu_duration: 60,
-    staff_id: 2,
-    staff_name: '佐藤 太郎',
-    status: 'confirmed'
-  },
-  {
-    reservation_id: 3,
-    reservation_date: '2025-01-15T16:00:00+09:00',
-    customer_name: '鈴木 一郎',
-    menu_name: 'パーマ',
-    price: 8000,
-    menu_duration: 120,
-    staff_id: null,
-    staff_name: null,
-    status: 'confirmed'
-  }
-];
-
 const mockStaff = [
   { staff_id: 1, name: '山田 花子' },
   { staff_id: 2, name: '佐藤 太郎' },
   { staff_id: 3, name: '鈴木 美咲' }
 ];
+
+// モックデータ - 1週間分の予約データを生成
+const generateMockReservations = () => {
+  const reservations = [];
+  const baseDate = new Date();
+  const customers = ['山田 太郎', '佐藤 花子', '鈴木 一郎', '田中 美咲', '高橋 健太', '伊藤 さくら', '渡辺 大輔', '中村 麻衣', '小林 翔太', '加藤 優香'];
+  const menus = [
+    { menu_id: 1, menu_name: 'カット', price: 3000, duration: 60 },
+    { menu_id: 2, menu_name: 'カラー', price: 5000, duration: 90 },
+    { menu_id: 3, menu_name: 'カットカラー', price: 7500, duration: 120 },
+    { menu_id: 4, menu_name: 'パーマ', price: 8000, duration: 120 },
+    { menu_id: 5, menu_name: 'トリートメント', price: 2000, duration: 30 }
+  ];
+  const staffIds = [1, 2, 3, null];
+  const timeSlots = ['10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
+  
+  let reservationId = 1;
+  
+  // 今日から7日間分の予約を生成
+  for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+    const date = new Date(baseDate);
+    date.setDate(baseDate.getDate() + dayOffset);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    // 各日に3-5件の予約を生成
+    const reservationsPerDay = Math.floor(Math.random() * 3) + 3;
+    const usedTimes: string[] = [];
+    
+    for (let i = 0; i < reservationsPerDay; i++) {
+      // 利用可能な時間スロットから選択
+      const availableTimes = timeSlots.filter(t => !usedTimes.includes(t));
+      if (availableTimes.length === 0) break;
+      
+      const time = availableTimes[Math.floor(Math.random() * availableTimes.length)];
+      usedTimes.push(time);
+      
+      const [hour, minute] = time.split(':').map(Number);
+      const reservationDate = new Date(date);
+      reservationDate.setHours(hour, minute, 0, 0);
+      
+      const menu = menus[Math.floor(Math.random() * menus.length)];
+      const customer = customers[Math.floor(Math.random() * customers.length)];
+      const staffId = staffIds[Math.floor(Math.random() * staffIds.length)];
+      
+      // 複数メニューの場合（30%の確率）
+      const isMultipleMenus = Math.random() < 0.3 && menu.menu_id !== 3;
+      let menuData: any;
+      let totalPrice = menu.price;
+      let totalDuration = menu.duration;
+      
+      if (isMultipleMenus) {
+        const secondMenu = menus.find(m => m.menu_id !== menu.menu_id && m.menu_id !== 3);
+        if (secondMenu) {
+          menuData = {
+            menus: [menu, secondMenu],
+            menu_name: `${menu.menu_name} + ${secondMenu.menu_name}`
+          };
+          totalPrice = menu.price + secondMenu.price;
+          totalDuration = menu.duration + secondMenu.duration;
+        } else {
+          menuData = { menu_name: menu.menu_name, price: menu.price, menu_duration: menu.duration };
+        }
+      } else {
+        menuData = { menu_name: menu.menu_name, price: menu.price, menu_duration: menu.duration };
+      }
+      
+      reservations.push({
+        reservation_id: reservationId++,
+        reservation_date: reservationDate.toISOString().replace('Z', '+09:00'),
+        customer_name: customer,
+        ...menuData,
+        total_price: totalPrice,
+        total_duration: totalDuration,
+        staff_id: staffId,
+        staff_name: staffId ? mockStaff.find(s => s.staff_id === staffId)?.name || null : null,
+        status: Math.random() < 0.1 ? 'cancelled' : Math.random() < 0.3 ? 'completed' : 'confirmed'
+      });
+    }
+  }
+  
+  return reservations;
+};
+
+const mockReservations = generateMockReservations();
 
 export default function DemoAdminReservations() {
   const formatTime = (dateString: string) => {
