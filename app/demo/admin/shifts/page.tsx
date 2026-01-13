@@ -19,7 +19,7 @@ const mockStaff = [
 
 // モックデータ - シフトデータを生成
 const generateMockShifts = () => {
-  const shifts: Record<string, Record<number, any>> = {};
+  const shifts: Record<number, Record<string, any>> = {};
   const baseDate = new Date();
   baseDate.setDate(1); // 月初めに設定
   
