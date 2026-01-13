@@ -8,6 +8,12 @@
     "app/api/**/*.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/generate-demo-reservations",
+      "schedule": "0 2 * * *"
+    }
+  ]
 }
 

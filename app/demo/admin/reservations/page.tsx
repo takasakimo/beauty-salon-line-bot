@@ -23,7 +23,7 @@ const generateMockReservations = () => {
     { menu_id: 5, menu_name: 'トリートメント', price: 2000, duration: 30 }
   ];
   const staffIds = [1, 2, 3, null];
-  const timeSlots = ['10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'];
+  const timeSlots = ['10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
   
   let reservationId = 1;
   
@@ -125,10 +125,11 @@ export default function DemoAdminReservations() {
 
   const weekDates = getWeekDates();
   const timeSlots: string[] = [];
-  for (let hour = 9; hour < 20; hour++) {
+  for (let hour = 10; hour < 19; hour++) {
     timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
     timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
   }
+  timeSlots.push('19:00');
 
   // 日付とスタッフをキーとして予約をグループ化
   const reservationsByDateAndStaff = weekDates.reduce((acc, date) => {
@@ -169,7 +170,7 @@ export default function DemoAdminReservations() {
     const slotHeight = 40;
     const minutesPerSlot = 30;
     
-    const top = ((startMinutes - timeToMinutes('09:00')) / minutesPerSlot) * slotHeight;
+    const top = ((startMinutes - timeToMinutes('10:00')) / minutesPerSlot) * slotHeight;
     const height = Math.max((duration / minutesPerSlot) * slotHeight, 60);
     
     return {
@@ -291,7 +292,7 @@ export default function DemoAdminReservations() {
                                   <div className="text-xs text-gray-600">
                                     {reservation.menus && reservation.menus.length > 1 ? (
                                       <div>
-                                        {reservation.menus.map((menu, idx) => (
+                                        {reservation.menus.map((menu: { menu_id: number; menu_name: string }, idx: number) => (
                                           <div key={menu.menu_id} className="truncate">
                                             {idx > 0 && ' + '}
                                             {menu.menu_name}
@@ -348,7 +349,7 @@ export default function DemoAdminReservations() {
                                       <div className="text-xs text-gray-600">
                                         {reservation.menus && reservation.menus.length > 1 ? (
                                           <div>
-                                            {reservation.menus.map((menu, idx) => (
+                                            {reservation.menus.map((menu: { menu_id: number; menu_name: string }, idx: number) => (
                                               <div key={menu.menu_id} className="truncate">
                                                 {idx > 0 && ' + '}
                                                 {menu.menu_name}

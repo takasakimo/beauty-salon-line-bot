@@ -358,32 +358,62 @@ export async function getSuperAdminAuthFromRequest(request: NextRequest): Promis
   return null;
 }
 
-// スーパー管理者が店舗管理画面にアクセスする際のtenantIdを取得
+// スーパー管理者が店舗管理画面にアクセスする際のtenantIdを取得（同期版）
 export function getTenantIdFromRequest(request: NextRequest, session: SessionData | null): number | null {
-  // スーパー管理者の場合、クエリパラメータのtenantIdを優先
+  // クエリパラメータからtenantIdを取得（セッションがない場合やデモ画面でも使用可能）
+  const tenantIdParam = request.nextUrl.searchParams.get('tenantId');
+  if (tenantIdParam) {
+    const tenantId = parseInt(tenantIdParam);
+    if (!isNaN(tenantId)) {
+      console.log('クエリパラメータからtenantIdを取得:', tenantId);
+      return tenantId;
+    }
+  }
+  
+  // スーパー管理者の場合、クエリパラメータのtenantIdを優先（既にチェック済み）
   if (session && session.role === 'super_admin') {
-    const tenantIdParam = request.nextUrl.searchParams.get('tenantId');
     console.log('スーパー管理者のtenantId取得:', {
       hasSession: !!session,
       role: session.role,
       tenantIdParam,
       allParams: Object.fromEntries(request.nextUrl.searchParams.entries())
     });
-    
-    if (tenantIdParam) {
-      const tenantId = parseInt(tenantIdParam);
-      if (!isNaN(tenantId)) {
-        console.log('クエリパラメータからtenantIdを取得:', tenantId);
-        return tenantId;
-      }
-    }
-    console.log('クエリパラメータにtenantIdがありません');
+    // クエリパラメータにtenantIdがない場合はnullを返す
+    return null;
   }
   
   // 通常の管理者の場合はセッションのtenantIdを使用
   const sessionTenantId = session?.tenantId || null;
   console.log('セッションからtenantIdを取得:', sessionTenantId);
   return sessionTenantId;
+}
+
+// テナントIDを取得（非同期版、デフォルトテナントコードからも取得可能）
+export async function getTenantIdFromRequestAsync(request: NextRequest, session: SessionData | null): Promise<number | null> {
+  // まず同期版を試す
+  const tenantId = getTenantIdFromRequest(request, session);
+  if (tenantId) {
+    return tenantId;
+  }
+  
+  // セッションがない場合、デフォルトのテナントコード（beauty-salon-001）から取得を試みる
+  const tenantCode = request.nextUrl.searchParams.get('tenant') || 'beauty-salon-001';
+  try {
+    const { query } = await import('@/lib/db');
+    const tenantResult = await query(
+      'SELECT tenant_id FROM tenants WHERE tenant_code = $1 AND is_active = true',
+      [tenantCode]
+    );
+    if (tenantResult.rows.length > 0) {
+      const defaultTenantId = tenantResult.rows[0].tenant_id;
+      console.log('デフォルトテナントコードからtenantIdを取得:', defaultTenantId);
+      return defaultTenantId;
+    }
+  } catch (error) {
+    console.error('テナントID取得エラー:', error);
+  }
+  
+  return null;
 }
 
 // 顧客認証

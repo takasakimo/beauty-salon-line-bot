@@ -29,9 +29,15 @@ export function getApiUrlWithTenantId(baseUrl: string): string {
 /**
  * 管理画面ページのリンクURLにtenantIdクエリパラメータを追加
  * スーパー管理者がページ間を移動する際にクエリパラメータを保持するため
+ * デモモードの場合はそのまま返す（デモ画面ではtenantIdは不要）
  */
 export function getAdminLinkUrl(path: string): string {
   if (typeof window === 'undefined') {
+    return path;
+  }
+  
+  // デモモードの場合はそのまま返す
+  if (path.startsWith('/demo/')) {
     return path;
   }
   

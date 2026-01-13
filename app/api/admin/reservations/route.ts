@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, getPool } from '@/lib/db';
-import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequestAsync } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,14 +8,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const session = await getAuthFromRequest(request);
-    if (!session) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
-
-    const tenantId = getTenantIdFromRequest(request, session);
+    
+    // セッションがない場合でも、クエリパラメータからtenantIdを取得できるようにする
+    const tenantId = await getTenantIdFromRequestAsync(request, session);
+    
     if (!tenantId) {
       return NextResponse.json(
         { error: '店舗IDが指定されていません' },
@@ -155,7 +151,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tenantId = getTenantIdFromRequest(request, session);
+    const tenantId = await getTenantIdFromRequestAsync(request, session);
     if (!tenantId) {
       return NextResponse.json(
         { error: '店舗IDが指定されていません' },

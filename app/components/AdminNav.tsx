@@ -16,8 +16,16 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // デモモードかどうかを判定（currentPathが/demo/admin/*で始まる場合）
+  const isDemoMode = currentPath.startsWith('/demo/admin');
+
   const handleLogout = async () => {
     try {
+      if (isDemoMode) {
+        // デモモードの場合はログアウトせず、デモトップに戻る
+        router.push('/demo');
+        return;
+      }
       await fetch('/api/admin/logout', {
         method: 'POST',
         credentials: 'include',
@@ -25,10 +33,13 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
       router.push('/admin/login');
     } catch (error) {
       console.error('ログアウトエラー:', error);
+      if (isDemoMode) {
+        router.push('/demo');
+      }
     }
   };
 
-  const navigation = [
+  const baseNavigation = [
     { name: 'ダッシュボード', href: '/admin/dashboard' },
     { name: 'スケジュール管理', href: '/admin/reservations' },
     { name: '顧客管理', href: '/admin/customers' },
@@ -39,6 +50,17 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
     { name: 'シフト管理', href: '/admin/shifts' },
     { name: '設定', href: '/admin/settings' },
   ];
+
+  // デモモードで存在するページのみ
+  const demoAvailablePages = ['/admin/dashboard', '/admin/reservations'];
+
+  // デモモードの場合はパスを/demo/admin/*に変換し、存在するページのみを表示
+  const navigation = baseNavigation
+    .filter(item => !isDemoMode || demoAvailablePages.includes(item.href))
+    .map(item => ({
+      ...item,
+      href: isDemoMode ? item.href.replace('/admin/', '/demo/admin/') : item.href
+    }));
 
   const isActive = (href: string) => {
     return currentPath === href;
@@ -81,7 +103,7 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
                 onClick={handleLogout}
                 className="hidden sm:block text-gray-500 hover:text-gray-700 px-3 py-2 text-sm font-medium"
               >
-                ログアウト
+                {isDemoMode ? 'デモトップに戻る' : 'ログアウト'}
               </button>
               {/* モバイルメニューボタン */}
               <button
@@ -150,7 +172,7 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
                   }}
                   className="w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                 >
-                  ログアウト
+                  {isDemoMode ? 'デモトップに戻る' : 'ログアウト'}
                 </button>
               </div>
             </div>
