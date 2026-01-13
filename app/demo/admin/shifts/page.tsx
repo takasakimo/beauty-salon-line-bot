@@ -303,17 +303,19 @@ export default function DemoAdminShifts() {
               <div className="overflow-x-auto">
                 <div className="inline-block min-w-full">
                   <div className="flex border-b border-gray-200">
+                    {/* 時間列（10:00-20:00） */}
                     <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
                       <div className="h-12 border-b border-gray-200 px-2 py-1 flex items-center">
                         <span className="text-xs font-semibold text-gray-900">時間</span>
                       </div>
-                      {Array.from({ length: 24 }, (_, i) => i).map(hour => (
+                      {Array.from({ length: 11 }, (_, i) => i + 10).map(hour => (
                         <div key={hour} className="h-16 border-b border-gray-100 px-2 py-1">
                           <div className="text-xs text-gray-600">{hour}:00</div>
                           <div className="text-xs text-gray-400 mt-1">{hour}:30</div>
                         </div>
                       ))}
                     </div>
+                    {/* 日付列 */}
                     {monthDates.map((dateKey) => {
                       const shift = selectedStaffShifts[dateKey] || {
                         date: dateKey,
@@ -326,6 +328,12 @@ export default function DemoAdminShifts() {
                       const dayOfWeek = dateObj.getDay();
                       const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
                       const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                      
+                      // 時間を分に変換（10:00を基準に0分とする）
+                      const timeToMinutes = (time: string) => {
+                        const [hour, minute] = time.split(':').map(Number);
+                        return (hour - 10) * 60 + minute;
+                      };
                       
                       return (
                         <div
@@ -340,21 +348,21 @@ export default function DemoAdminShifts() {
                               {dayNames[dayOfWeek]}
                             </span>
                           </div>
-                          <div className="relative" style={{ height: '384px' }}>
+                          {/* タイムテーブル本体（10:00-20:00 = 10時間 = 600分 = 20スロット） */}
+                          <div className="relative" style={{ height: '320px' }}>
                             {shift.startTime && shift.endTime && !shift.isOff && (
                               <>
                                 {/* 勤務時間 */}
                                 {(() => {
-                                  const [sh, sm] = shift.startTime.split(':').map(Number);
-                                  const [eh, em] = shift.endTime.split(':').map(Number);
-                                  const startMinutes = sh * 60 + sm;
-                                  const endMinutes = eh * 60 + em;
-                                  const top = (startMinutes / 30) * 8;
-                                  const height = ((endMinutes - startMinutes) / 30) * 8;
+                                  const startMinutes = timeToMinutes(shift.startTime);
+                                  const endMinutes = timeToMinutes(shift.endTime);
+                                  const slotHeight = 16; // 30分 = 16px
+                                  const top = (startMinutes / 30) * slotHeight;
+                                  const height = ((endMinutes - startMinutes) / 30) * slotHeight;
                                   
                                   return (
                                     <div
-                                      className="absolute bg-blue-200 border-l-2 border-blue-500 rounded px-1 text-xs"
+                                      className="absolute bg-blue-200 border-l-2 border-blue-500 rounded px-1 text-xs z-10"
                                       style={{
                                         top: `${top}px`,
                                         height: `${height}px`,
@@ -363,7 +371,7 @@ export default function DemoAdminShifts() {
                                         minHeight: '20px'
                                       }}
                                     >
-                                      <div className="font-semibold text-blue-900">
+                                      <div className="font-semibold text-blue-900 whitespace-nowrap">
                                         {shift.startTime} - {shift.endTime}
                                       </div>
                                     </div>
@@ -372,17 +380,16 @@ export default function DemoAdminShifts() {
                                 
                                 {/* 休憩時間 */}
                                 {shift.breakTimes.map((bt: any, idx: number) => {
-                                  const [bsh, bsm] = bt.start.split(':').map(Number);
-                                  const [beh, bem] = bt.end.split(':').map(Number);
-                                  const breakStartMinutes = bsh * 60 + bsm;
-                                  const breakEndMinutes = beh * 60 + bem;
-                                  const top = (breakStartMinutes / 30) * 8;
-                                  const height = ((breakEndMinutes - breakStartMinutes) / 30) * 8;
+                                  const breakStartMinutes = timeToMinutes(bt.start);
+                                  const breakEndMinutes = timeToMinutes(bt.end);
+                                  const slotHeight = 16; // 30分 = 16px
+                                  const top = (breakStartMinutes / 30) * slotHeight;
+                                  const height = ((breakEndMinutes - breakStartMinutes) / 30) * slotHeight;
                                   
                                   return (
                                     <div
                                       key={idx}
-                                      className="absolute bg-yellow-200 border-l-2 border-yellow-500 rounded px-1 text-xs"
+                                      className="absolute bg-yellow-200 border-l-2 border-yellow-500 rounded px-1 text-xs z-20"
                                       style={{
                                         top: `${top}px`,
                                         height: `${height}px`,
@@ -391,7 +398,7 @@ export default function DemoAdminShifts() {
                                         minHeight: '16px'
                                       }}
                                     >
-                                      <div className="text-yellow-900">
+                                      <div className="text-yellow-900 whitespace-nowrap">
                                         休憩 {bt.start} - {bt.end}
                                       </div>
                                     </div>
@@ -400,8 +407,8 @@ export default function DemoAdminShifts() {
                               </>
                             )}
                             {shift.isOff && (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xs text-gray-400">休み</span>
+                              <div className="absolute inset-0 flex items-center justify-center bg-gray-50 bg-opacity-50">
+                                <span className="text-xs text-gray-400 font-medium">休み</span>
                               </div>
                             )}
                           </div>
