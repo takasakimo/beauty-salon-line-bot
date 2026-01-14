@@ -215,16 +215,51 @@ export async function GET(request: NextRequest) {
           LIMIT 5
         `, [tenantId]);
         
-        newReservations = newReservationsResult.rows.map(row => ({
-          reservation_id: row.reservation_id,
-          reservation_date: row.reservation_date,
-          status: row.status,
-          created_date: row.created_date,
-          customer_name: row.customer_name || '未登録顧客',
-          customer_phone: row.customer_phone,
-          menu_name: row.menu_name || 'メニュー不明',
-          staff_name: row.staff_name
-        }));
+        newReservations = newReservationsResult.rows.map(row => {
+          // reservation_dateをJSTとして処理（予約一覧APIと同じ処理）
+          let reservationDate = row.reservation_date;
+          
+          if (reservationDate) {
+            if (reservationDate instanceof Date) {
+              // Dateオブジェクトの場合、UTC時刻として解釈してJSTに変換
+              const year = reservationDate.getUTCFullYear();
+              const month = String(reservationDate.getUTCMonth() + 1).padStart(2, '0');
+              const day = String(reservationDate.getUTCDate()).padStart(2, '0');
+              const hours = String(reservationDate.getUTCHours()).padStart(2, '0');
+              const minutes = String(reservationDate.getUTCMinutes()).padStart(2, '0');
+              const seconds = String(reservationDate.getUTCSeconds()).padStart(2, '0');
+              // JST時刻として文字列に変換（+09:00を付与）
+              reservationDate = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
+            } else if (typeof reservationDate === 'string') {
+              // 文字列の場合
+              if (!reservationDate.includes('+') && !reservationDate.includes('Z')) {
+                // タイムゾーン情報がない場合は+09:00を付与
+                reservationDate = reservationDate.replace(' ', 'T') + '+09:00';
+              } else if (reservationDate.includes('Z') || reservationDate.endsWith('+00:00')) {
+                // UTC時刻（Z付きまたは+00:00）の場合は、JSTに変換
+                const dateObj = new Date(reservationDate);
+                const year = dateObj.getUTCFullYear();
+                const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(dateObj.getUTCDate()).padStart(2, '0');
+                const hours = String(dateObj.getUTCHours()).padStart(2, '0');
+                const minutes = String(dateObj.getUTCMinutes()).padStart(2, '0');
+                const seconds = String(dateObj.getUTCSeconds()).padStart(2, '0');
+                reservationDate = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+09:00`;
+              }
+            }
+          }
+          
+          return {
+            reservation_id: row.reservation_id,
+            reservation_date: reservationDate,
+            status: row.status,
+            created_date: row.created_date,
+            customer_name: row.customer_name || '未登録顧客',
+            customer_phone: row.customer_phone,
+            menu_name: row.menu_name || 'メニュー不明',
+            staff_name: row.staff_name
+          };
+        });
         
         // 未読予約の件数
         const countResult = await query(`
