@@ -35,6 +35,7 @@
     "menu-categories:migrate": "node scripts/migrate-menu-categories.js",
     "staff-shifts:migrate": "node scripts/migrate-staff-shifts.js",
     "demo:reservations": "node scripts/generate-demo-reservations.js",
+    "demo:reservations:delete": "node scripts/delete-demo-reservations.js",
     "demo:shifts": "node scripts/generate-demo-shifts.js"
   },
   "dependencies": {
