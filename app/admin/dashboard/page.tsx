@@ -119,7 +119,13 @@ export default function AdminDashboard() {
                     {stats.newReservations && stats.newReservations.length > 0 && (
                       <div className="mt-2 space-y-2">
                         {stats.newReservations.map((reservation) => {
-                          const reservationDate = new Date(reservation.reservation_date);
+                          // reservation_dateをJSTとして解釈
+                          let dateStr = reservation.reservation_date;
+                          // タイムゾーン情報がない場合は+09:00を付与
+                          if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+                            dateStr = dateStr.replace(' ', 'T') + '+09:00';
+                          }
+                          const reservationDate = new Date(dateStr);
                           const formattedDate = reservationDate.toLocaleString('ja-JP', {
                             year: 'numeric',
                             month: 'long',
