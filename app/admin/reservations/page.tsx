@@ -706,9 +706,8 @@ export default function ReservationManagement() {
       if (dateParam) {
         setFilterDate(dateParam);
       } else {
-        // dateパラメータがない場合は、今日の日付をデフォルトとして設定
-        const today = new Date().toISOString().split('T')[0];
-        setFilterDate(today);
+        // dateパラメータがない場合は、空文字列（全予約表示）
+        setFilterDate('');
       }
       
       // highlightパラメータがある場合は、その予約を既読にしてハイライト表示
@@ -759,11 +758,14 @@ export default function ReservationManagement() {
       }
       let baseUrl = '/api/admin/reservations';
       const params = new URLSearchParams();
-      // filterDateが空文字列の場合は、今日の日付を使用
-      const dateToFilter = filterDate || new Date().toISOString().split('T')[0];
-      params.append('date', dateToFilter);
+      // filterDateが空文字列でない場合のみ日付パラメータを追加（全予約表示のため）
+      if (filterDate) {
+        params.append('date', filterDate);
+      }
       if (filterStatus) params.append('status', filterStatus);
-      baseUrl += '?' + params.toString();
+      if (params.toString()) {
+        baseUrl += '?' + params.toString();
+      }
       
       const url = getApiUrlWithTenantId(baseUrl);
 
@@ -1309,13 +1311,22 @@ export default function ReservationManagement() {
               <label htmlFor="filterDate" className="block text-sm font-medium text-gray-700 mb-1">
                 日付
               </label>
-              <input
-                type="date"
-                id="filterDate"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  id="filterDate"
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  className="block flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFilterDate('')}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 whitespace-nowrap"
+                >
+                  すべて表示
+                </button>
+              </div>
             </div>
             <div>
               <label htmlFor="filterStatus" className="block text-sm font-medium text-gray-700 mb-1">
