@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getAuthFromRequest, getTenantIdFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequestAsync } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tenantId = getTenantIdFromRequest(request, session);
+    const tenantId = await getTenantIdFromRequestAsync(request, session);
     if (!tenantId) {
       return NextResponse.json(
         { error: '店舗IDが指定されていません' },
@@ -181,6 +181,67 @@ export async function GET(request: NextRequest) {
 
     const todaySales = todayReservationSales + todayProductSales;
 
+    // 新着予約（未読予約）の取得
+    let newReservations: any[] = [];
+    let newReservationsCount = 0;
+    try {
+      // is_viewedカラムが存在するかチェック
+      const columnCheck = await query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'reservations' AND column_name = 'is_viewed'
+      `);
+      
+      if (columnCheck.rows.length > 0) {
+        // 未読予約を取得（最新5件）
+        const newReservationsResult = await query(`
+          SELECT 
+            r.reservation_id,
+            r.reservation_date,
+            r.status,
+            r.created_date,
+            c.real_name as customer_name,
+            c.phone_number as customer_phone,
+            m.name as menu_name,
+            s.name as staff_name
+          FROM reservations r
+          LEFT JOIN customers c ON r.customer_id = c.customer_id
+          LEFT JOIN menus m ON r.menu_id = m.menu_id
+          LEFT JOIN staff s ON r.staff_id = s.staff_id
+          WHERE r.tenant_id = $1
+          AND (r.is_viewed = false OR r.is_viewed IS NULL)
+          AND r.status != 'cancelled'
+          ORDER BY r.created_date DESC
+          LIMIT 5
+        `, [tenantId]);
+        
+        newReservations = newReservationsResult.rows.map(row => ({
+          reservation_id: row.reservation_id,
+          reservation_date: row.reservation_date,
+          status: row.status,
+          created_date: row.created_date,
+          customer_name: row.customer_name || '未登録顧客',
+          customer_phone: row.customer_phone,
+          menu_name: row.menu_name || 'メニュー不明',
+          staff_name: row.staff_name
+        }));
+        
+        // 未読予約の件数
+        const countResult = await query(`
+          SELECT COUNT(*) as total
+          FROM reservations
+          WHERE tenant_id = $1
+          AND (is_viewed = false OR is_viewed IS NULL)
+          AND status != 'cancelled'
+        `, [tenantId]);
+        
+        newReservationsCount = parseInt(countResult.rows[0]?.total || '0');
+      }
+    } catch (error: any) {
+      // is_viewedカラムが存在しない場合はエラーを無視
+      console.warn('新着予約の取得でエラーが発生しました（is_viewedカラムが存在しない可能性があります）:', error);
+    }
+
     // テナント情報を追加
     const tenantResult = await query(
       'SELECT salon_name FROM tenants WHERE tenant_id = $1',
@@ -195,7 +256,9 @@ export async function GET(request: NextRequest) {
       monthlySales: monthlySales,
       todayReservations: parseInt(todayReservationsResult.rows[0].total),
       todaySales: todaySales,
-      tenantName: tenantResult.rows[0]?.salon_name || 'ビューティーサロン'
+      tenantName: tenantResult.rows[0]?.salon_name || 'ビューティーサロン',
+      newReservationsCount: newReservationsCount,
+      newReservations: newReservations
     });
   } catch (error: any) {
     console.error('Error fetching statistics:', error);

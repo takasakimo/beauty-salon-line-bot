@@ -808,12 +808,23 @@ export async function POST(request: NextRequest) {
         dateStrForDb = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       }
 
+      // is_viewedカラムが存在するかチェック
+      const columnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'reservations' AND column_name = 'is_viewed'
+      `);
+      
+      const hasIsViewedColumn = columnCheck.rows.length > 0;
+      
       // 予約を作成（menu_idは最初のメニューを設定、後でreservation_menusに全メニューを保存）
-      const insertQuery = `
-        INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)
-        VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, NOW())
-        RETURNING reservation_id
-      `;
+      const insertQuery = hasIsViewedColumn
+        ? `INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, is_viewed, created_date)
+           VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, false, NOW())
+           RETURNING reservation_id`
+        : `INSERT INTO reservations (tenant_id, customer_id, staff_id, menu_id, reservation_date, status, price, created_date)
+           VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, NOW())
+           RETURNING reservation_id`;
       const result = await client.query(insertQuery, [
         tenantId,
         actualCustomerId,

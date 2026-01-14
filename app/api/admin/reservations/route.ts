@@ -915,20 +915,45 @@ export async function POST(request: NextRequest) {
       // 予約を作成（最初のメニューIDをmenu_idとして使用）
       // JST時刻をそのまま保存（YYYY-MM-DD HH:mm:ss形式）
       const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
+      
+      // is_viewedカラムが存在するかチェック
+      const columnCheck = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'reservations' AND column_name = 'is_viewed'
+      `);
+      
+      const hasIsViewedColumn = columnCheck.rows.length > 0;
+      
       const reservationResult = await client.query(
-        `INSERT INTO reservations (
-          tenant_id, 
-          customer_id, 
-          staff_id, 
-          menu_id, 
-          reservation_date, 
-          status, 
-          price,
-          notes,
-          created_date
-        )
-        VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, $8, CURRENT_TIMESTAMP)
-        RETURNING *`,
+        hasIsViewedColumn
+          ? `INSERT INTO reservations (
+              tenant_id, 
+              customer_id, 
+              staff_id, 
+              menu_id, 
+              reservation_date, 
+              status, 
+              price,
+              notes,
+              is_viewed,
+              created_date
+            )
+            VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, $8, false, CURRENT_TIMESTAMP)
+            RETURNING *`
+          : `INSERT INTO reservations (
+              tenant_id, 
+              customer_id, 
+              staff_id, 
+              menu_id, 
+              reservation_date, 
+              status, 
+              price,
+              notes,
+              created_date
+            )
+            VALUES ($1, $2, $3, $4, $5::timestamp, $6, $7, $8, CURRENT_TIMESTAMP)
+            RETURNING *`,
         [
           tenantId,
           actualCustomerId,

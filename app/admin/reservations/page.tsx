@@ -696,6 +696,7 @@ export default function ReservationManagement() {
   const [loadingTimes, setLoadingTimes] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
   const [showCancelled, setShowCancelled] = useState(false);
+  const [highlightedReservationId, setHighlightedReservationId] = useState<number | null>(null);
 
   useEffect(() => {
     // URLパラメータから日付を取得
@@ -708,6 +709,18 @@ export default function ReservationManagement() {
         // dateパラメータがない場合は、今日の日付をデフォルトとして設定
         const today = new Date().toISOString().split('T')[0];
         setFilterDate(today);
+      }
+      
+      // highlightパラメータがある場合は、その予約を既読にしてハイライト表示
+      const highlightId = urlParams.get('highlight');
+      if (highlightId) {
+        const id = parseInt(highlightId);
+        setHighlightedReservationId(id);
+        markReservationAsViewed(id);
+        // 3秒後にハイライトを解除
+        setTimeout(() => {
+          setHighlightedReservationId(null);
+        }, 3000);
       }
     }
     // 他のデータ（顧客、メニュー、スタッフ）を読み込む
@@ -842,6 +855,19 @@ export default function ReservationManagement() {
     }
   };
 
+  // 予約を既読にする
+  const markReservationAsViewed = async (reservationId: number) => {
+    try {
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}/view`);
+      await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('既読更新エラー:', error);
+    }
+  };
+
   const loadAvailableTimes = async () => {
     if (formData.selectedMenuIds.length === 0 || !formData.reservation_date) {
       setAvailableTimes([]);
@@ -878,6 +904,9 @@ export default function ReservationManagement() {
 
   const handleOpenModal = (reservation?: Reservation) => {
     if (reservation) {
+      // 予約を既読にする
+      markReservationAsViewed(reservation.reservation_id);
+      
       setEditingReservation(reservation);
       // reservation_dateをJSTとして解釈
       let dateStr = reservation.reservation_date;
@@ -1364,8 +1393,15 @@ export default function ReservationManagement() {
                   予約が登録されていません
                 </li>
               ) : (
-                getFilteredReservations().map((reservation) => (
-                  <li key={reservation.reservation_id} className="px-6 py-4">
+                getFilteredReservations().map((reservation) => {
+                  const isHighlighted = highlightedReservationId === reservation.reservation_id;
+                  return (
+                  <li 
+                    key={reservation.reservation_id} 
+                    className={`px-6 py-4 transition-all ${
+                      isHighlighted ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center">
@@ -1461,7 +1497,8 @@ export default function ReservationManagement() {
                       </div>
                     </div>
                   </li>
-                ))
+                  );
+                })
               )}
             </ul>
           </div>
