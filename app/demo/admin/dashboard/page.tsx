@@ -17,7 +17,7 @@ const mockStats = {
   monthlySales: 1250000,
   todayReservations: 8,
   todaySales: 68000,
-  tenantName: 'らくポチビューティー デモ店'
+  tenantName: 'らくっぽリザーブ デモ店'
 };
 
 export default function DemoAdminDashboard() {

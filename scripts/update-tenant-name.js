@@ -48,7 +48,7 @@ async function updateTenantName() {
       console.log('  npm run tenant:update "新しい店舗名"');
       console.log('');
       console.log('例:');
-      console.log('  npm run tenant:update "らくポチビューティー"');
+      console.log('  npm run tenant:update "らくっぽリザーブ"');
       process.exit(1);
     }
 

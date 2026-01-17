@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'らくポチビューティー - 美容院予約管理システム',
-  description: '美容院向けの予約管理システム',
+  title: 'らくっぽリザーブ - 個人サロン向け予約管理システム',
+  description: '個人サロン向けの予約管理システム',
 }
 
 export default function RootLayout({

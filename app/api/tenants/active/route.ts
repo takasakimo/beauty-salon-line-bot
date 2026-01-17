@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         {
           tenant_id: null,
           tenant_code: 'beauty-salon-001',
-          salon_name: 'らくポチビューティー',
+          salon_name: 'らくっぽリザーブ',
           is_active: true
         }
       ]);
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       {
         tenant_id: null,
         tenant_code: 'beauty-salon-001',
-        salon_name: 'らくポチビューティー',
+        salon_name: 'らくっぽリザーブ',
         is_active: true
       }
     ], { status: 200 }); // 200を返してエラーを隠す

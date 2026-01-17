@@ -1,7 +1,7 @@
 {
   "name": "beauty-salon-line-bot",
   "version": "2.0.0",
-  "description": "美容院予約管理システム - Next.js版",
+  "description": "個人サロン向け予約管理システム - Next.js版",
   "private": true,
   "scripts": {
     "dev": "next dev",

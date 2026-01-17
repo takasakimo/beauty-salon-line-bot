@@ -15,10 +15,10 @@ export default function Home() {
               <SparklesIcon className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2 text-gray-900 tracking-tight">
-              らくポチビューティー
+              らくっぽリザーブ
             </h1>
             <p className="text-gray-500 text-base">
-              美容院予約管理システム
+              個人サロン向け予約管理システム
             </p>
           </div>
 
