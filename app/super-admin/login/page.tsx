@@ -48,6 +48,7 @@ export default function SuperAdminLoginPage() {
       }
 
       // ログイン成功
+      setLoading(false);
       router.push('/super-admin/dashboard');
     } catch (err: any) {
       console.error('ログインエラー:', err);
@@ -57,7 +58,14 @@ export default function SuperAdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
+      {loading && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 shadow-lg">
+            <p className="text-gray-900">ログイン中...</p>
+          </div>
+        </div>
+      )}
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
