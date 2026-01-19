@@ -210,6 +210,47 @@ export async function POST(request: NextRequest) {
 
     console.log('パスワード検証後の管理者店舗:', { count: tenants.length });
 
+    // スーパー管理者もチェック
+    const trimmedInput = email.trim();
+    const superAdminResult = await query(
+      `SELECT super_admin_id, full_name, username, password_hash, is_active
+       FROM super_admins 
+       WHERE username = $1`,
+      [trimmedInput]
+    );
+
+    console.log('スーパー管理者検索結果:', { 
+      count: superAdminResult.rows.length,
+      details: superAdminResult.rows.map(r => ({
+        super_admin_id: r.super_admin_id,
+        username: r.username,
+        has_password_hash: !!r.password_hash,
+        is_active: r.is_active
+      }))
+    });
+
+    // スーパー管理者が見つかった場合
+    if (superAdminResult.rows.length > 0) {
+      const superAdmin = superAdminResult.rows[0];
+      const hasPassword = !!superAdmin.password_hash;
+      const passwordMatch = hasPassword && superAdmin.password_hash === passwordHash;
+
+      console.log(`スーパー管理者 ${superAdmin.username} パスワード検証:`, {
+        has_password: hasPassword,
+        match: passwordMatch,
+        is_active: superAdmin.is_active
+      });
+
+      if (superAdmin.is_active && (passwordMatch || !hasPassword)) {
+        // スーパー管理者の場合は特別なフラグを返す
+        return NextResponse.json({
+          success: true,
+          isSuperAdmin: true,
+          tenants: [] // スーパー管理者は店舗選択不要
+        });
+      }
+    }
+
     console.log('最終的な店舗リスト:', { 
       count: tenants.length, 
       tenants: tenants.map(t => ({ 

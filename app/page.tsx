@@ -70,6 +70,12 @@ export default function Home() {
         return;
       }
 
+      // スーパー管理者の場合は直接ログイン
+      if (tenantsResult.isSuperAdmin) {
+        await performSuperAdminLogin();
+        return;
+      }
+
       const tenantList: Tenant[] = tenantsResult.tenants || [];
 
       if (tenantList.length === 0) {
@@ -90,6 +96,43 @@ export default function Home() {
       console.error('店舗一覧取得エラー:', error);
       setError('ログイン処理中にエラーが発生しました。しばらくしてから再度お試しください。');
       setPassword('');
+      setLoading(false);
+    }
+  };
+
+  const performSuperAdminLogin = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/super-admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          username: email.trim(),
+          password,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSuccess(true);
+        setTimeout(() => {
+          router.push('/super-admin/dashboard');
+        }, 500);
+      } else {
+        setError(result.error || 'ログインに失敗しました');
+        setPassword('');
+      }
+    } catch (error) {
+      console.error('スーパー管理者ログインエラー:', error);
+      setError('ログイン処理中にエラーが発生しました。しばらくしてから再度お試しください。');
+      setPassword('');
+    } finally {
       setLoading(false);
     }
   };
@@ -220,7 +263,7 @@ export default function Home() {
                 ログイン
               </h2>
               <p className="text-sm text-gray-600 mb-6 text-center">
-                メールアドレスとパスワードでログイン
+                メールアドレスまたはユーザー名とパスワードでログイン
               </p>
 
               <form onSubmit={handleCheckTenants} className="space-y-6">
@@ -244,7 +287,7 @@ export default function Home() {
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                      メールアドレス
+                      メールアドレスまたはユーザー名
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -253,7 +296,7 @@ export default function Home() {
                       <input
                         ref={emailInputRef}
                         id="email"
-                        type="email"
+                        type="text"
                         required
                         value={email}
                         onChange={(e) => {
@@ -262,7 +305,7 @@ export default function Home() {
                         }}
                         disabled={loading}
                         className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all disabled:bg-gray-50 disabled:cursor-not-allowed"
-                        placeholder="example@email.com"
+                        placeholder="example@email.com または username"
                         autoComplete="username"
                       />
                     </div>
