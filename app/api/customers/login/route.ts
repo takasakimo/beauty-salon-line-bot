@@ -25,13 +25,26 @@ export async function POST(request: NextRequest) {
     }
 
     // セッションクッキーを設定
+    const isAdmin = result.customer?.isAdmin || false;
     const response = NextResponse.json({
       success: true,
       customer: result.customer,
-      tenantName: result.tenant?.salonName
+      tenantName: result.tenant?.salonName,
+      isAdmin: isAdmin
     });
 
     if (result.sessionToken) {
+      // 管理者の場合はsession_tokenも設定（管理画面で使用）
+      if (isAdmin) {
+        response.cookies.set('session_token', result.sessionToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 7, // 7日間
+          path: '/'
+        });
+      }
+      // 顧客セッションも設定（顧客画面で使用）
       response.cookies.set('customer_session_token', result.sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
