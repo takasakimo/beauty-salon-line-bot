@@ -125,10 +125,11 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
     setCurrentTenantId(tenantId);
     setShowTenantSelector(false);
     
-    // 現在のパスにtenantIdを追加して遷移
+    // 現在のパスにtenantIdを追加して完全なリロードで遷移
     const url = new URL(window.location.href);
     url.searchParams.set('tenantId', tenantId.toString());
-    router.push(url.pathname + url.search);
+    // 完全なページリロードを行う
+    window.location.href = url.pathname + url.search;
   };
 
   const currentTenant = tenants.find(t => t.tenantId === currentTenantId);
