@@ -108,6 +108,7 @@ function MyPageContent() {
 
       if (response.status === 401) {
         // 未認証 - ログインページにリダイレクト
+        setLoading(false);
         router.push(`/login?tenant=${tenantCode}&redirect=/mypage`);
         return;
       }
@@ -120,9 +121,12 @@ function MyPageContent() {
         if (customerData.customer_id) {
           loadCustomerData(customerData.customer_id);
         }
+      } else {
+        setLoading(false);
       }
     } catch (error) {
       console.error('認証確認エラー:', error);
+      setLoading(false);
       router.push(`/login?tenant=${tenantCode}&redirect=/mypage`);
     } finally {
       setLoading(false);

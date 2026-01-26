@@ -55,24 +55,37 @@ export default function AdminDashboard() {
 
   const loadStatistics = async () => {
     try {
-      // クエリパラメータからtenantIdを取得（スーパー管理者の場合）
+      // クエリパラメータからtenantIdまたはtenantCodeを取得
       const urlParams = new URLSearchParams(window.location.search);
       const tenantId = urlParams.get('tenantId');
-      const url = tenantId ? `/api/admin/statistics?tenantId=${tenantId}` : '/api/admin/statistics';
+      const tenantCode = urlParams.get('tenant');
+      
+      let url = '/api/admin/statistics';
+      if (tenantId) {
+        url += `?tenantId=${tenantId}`;
+      } else if (tenantCode) {
+        url += `?tenant=${tenantCode}`;
+      }
       
       const response = await fetch(url, {
         credentials: 'include',
       });
 
       if (response.status === 401) {
+        setLoading(false);
         router.push('/admin/login');
         return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       setStats(data);
     } catch (error) {
       console.error('統計データ取得エラー:', error);
+      setLoading(false);
     } finally {
       setLoading(false);
     }
