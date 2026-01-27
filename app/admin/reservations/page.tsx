@@ -466,15 +466,21 @@ function TimelineScheduleView({
           {/* 時間列 */}
           <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
             <div className="h-10 border-b border-gray-200"></div>
-            {timeSlots.map((time) => (
-              <div
-                key={time}
-                className="h-10 border-b border-gray-100 text-xs text-gray-600 px-2 flex items-center"
-                style={{ height: '40px' }}
-              >
-                {time}
-              </div>
-            ))}
+            {timeSlots.map((time) => {
+              // 1時間ごと（:00で終わる）はより濃い枠線、30分ごとは薄い枠線
+              const isHourMark = time.endsWith(':00');
+              return (
+                <div
+                  key={time}
+                  className={`h-10 text-xs text-gray-600 px-2 flex items-center ${
+                    isHourMark ? 'border-b border-gray-300' : 'border-b border-gray-100'
+                  }`}
+                  style={{ height: '40px' }}
+                >
+                  {time}
+                </div>
+              );
+            })}
           </div>
           
           {/* 日付列 - 店舗全体と各スタッフを並べて表示 */}
@@ -598,13 +604,24 @@ function TimelineScheduleView({
                   
                   {/* 時間スロット */}
                   <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
-                    {timeSlots.map((time) => (
-                      <div
-                        key={time}
-                        className="border-b border-gray-100"
-                        style={{ height: '40px' }}
-                      ></div>
-                    ))}
+                    {/* 時間スロットの背景線 */}
+                    {timeSlots.map((time, index) => {
+                      // 1時間ごと（:00で終わる）はより濃い枠線、30分ごとは薄い枠線
+                      const isHourMark = time.endsWith(':00');
+                      return (
+                        <div
+                          key={`time-${time}`}
+                          className={`absolute left-0 right-0 ${
+                            isHourMark ? 'border-b border-gray-300' : 'border-b border-gray-100'
+                          }`}
+                          style={{
+                            top: `${index * 40}px`,
+                            height: '40px',
+                            pointerEvents: 'none'
+                          }}
+                        ></div>
+                      );
+                    })}
                     
                     {/* 予約ブロック（店舗全体） - 列に割り当てて表示（ドラッグ可能） */}
                     {storeReservationsWithColumns.map(({ reservation, column, totalColumns }) => 
@@ -643,13 +660,24 @@ function TimelineScheduleView({
                       
                       {/* 時間スロット */}
                       <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
-                        {timeSlots.map((time) => (
-                          <div
-                            key={time}
-                            className="border-b border-gray-100"
-                            style={{ height: '40px' }}
-                          ></div>
-                        ))}
+                        {/* 時間スロットの背景線 */}
+                        {timeSlots.map((time, index) => {
+                          // 1時間ごと（:00で終わる）はより濃い枠線、30分ごとは薄い枠線
+                          const isHourMark = time.endsWith(':00');
+                          return (
+                            <div
+                              key={`time-${time}`}
+                              className={`absolute left-0 right-0 ${
+                                isHourMark ? 'border-b border-gray-300' : 'border-b border-gray-100'
+                              }`}
+                              style={{
+                                top: `${index * 40}px`,
+                                height: '40px',
+                                pointerEvents: 'none'
+                              }}
+                            ></div>
+                          );
+                        })}
                         
                         {/* 予約ブロック（スタッフ別） - 列に割り当てて表示（ドラッグ可能） */}
                         {staffReservationsWithColumns.map(({ reservation, column, totalColumns }) => 

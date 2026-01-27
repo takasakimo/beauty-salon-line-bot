@@ -274,15 +274,21 @@ export default function DemoAdminReservations() {
                 <div className="flex border-b border-gray-200">
                   <div className="w-20 flex-shrink-0 border-r border-gray-200 bg-gray-50">
                     <div className="h-10 border-b border-gray-200"></div>
-                    {timeSlots.map((time) => (
-                      <div
-                        key={time}
-                        className="h-10 border-b border-gray-100 text-xs text-gray-600 px-2 flex items-center"
-                        style={{ height: '40px' }}
-                      >
-                        {time}
-                      </div>
-                    ))}
+                    {timeSlots.map((time) => {
+                      // 1時間ごと（:00で終わる）はより濃い枠線、30分ごとは薄い枠線
+                      const isHourMark = time.endsWith(':00');
+                      return (
+                        <div
+                          key={time}
+                          className={`h-10 text-xs text-gray-600 px-2 flex items-center ${
+                            isHourMark ? 'border-b border-gray-300' : 'border-b border-gray-100'
+                          }`}
+                          style={{ height: '40px' }}
+                        >
+                          {time}
+                        </div>
+                      );
+                    })}
                   </div>
                   
                   {weekDates.map((date) => {
@@ -302,6 +308,23 @@ export default function DemoAdminReservations() {
                           </div>
                           
                           <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
+                            {/* 時間スロットの背景線 */}
+                            {timeSlots.map((time, index) => {
+                              const isHourMark = time.endsWith(':00');
+                              return (
+                                <div
+                                  key={`time-${time}`}
+                                  className={`absolute left-0 right-0 ${
+                                    isHourMark ? 'border-b border-gray-300' : 'border-b border-gray-100'
+                                  }`}
+                                  style={{
+                                    top: `${index * 40}px`,
+                                    height: '40px',
+                                    pointerEvents: 'none'
+                                  }}
+                                ></div>
+                              );
+                            })}
                             {dayData.all.map((reservation) => {
                               const style = getReservationStyle(reservation);
                               return (
@@ -359,6 +382,23 @@ export default function DemoAdminReservations() {
                               </div>
                               
                               <div className="relative" style={{ height: `${timeSlots.length * 40}px` }}>
+                                {/* 時間スロットの背景線 */}
+                                {timeSlots.map((time, index) => {
+                                  const isHourMark = time.endsWith(':00');
+                                  return (
+                                    <div
+                                      key={`time-${time}`}
+                                      className={`absolute left-0 right-0 ${
+                                        isHourMark ? 'border-b border-gray-300' : 'border-b border-gray-100'
+                                      }`}
+                                      style={{
+                                        top: `${index * 40}px`,
+                                        height: '40px',
+                                        pointerEvents: 'none'
+                                      }}
+                                    ></div>
+                                  );
+                                })}
                                 {staffReservations.map((reservation) => {
                                   const style = getReservationStyle(reservation);
                                   return (
