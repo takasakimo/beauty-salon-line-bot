@@ -23,7 +23,10 @@ const mockStats = {
 export default function DemoAdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-100">
-      <AdminNav currentPath="/demo/admin/dashboard" title="ダッシュボード（デモ）" />
+      <AdminNav 
+        currentPath="/demo/admin/dashboard" 
+        tenantName={mockStats.tenantName}
+      />
       
       {/* デモバナー */}
       <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mx-4 mt-4 rounded">
@@ -41,99 +44,143 @@ export default function DemoAdminDashboard() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">ダッシュボード（デモ）</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">ダッシュボード</h2>
 
-            {/* 統計カード */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-blue-100 text-sm">総顧客数</p>
-                    <p className="text-3xl font-bold mt-2">{mockStats.totalCustomers}</p>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+            <Link
+              href="/demo/admin/customers"
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <UsersIcon className="w-6 h-6 text-blue-600" />
+                    </div>
                   </div>
-                  <UsersIcon className="h-12 w-12 text-blue-200" />
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-green-100 text-sm">今月の新規顧客</p>
-                    <p className="text-3xl font-bold mt-2">{mockStats.newCustomersMonth}</p>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        総顧客数
+                      </dt>
+                      <dd className="text-lg font-semibold text-gray-900">
+                        {mockStats.totalCustomers}人
+                      </dd>
+                    </dl>
                   </div>
-                  <UsersIcon className="h-12 w-12 text-green-200" />
                 </div>
               </div>
+            </Link>
 
-              <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-purple-100 text-sm">平均単価</p>
-                    <p className="text-3xl font-bold mt-2">¥{mockStats.averageSpending.toLocaleString()}</p>
+            <Link
+              href="/demo/admin/reservations"
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                      <CalendarDaysIcon className="w-6 h-6 text-green-600" />
+                    </div>
                   </div>
-                  <CurrencyYenIcon className="h-12 w-12 text-purple-200" />
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-pink-500 to-pink-600 rounded-lg p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-pink-100 text-sm">月間売上</p>
-                    <p className="text-3xl font-bold mt-2">¥{mockStats.monthlySales.toLocaleString()}</p>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        今日の予約
+                      </dt>
+                      <dd className="text-lg font-semibold text-gray-900">
+                        {mockStats.todayReservations}件
+                      </dd>
+                    </dl>
                   </div>
-                  <ChartBarIcon className="h-12 w-12 text-pink-200" />
                 </div>
               </div>
-            </div>
+            </Link>
 
-            {/* 今日の予約 */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <CalendarDaysIcon className="h-5 w-5 mr-2 text-pink-600" />
-                今日の予約
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">予約件数</p>
-                  <p className="text-2xl font-bold text-gray-900">{mockStats.todayReservations}件</p>
-                </div>
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-600">今日の売上</p>
-                  <p className="text-2xl font-bold text-gray-900">¥{mockStats.todaySales.toLocaleString()}</p>
+            <Link
+              href="/demo/admin/sales"
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
+                      <CurrencyYenIcon className="w-6 h-6 text-yellow-600" />
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        今日の売上
+                      </dt>
+                      <dd className="text-lg font-semibold text-gray-900">
+                        ¥{mockStats.todaySales.toLocaleString()}
+                      </dd>
+                    </dl>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Link>
 
-            {/* クイックアクション */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">クイックアクション</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Link
-                  href="/demo/admin/reservations"
-                  className="bg-pink-600 hover:bg-pink-700 text-white font-medium py-3 px-6 rounded-lg text-center transition-colors"
-                >
-                  予約管理
-                </Link>
-                <Link
-                  href="/demo/admin/customers"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg text-center transition-colors"
-                >
-                  顧客管理
-                </Link>
-                <Link
-                  href="/demo/admin/menus"
-                  className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-6 rounded-lg text-center transition-colors"
-                >
-                  メニュー管理
-                </Link>
+            <Link
+              href="/demo/admin/sales"
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="p-5">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <ChartBarIcon className="w-6 h-6 text-purple-600" />
+                    </div>
+                  </div>
+                  <div className="ml-5 w-0 flex-1">
+                    <dl>
+                      <dt className="text-sm font-medium text-gray-500 truncate">
+                        今月の売上
+                      </dt>
+                      <dd className="text-lg font-semibold text-gray-900">
+                        ¥{mockStats.monthlySales.toLocaleString()}
+                      </dd>
+                    </dl>
+                  </div>
+                </div>
               </div>
-            </div>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Link
+              href="/demo/admin/customers"
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="p-5">
+                <h3 className="text-sm font-medium text-gray-500 mb-2">
+                  今月の新規顧客
+                </h3>
+                <p className="text-2xl font-bold text-gray-900">
+                  {mockStats.newCustomersMonth}人
+                </p>
+              </div>
+            </Link>
+
+            <Link
+              href="/demo/admin/reservations"
+              className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <div className="p-5">
+                <h3 className="text-sm font-medium text-gray-500 mb-2">
+                  平均客単価
+                </h3>
+                <p className="text-2xl font-bold text-gray-900">
+                  ¥{mockStats.averageSpending.toLocaleString()}
+                </p>
+              </div>
+            </Link>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
