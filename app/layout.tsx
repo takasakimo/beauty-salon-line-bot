@@ -4,6 +4,13 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'らくっぽリザーブ - 個人サロン向け予約管理システム',
   description: '個人サロン向けの予約管理システム',
+  icons: {
+    icon: [
+      { url: '/favicon.png', type: 'image/png' },
+      { url: '/favicon.ico', type: 'image/x-icon' },
+    ],
+    apple: '/favicon.png',
+  },
 }
 
 export default function RootLayout({
