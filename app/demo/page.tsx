@@ -90,13 +90,16 @@ export default function DemoPage() {
           </div>
 
           {/* 本番環境へのリンク */}
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center space-y-2">
             <Link
               href="/"
               className="text-sm text-gray-500 hover:text-gray-700 underline"
             >
               本番環境に戻る
             </Link>
+            <div className="text-xs text-gray-400">
+              GitHub: <a href="https://github.com/takasakimo/beauty-salon-line-bot" target="_blank" rel="noopener noreferrer" className="hover:text-gray-600 underline">https://github.com/takasakimo/beauty-salon-line-bot</a>
+            </div>
           </div>
         </div>
       </div>
