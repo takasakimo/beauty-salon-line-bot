@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { CartProvider } from './contexts/CartContext'
 
 export const metadata: Metadata = {
   title: 'らくっぽリザーブ - 個人サロン向け予約管理システム',
@@ -23,7 +24,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        <CartProvider>{children}</CartProvider>
+      </body>
     </html>
   )
 }

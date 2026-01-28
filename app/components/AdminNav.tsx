@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getAdminLinkUrl } from '@/lib/admin-utils';
-import { Bars3Icon, XMarkIcon, BuildingStorefrontIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { Bars3Icon, XMarkIcon, BuildingStorefrontIcon, ChevronDownIcon, ShoppingCartIcon } from '@heroicons/react/24/outline';
+import { useCart } from '@/app/contexts/CartContext';
+import CartModal from './CartModal';
 
 interface AdminNavProps {
   currentPath: string;
@@ -26,6 +28,8 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [showTenantSelector, setShowTenantSelector] = useState(false);
   const [currentTenantId, setCurrentTenantId] = useState<number | null>(null);
+  const [showCartModal, setShowCartModal] = useState(false);
+  const { getTotalItems } = useCart();
 
   // デモモードかどうかを判定（currentPathが/demo/admin/*で始まる場合）
   const isDemoMode = currentPath.startsWith('/demo/admin');
@@ -164,8 +168,22 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
                 ))}
               </div>
             </div>
-            {/* 右側: 店舗切り替えボタンとログアウトボタン */}
+            {/* 右側: カート、店舗切り替えボタンとログアウトボタン */}
             <div className="flex items-center flex-shrink-0 gap-2">
+              {/* カートボタン（商品管理ページと顧客管理ページで表示） */}
+              {!isDemoMode && (currentPath === '/admin/products' || currentPath === '/admin/customers') && (
+                <button
+                  onClick={() => setShowCartModal(true)}
+                  className="relative inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                >
+                  <ShoppingCartIcon className="h-5 w-5" />
+                  {getTotalItems() > 0 && (
+                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-pink-600 rounded-full">
+                      {getTotalItems()}
+                    </span>
+                  )}
+                </button>
+              )}
               {/* スーパー管理者の場合のみ店舗切り替えボタンを表示 */}
               {isSuperAdmin && !isDemoMode && tenants.length > 0 && (
                 <div className="hidden sm:block relative">
@@ -320,6 +338,9 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
           </div>
         </>
       )}
+
+      {/* カートモーダル */}
+      <CartModal isOpen={showCartModal} onClose={() => setShowCartModal(false)} />
     </>
   );
 }

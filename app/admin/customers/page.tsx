@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import AdminNav from '@/app/components/AdminNav';
+import { useCart } from '@/app/contexts/CartContext';
 import { QRCodeSVG } from 'qrcode.react';
 import { 
   PlusIcon,
@@ -16,7 +17,8 @@ import {
   ArrowDownTrayIcon,
   UserCircleIcon,
   ClockIcon,
-  ShoppingBagIcon
+  ShoppingBagIcon,
+  ShoppingCartIcon
 } from '@heroicons/react/24/outline';
 
 interface Customer {
@@ -33,6 +35,7 @@ interface Customer {
 
 export default function CustomerManagement() {
   const router = useRouter();
+  const { addToCart } = useCart();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -88,10 +91,60 @@ export default function CustomerManagement() {
   });
   const [menusList, setMenusList] = useState<any[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [selectedCustomerForProduct, setSelectedCustomerForProduct] = useState<Customer | null>(null);
+  const [addProductFormData, setAddProductFormData] = useState({
+    product_id: '',
+    quantity: '1'
+  });
 
   useEffect(() => {
     loadCustomers();
+    loadProductsList();
   }, []);
+
+  const handleOpenAddProductModal = (customer: Customer) => {
+    setSelectedCustomerForProduct(customer);
+    setAddProductFormData({
+      product_id: '',
+      quantity: '1'
+    });
+    setShowAddProductModal(true);
+  };
+
+  const handleCloseAddProductModal = () => {
+    setShowAddProductModal(false);
+    setSelectedCustomerForProduct(null);
+    setAddProductFormData({
+      product_id: '',
+      quantity: '1'
+    });
+  };
+
+  const handleAddProductToCart = () => {
+    if (!addProductFormData.product_id) {
+      alert('商品を選択してください');
+      return;
+    }
+
+    const selectedProduct = productsList.find((p: any) => p.product_id.toString() === addProductFormData.product_id);
+    if (!selectedProduct) {
+      alert('商品が見つかりません');
+      return;
+    }
+
+    addToCart({
+      product_id: selectedProduct.product_id,
+      product_name: selectedProduct.product_name,
+      product_category: selectedProduct.product_category || null,
+      unit_price: selectedProduct.unit_price,
+      quantity: parseInt(addProductFormData.quantity) || 1,
+      stock_quantity: selectedProduct.stock_quantity || 0,
+    });
+
+    alert(`${selectedProduct.product_name}をカートに追加しました`);
+    handleCloseAddProductModal();
+  };
 
   // 店舗情報を取得
   const loadTenantInfo = async () => {
@@ -846,6 +899,13 @@ export default function CustomerManagement() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleOpenAddProductModal(customer)}
+                          className="p-2 text-blue-600 hover:text-blue-700"
+                          title="商品をカートに追加"
+                        >
+                          <ShoppingCartIcon className="h-5 w-5" />
+                        </button>
                         <button
                           onClick={() => handleOpenModal(customer)}
                           className="p-2 text-gray-400 hover:text-gray-600"
@@ -1841,6 +1901,85 @@ export default function CustomerManagement() {
                     className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
                   >
                     追加
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 商品追加モーダル */}
+      {showAddProductModal && selectedCustomerForProduct && (
+        <div className="fixed z-30 inset-0 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseAddProductModal}></div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {selectedCustomerForProduct.real_name}様に商品をカートに追加
+                  </h3>
+                  <button
+                    onClick={handleCloseAddProductModal}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <XMarkIcon className="h-6 w-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="add_product_id" className="block text-sm font-medium text-gray-700 mb-1">
+                      商品 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="add_product_id"
+                      value={addProductFormData.product_id}
+                      onChange={(e) => setAddProductFormData({ ...addProductFormData, product_id: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      required
+                    >
+                      <option value="">選択してください</option>
+                      {productsList.filter((p: any) => p.is_active).map((product: any) => (
+                        <option key={product.product_id} value={product.product_id}>
+                          {product.product_name} {product.product_category ? `(${product.product_category})` : ''} - ¥{product.unit_price.toLocaleString()}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="add_quantity" className="block text-sm font-medium text-gray-700 mb-1">
+                      数量 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      id="add_quantity"
+                      min="1"
+                      value={addProductFormData.quantity}
+                      onChange={(e) => setAddProductFormData({ ...addProductFormData, quantity: e.target.value })}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseAddProductModal}
+                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddProductToCart}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    カートに追加
                   </button>
                 </div>
               </div>

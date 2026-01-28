@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import AdminNav from '@/app/components/AdminNav';
+import { useCart } from '@/app/contexts/CartContext';
 import { 
   PlusIcon,
   PencilIcon,
@@ -12,7 +13,8 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  ShoppingBagIcon
+  ShoppingBagIcon,
+  ShoppingCartIcon
 } from '@heroicons/react/24/outline';
 
 interface Product {
@@ -40,6 +42,7 @@ interface Category {
 
 export default function ProductManagement() {
   const router = useRouter();
+  const { addToCart } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -415,6 +418,18 @@ export default function ProductManagement() {
       console.error('カテゴリ削除エラー:', error);
       alert('削除に失敗しました');
     }
+  };
+
+  const handleAddToCart = (product: Product) => {
+    addToCart({
+      product_id: product.product_id,
+      product_name: product.product_name,
+      product_category: product.product_category,
+      unit_price: product.unit_price,
+      quantity: 1,
+      stock_quantity: product.stock_quantity || 0,
+    });
+    alert(`${product.product_name}をカートに追加しました`);
   };
 
   const handleOpenSaleModal = (product: Product) => {
@@ -851,10 +866,19 @@ export default function ProductManagement() {
                                   </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
+                                  {product.is_active && (
+                                    <button
+                                      onClick={() => handleAddToCart(product)}
+                                      className="p-2 text-blue-600 hover:text-blue-700"
+                                      title="カートに追加"
+                                    >
+                                      <ShoppingCartIcon className="h-5 w-5" />
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => handleOpenSaleModal(product)}
                                     className="p-2 text-green-600 hover:text-green-700"
-                                    title="販売"
+                                    title="直接販売"
                                   >
                                     <ShoppingBagIcon className="h-5 w-5" />
                                   </button>
