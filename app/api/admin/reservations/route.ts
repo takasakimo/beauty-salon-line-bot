@@ -72,10 +72,8 @@ export async function GET(request: NextRequest) {
     if (date) {
       queryText += ` AND DATE(r.reservation_date) = $${params.length + 1}`;
       params.push(date);
-    } else {
-      // 日付が指定されていない場合は、当日以降の予約のみを表示
-      queryText += ` AND DATE(r.reservation_date) >= CURRENT_DATE`;
     }
+    // 日付が指定されていない場合は、過去の予約も含めて全予約を表示
 
     // ステータスフィルタ
     if (status) {
