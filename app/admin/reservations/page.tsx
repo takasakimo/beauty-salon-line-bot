@@ -1668,7 +1668,6 @@ export default function ReservationManagement() {
                             >
                               <option value="confirmed">予約確定</option>
                               <option value="completed">完了</option>
-                              <option value="cancelled">キャンセル</option>
                             </select>
                             <button
                               onClick={() => handleOpenModal(reservation)}
@@ -1681,9 +1680,10 @@ export default function ReservationManagement() {
                         {reservation.status !== 'cancelled' && (
                           <button
                             onClick={() => handleCancel(reservation.reservation_id)}
-                            className="p-2 text-gray-400 hover:text-red-600"
+                            className="ml-auto px-3 py-1 text-xs font-medium text-red-700 bg-red-50 border border-red-300 rounded hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                            title="キャンセル"
                           >
-                            <XMarkIcon className="h-5 w-5" />
+                            キャンセル
                           </button>
                         )}
                       </div>
@@ -1990,8 +1990,10 @@ export default function ReservationManagement() {
                       >
                         <option value="confirmed">予約確定</option>
                         <option value="completed">完了</option>
-                        <option value="cancelled">キャンセル</option>
                       </select>
+                      <p className="mt-1 text-xs text-gray-500">
+                        ※ キャンセルは予約一覧画面の「キャンセル」ボタンから実行してください
+                      </p>
                     </div>
 
                     <div>
