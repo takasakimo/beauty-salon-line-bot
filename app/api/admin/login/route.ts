@@ -65,18 +65,18 @@ export async function POST(request: NextRequest) {
 
     // 店舗コードが空の場合は、まずスーパー管理者としてログインを試みる
     // 失敗した場合はメールアドレスで店舗管理者としてログインを試みる
-    let result = await authenticateSuperAdmin(emailOrUsername, password);
+    const superAdminResult = await authenticateSuperAdmin(emailOrUsername, password);
     
-    if (result.success) {
+    if (superAdminResult.success) {
       // スーパー管理者としてログイン成功
       const response = NextResponse.json({
         success: true,
         isSuperAdmin: true,
-        superAdminName: result.superAdmin?.fullName
+        superAdminName: superAdminResult.superAdmin?.fullName
       });
 
-      if (result.sessionToken) {
-        response.cookies.set('session_token', result.sessionToken, {
+      if (superAdminResult.sessionToken) {
+        response.cookies.set('session_token', superAdminResult.sessionToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
@@ -89,15 +89,15 @@ export async function POST(request: NextRequest) {
     }
 
     // スーパー管理者としてログイン失敗した場合、メールアドレスで店舗管理者としてログインを試みる
-    result = await authenticateAdminByEmail(emailOrUsername, password);
+    const adminResult = await authenticateAdminByEmail(emailOrUsername, password);
 
-    if (!result.success) {
+    if (!adminResult.success) {
       console.error('管理者認証失敗:', {
         emailOrUsername,
-        error: result.error
+        error: adminResult.error
       });
       return NextResponse.json(
-        { success: false, error: result.error || 'メールアドレスまたはパスワードが正しくありません' },
+        { success: false, error: adminResult.error || 'メールアドレスまたはパスワードが正しくありません' },
         { status: 401 }
       );
     }
@@ -106,13 +106,13 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       isSuperAdmin: false,
-      adminName: result.admin?.fullName,
-      tenantName: result.tenant?.salonName,
-      role: result.admin?.role
+      adminName: adminResult.admin?.fullName,
+      tenantName: adminResult.tenant?.salonName,
+      role: adminResult.admin?.role
     });
 
-    if (result.sessionToken) {
-      response.cookies.set('session_token', result.sessionToken, {
+    if (adminResult.sessionToken) {
+      response.cookies.set('session_token', adminResult.sessionToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         path: '/'
       });
       console.log('セッションクッキー設定:', {
-        token: result.sessionToken.substring(0, 10) + '...',
+        token: adminResult.sessionToken.substring(0, 10) + '...',
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7
