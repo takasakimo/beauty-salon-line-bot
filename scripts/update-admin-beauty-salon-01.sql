@@ -11,8 +11,7 @@ SET
     password_hash = 'b22f213ec710f0b0e86297d10279d69171f50f01a04edf40f472a563e7ad8576',
     email = 'info@aims-ngy.com',
     full_name = 'info',
-    is_active = true,
-    updated_at = CURRENT_TIMESTAMP
+    is_active = true
 WHERE tenant_id = (
     SELECT tenant_id 
     FROM tenants 
