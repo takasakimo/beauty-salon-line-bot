@@ -143,6 +143,8 @@ export async function authenticateAdminByEmail(
     console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
     
     // メールアドレスまたはユーザー名で管理者を検索（テナント情報も同時に取得）
+    // 大文字小文字を区別せず、トリム処理も行う
+    const trimmedEmailOrUsername = emailOrUsername.trim().toLowerCase();
     const adminResult = await query(
       `SELECT 
         ta.admin_id, 
@@ -159,11 +161,12 @@ export async function authenticateAdminByEmail(
         t.tenant_code
        FROM tenant_admins ta
        INNER JOIN tenants t ON ta.tenant_id = t.tenant_id
-       WHERE (ta.username = $1 OR ta.email = $1)
+       WHERE (LOWER(TRIM(ta.username)) = $1 OR LOWER(TRIM(ta.email)) = $1)
        AND ta.is_active = true
+       AND t.is_active = true
        ORDER BY ta.admin_id ASC
        LIMIT 1`,
-      [emailOrUsername]
+      [trimmedEmailOrUsername]
     );
 
     if (adminResult.rows.length === 0) {
