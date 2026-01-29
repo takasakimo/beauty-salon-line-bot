@@ -1492,8 +1492,8 @@ export default function ReservationManagement() {
           </div>
 
           {/* フィルタ */}
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <div className="flex-shrink-0">
               <label htmlFor="filterStartDate" className="block text-sm font-medium text-gray-700 mb-1">
                 開始日
               </label>
@@ -1502,10 +1502,10 @@ export default function ReservationManagement() {
                 id="filterStartDate"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                className="block w-auto px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
               />
             </div>
-            <div>
+            <div className="flex-shrink-0">
               <label htmlFor="filterEndDate" className="block text-sm font-medium text-gray-700 mb-1">
                 終了日
               </label>
@@ -1515,7 +1515,7 @@ export default function ReservationManagement() {
                   id="filterEndDate"
                   value={filterEndDate}
                   onChange={(e) => setFilterEndDate(e.target.value)}
-                  className="block flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                  className="block w-auto px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                 />
                 <button
                   type="button"
@@ -1524,13 +1524,13 @@ export default function ReservationManagement() {
                     setFilterEndDate('');
                     setFilterDate('');
                   }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 whitespace-nowrap"
+                  className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 whitespace-nowrap"
                 >
                   クリア
                 </button>
               </div>
             </div>
-            <div>
+            <div className="flex-shrink-0">
               <label htmlFor="filterStatus" className="block text-sm font-medium text-gray-700 mb-1">
                 ステータス
               </label>
@@ -1538,7 +1538,7 @@ export default function ReservationManagement() {
                 id="filterStatus"
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                className="block w-auto px-2 py-1.5 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
               >
                 <option value="">すべて</option>
                 <option value="confirmed">予約確定</option>
