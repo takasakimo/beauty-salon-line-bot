@@ -130,7 +130,135 @@ export function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
-// 管理者認証
+// メールアドレスまたはユーザー名で管理者を検索して認証（店舗コード不要）
+export async function authenticateAdminByEmail(
+  emailOrUsername: string,
+  password: string
+): Promise<{ success: boolean; sessionToken?: string; admin?: any; tenant?: any; error?: string }> {
+  try {
+    console.log('メールアドレス/ユーザー名で管理者認証開始:', { emailOrUsername });
+    
+    // パスワードハッシュの生成
+    const passwordHash = hashPassword(password);
+    console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
+    
+    // メールアドレスまたはユーザー名で管理者を検索（テナント情報も同時に取得）
+    const adminResult = await query(
+      `SELECT 
+        ta.admin_id, 
+        ta.username, 
+        ta.email, 
+        ta.full_name, 
+        ta.role, 
+        ta.password_hash, 
+        ta.is_active,
+        ta.tenant_id,
+        t.tenant_id as tenant_tenant_id,
+        t.salon_name,
+        t.is_active as tenant_is_active,
+        t.tenant_code
+       FROM tenant_admins ta
+       INNER JOIN tenants t ON ta.tenant_id = t.tenant_id
+       WHERE (ta.username = $1 OR ta.email = $1)
+       AND ta.is_active = true
+       ORDER BY ta.admin_id ASC
+       LIMIT 1`,
+      [emailOrUsername]
+    );
+
+    if (adminResult.rows.length === 0) {
+      console.error('管理者が見つかりません:', { emailOrUsername });
+      return { success: false, error: 'メールアドレスまたはパスワードが正しくありません' };
+    }
+
+    const row = adminResult.rows[0];
+    const admin = {
+      admin_id: row.admin_id,
+      username: row.username,
+      email: row.email,
+      full_name: row.full_name,
+      role: row.role,
+      password_hash: row.password_hash,
+      is_active: row.is_active,
+      tenant_id: row.tenant_id
+    };
+    
+    const tenant = {
+      tenant_id: row.tenant_tenant_id,
+      salon_name: row.salon_name,
+      is_active: row.tenant_is_active,
+      tenant_code: row.tenant_code
+    };
+
+    console.log('管理者情報取得:', { 
+      adminId: admin.admin_id, 
+      username: admin.username,
+      email: admin.email,
+      tenantId: tenant.tenant_id,
+      tenantCode: tenant.tenant_code,
+      isActive: admin.is_active 
+    });
+
+    if (!admin.is_active) {
+      return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
+    }
+
+    if (!tenant.is_active) {
+      return { success: false, error: 'ログイン失敗：この店舗は無効です' };
+    }
+
+    // パスワードの検証
+    const storedHash = admin.password_hash || '';
+    const passwordMatch = storedHash === passwordHash;
+    console.log('パスワード検証:', { 
+      storedHash: storedHash.substring(0, 20) + '...', 
+      providedHash: passwordHash.substring(0, 20) + '...',
+      match: passwordMatch 
+    });
+
+    if (!passwordMatch) {
+      return { success: false, error: 'メールアドレスまたはパスワードが正しくありません' };
+    }
+
+    // セッショントークンの生成
+    const sessionToken = generateSessionToken();
+    
+    // セッション情報を保存（データベース）
+    await setSession(sessionToken, {
+      adminId: admin.admin_id,
+      tenantId: tenant.tenant_id,
+      username: admin.username,
+      role: admin.role,
+      createdAt: Date.now()
+    });
+
+    // 最終ログイン時刻を更新
+    await query(
+      'UPDATE tenant_admins SET last_login = CURRENT_TIMESTAMP WHERE admin_id = $1',
+      [admin.admin_id]
+    );
+
+    return {
+      success: true,
+      sessionToken,
+      admin: {
+        adminId: admin.admin_id,
+        fullName: admin.full_name,
+        role: admin.role
+      },
+      tenant: {
+        tenantId: tenant.tenant_id,
+        salonName: tenant.salon_name
+      }
+    };
+  } catch (error: any) {
+    console.error('認証エラー:', error);
+    const errorMessage = error?.message || String(error);
+    return { success: false, error: `サーバーエラー: ${errorMessage}` };
+  }
+}
+
+// 管理者認証（店舗コード指定版 - 後方互換性のため残す）
 export async function authenticateAdmin(
   username: string,
   password: string,

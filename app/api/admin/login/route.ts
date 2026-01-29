@@ -1,33 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateAdmin, authenticateSuperAdmin } from '@/lib/auth';
+import { authenticateAdmin, authenticateAdminByEmail, authenticateSuperAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    let { username, password, tenantCode } = body;
+    let { username, password, tenantCode, email } = body;
 
     // 入力値のトリム処理
     username = username?.trim() || '';
+    email = email?.trim() || '';
     password = password?.trim() || '';
     tenantCode = tenantCode?.trim() || '';
 
+    // メールアドレスまたはユーザー名を取得（emailがあればemail、なければusername）
+    const emailOrUsername = email || username;
+
     // バリデーション
-    if (!username || !password) {
+    if (!emailOrUsername || !password) {
       return NextResponse.json(
-        { success: false, error: 'ユーザー名とパスワードを入力してください' },
+        { success: false, error: 'メールアドレスとパスワードを入力してください' },
         { status: 400 }
       );
     }
 
-    // 店舗コードが空の場合はスーパー管理者としてログインを試みる
-    if (!tenantCode) {
-      const result = await authenticateSuperAdmin(username, password);
-      
+    // 店舗コードが指定されている場合は従来の方法で認証
+    if (tenantCode) {
+      const result = await authenticateAdmin(emailOrUsername, password, tenantCode);
+
       if (!result.success) {
-        console.error('スーパー管理者認証失敗:', {
-          username,
+        console.error('管理者認証失敗:', {
+          emailOrUsername,
+          tenantCode,
           error: result.error
         });
         return NextResponse.json(
@@ -37,6 +42,33 @@ export async function POST(request: NextRequest) {
       }
 
       // セッションクッキーを設定
+      const response = NextResponse.json({
+        success: true,
+        isSuperAdmin: false,
+        adminName: result.admin?.fullName,
+        tenantName: result.tenant?.salonName,
+        role: result.admin?.role
+      });
+
+      if (result.sessionToken) {
+        response.cookies.set('session_token', result.sessionToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 60 * 60 * 24 * 7, // 7日間
+          path: '/'
+        });
+      }
+
+      return response;
+    }
+
+    // 店舗コードが空の場合は、まずスーパー管理者としてログインを試みる
+    // 失敗した場合はメールアドレスで店舗管理者としてログインを試みる
+    let result = await authenticateSuperAdmin(emailOrUsername, password);
+    
+    if (result.success) {
+      // スーパー管理者としてログイン成功
       const response = NextResponse.json({
         success: true,
         isSuperAdmin: true,
@@ -56,18 +88,16 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
-    // 店舗管理者としてログインする場合
-
-    const result = await authenticateAdmin(username, password, tenantCode);
+    // スーパー管理者としてログイン失敗した場合、メールアドレスで店舗管理者としてログインを試みる
+    result = await authenticateAdminByEmail(emailOrUsername, password);
 
     if (!result.success) {
       console.error('管理者認証失敗:', {
-        username,
-        tenantCode,
+        emailOrUsername,
         error: result.error
       });
       return NextResponse.json(
-        { success: false, error: result.error || 'ログインに失敗しました' },
+        { success: false, error: result.error || 'メールアドレスまたはパスワードが正しくありません' },
         { status: 401 }
       );
     }

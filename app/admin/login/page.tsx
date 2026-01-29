@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 
 export default function AdminLogin() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantCode, setTenantCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -17,18 +16,14 @@ export default function AdminLogin() {
     setError('');
 
     // 入力値のトリム処理
-    const trimmedUsername = username.trim();
+    const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
-    const trimmedTenantCode = tenantCode.trim();
 
-    if (!trimmedUsername || !trimmedPassword) {
-      setError('ユーザー名とパスワードを入力してください');
+    if (!trimmedEmail || !trimmedPassword) {
+      setError('メールアドレスとパスワードを入力してください');
       setLoading(false);
       return;
     }
-
-    // 店舗コードが空の場合はスーパー管理者としてログインを試みる
-    // 店舗コードが入力されている場合は店舗管理者としてログインを試みる
 
     try {
       const response = await fetch('/api/admin/login', {
@@ -38,9 +33,8 @@ export default function AdminLogin() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          username: trimmedUsername,
+          email: trimmedEmail,
           password: trimmedPassword,
-          tenantCode: trimmedTenantCode,
         }),
       });
 
@@ -78,7 +72,7 @@ export default function AdminLogin() {
             管理画面ログイン
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            スタッフ専用ログイン
+            メールアドレスまたはユーザー名とパスワードでログイン
           </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
@@ -89,32 +83,16 @@ export default function AdminLogin() {
           )}
           <div className="space-y-4">
             <div>
-              <label htmlFor="tenantCode" className="block text-sm font-medium text-gray-700">
-                店舗コード <span className="text-gray-400 font-normal">(スーパー管理者の場合は空欄)</span>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                メールアドレスまたはユーザー名
               </label>
               <input
-                id="tenantCode"
-                type="text"
-                value={tenantCode}
-                onChange={(e) => setTenantCode(e.target.value)}
-                placeholder="例: beauty-salon-001"
-                className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
-                disabled={loading}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                店舗管理者の場合は店舗コードを入力してください。スーパー管理者の場合は空欄のままログインしてください。
-              </p>
-            </div>
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                ユーザー名
-              </label>
-              <input
-                id="username"
+                id="email"
                 type="text"
                 required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="メールアドレスまたはユーザー名を入力"
                 className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
                 disabled={loading}
               />
@@ -129,7 +107,9 @@ export default function AdminLogin() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="パスワードを入力"
                 className="mt-1 block w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent transition-all"
+                disabled={loading}
               />
             </div>
           </div>
