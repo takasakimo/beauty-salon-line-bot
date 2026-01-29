@@ -9,7 +9,9 @@ import {
   PlusIcon,
   PencilIcon,
   XMarkIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 
 interface MenuItem {
@@ -209,6 +211,12 @@ function TimelineScheduleView({
   const [dragOverStaffId, setDragOverStaffId] = useState<number | null>(null);
   const [dragOverStoreDate, setDragOverStoreDate] = useState<string | null>(null);
   const [shiftsByDate, setShiftsByDate] = useState<Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>>>({});
+  // 週の開始日を管理（初期値は今日）
+  const [weekStartDate, setWeekStartDate] = useState<Date>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
 
   // 予約をスタッフに割り当てる関数（staffIdがnullの場合は店舗全体に戻す）
   const handleAssignToStaff = async (reservation: Reservation, staffId: number | null) => {
@@ -341,21 +349,40 @@ function TimelineScheduleView({
     });
   }, []);
 
-  // 1週間分の日付を生成（選択された日付を含む週、または今日から7日後まで）
-  const getWeekDates = () => {
+  // 1週間分の日付を生成（週の開始日から7日間）
+  const getWeekDates = useCallback(() => {
     const dates = [];
-    // フィルタ日付が設定されている場合は、その日付を含む週を表示
-    // そうでない場合は今日から7日後まで
-    const baseDate = new Date();
+    const baseDate = new Date(weekStartDate);
     for (let i = 0; i < 7; i++) {
       const date = new Date(baseDate);
       date.setDate(baseDate.getDate() + i);
       dates.push(date);
     }
     return dates;
-  };
+  }, [weekStartDate]);
 
   const weekDates = getWeekDates();
+
+  // 前週に移動
+  const handlePreviousWeek = () => {
+    const newDate = new Date(weekStartDate);
+    newDate.setDate(weekStartDate.getDate() - 7);
+    setWeekStartDate(newDate);
+  };
+
+  // 翌週に移動
+  const handleNextWeek = () => {
+    const newDate = new Date(weekStartDate);
+    newDate.setDate(weekStartDate.getDate() + 7);
+    setWeekStartDate(newDate);
+  };
+
+  // 今週に戻る
+  const handleCurrentWeek = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    setWeekStartDate(today);
+  };
   
   // 各日付のシフトデータを一括取得（パフォーマンス改善）
   useEffect(() => {
@@ -416,7 +443,7 @@ function TimelineScheduleView({
     };
     
     loadShifts();
-  }, [weekDates]);
+  }, [weekStartDate]);
   
   // 各日付で出勤しているスタッフをフィルタリング（メモ化でパフォーマンス改善）
   const getWorkingStaffForDate = useCallback((dateKey: string): Staff[] => {
@@ -574,8 +601,57 @@ function TimelineScheduleView({
     return `${month}/${day}(${dayName})`;
   };
 
+  // 週の範囲を表示する文字列を生成
+  const getWeekRangeText = () => {
+    const start = weekDates[0];
+    const end = weekDates[weekDates.length - 1];
+    const startStr = `${start.getMonth() + 1}/${start.getDate()}`;
+    const endStr = `${end.getMonth() + 1}/${end.getDate()}`;
+    return `${startStr} - ${endStr}`;
+  };
+
+  // 今日かどうかを判定
+  const isCurrentWeek = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekStart = new Date(weekStartDate);
+    weekStart.setHours(0, 0, 0, 0);
+    return today.getTime() === weekStart.getTime();
+  };
+
   return (
     <div className="overflow-x-auto">
+      {/* 週移動コントロール */}
+      <div className="mb-4 flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePreviousWeek}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+          >
+            <ChevronLeftIcon className="h-5 w-5 mr-1" />
+            前週
+          </button>
+          <button
+            onClick={handleNextWeek}
+            className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+          >
+            翌週
+            <ChevronRightIcon className="h-5 w-5 ml-1" />
+          </button>
+          {!isCurrentWeek() && (
+            <button
+              onClick={handleCurrentWeek}
+              className="ml-2 inline-flex items-center px-3 py-2 border border-pink-300 rounded-md shadow-sm text-sm font-medium text-pink-700 bg-pink-50 hover:bg-pink-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500"
+            >
+              今週に戻る
+            </button>
+          )}
+        </div>
+        <div className="text-sm font-medium text-gray-700">
+          {getWeekRangeText()}
+        </div>
+      </div>
+
       <div className="inline-block min-w-full">
         {/* 日付ヘッダー行 */}
         <div className="flex border-b border-gray-200">
