@@ -13,6 +13,10 @@
     {
       "path": "/api/cron/generate-demo-reservations",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/auto-complete-reservations",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
