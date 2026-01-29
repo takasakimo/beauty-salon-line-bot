@@ -886,14 +886,25 @@ function ReservationPageContent() {
                                         <div className="relative" style={{ height: `${timeSlots.length * 32}px` }}>
                                           {timeSlots.map((time) => {
                                             // 30分間隔のスロットが利用可能かどうかを判定
-                                            // APIは15分間隔でスロットを返すので、その時間または15分前のスロットが利用可能かどうかをチェック
+                                            // APIは15分間隔でスロットを返すので、その時間帯（30分間）全体が利用可能なスロットに含まれているかをチェック
                                             const [hour, minute] = time.split(':').map(Number);
                                             const timeInMinutes = hour * 60 + minute;
                                             
                                             // その時間自体が利用可能か、または15分前のスロットが利用可能かチェック
+                                            // ただし、30分間隔のスロットが利用可能かどうかは、その時間帯全体（30分間）が利用可能なスロットに含まれているかをチェック
                                             const time15Before = timeInMinutes >= 15 
                                               ? `${Math.floor((timeInMinutes - 15) / 60).toString().padStart(2, '0')}:${((timeInMinutes - 15) % 60).toString().padStart(2, '0')}`
                                               : null;
+                                            
+                                            // その時間自体が利用可能なスロットに含まれているか
+                                            const timeSlotAvailable = availableSlots.includes(time);
+                                            
+                                            // 15分前のスロットが利用可能なスロットに含まれているか
+                                            const time15BeforeAvailable = time15Before !== null && availableSlots.includes(time15Before);
+                                            
+                                            // 30分間隔のスロットが利用可能かどうかは、その時間自体が利用可能な場合のみ
+                                            // 15分前のスロットが利用可能でも、30分間隔のスロット自体が利用可能でない場合は×とする
+                                            const isAvailable = timeSlotAvailable;
                                             
                                             // デバッグログ（最初の数回のみ）
                                             if (dateStr === '2026-01-06' && (time === '09:00' || time === '09:30' || time === '10:00')) {
@@ -903,13 +914,11 @@ function ReservationPageContent() {
                                                 availableSlotsLength: availableSlots.length,
                                                 availableSlotsSample: availableSlots.slice(0, 10),
                                                 time15Before,
-                                                includesTime: availableSlots.includes(time),
-                                                includesTime15Before: time15Before !== null && availableSlots.includes(time15Before)
+                                                timeSlotAvailable,
+                                                time15BeforeAvailable,
+                                                isAvailable
                                               });
                                             }
-                                            
-                                            const isAvailable = availableSlots.includes(time) || 
-                                              (time15Before !== null && availableSlots.includes(time15Before));
                                             
                                             const isSelected = selectedDate === dateStr && selectedTime === time;
                                             
@@ -927,9 +936,10 @@ function ReservationPageContent() {
                                                 onClick={() => {
                                                   if (isAvailable) {
                                                     // 利用可能なスロットから最も近い時間を選択
-                                                    const actualTime = availableSlots.includes(time) 
+                                                    // その時間自体が利用可能な場合はその時間を、そうでない場合は15分前のスロットを選択
+                                                    const actualTime = timeSlotAvailable 
                                                       ? time 
-                                                      : (time15Before && availableSlots.includes(time15Before) ? time15Before : null);
+                                                      : (time15BeforeAvailable ? time15Before : null);
                                                     if (actualTime) {
                                                       setSelectedDate(dateStr);
                                                       setSelectedTime(actualTime);

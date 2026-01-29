@@ -577,7 +577,7 @@ export async function GET(request: NextRequest) {
           ) as duration
         FROM reservations r
         LEFT JOIN menus m ON r.menu_id = m.menu_id
-        WHERE DATE(r.reservation_date) = $1
+        WHERE r.reservation_date::date = $1::date
         AND r.status = 'confirmed'
         AND r.tenant_id = $2
         AND r.staff_id = $3
@@ -600,7 +600,7 @@ export async function GET(request: NextRequest) {
           ) as duration
         FROM reservations r
         LEFT JOIN menus m ON r.menu_id = m.menu_id
-        WHERE DATE(r.reservation_date) = $1
+        WHERE r.reservation_date::date = $1::date
         AND r.status = 'confirmed'
         AND r.tenant_id = $2
       `;
