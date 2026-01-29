@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
       );
     }
     const searchParams = request.nextUrl.searchParams;
-    const date = searchParams.get('date');
+    const date = searchParams.get('date'); // 後方互換性のため残す
+    const startDate = searchParams.get('start_date');
+    const endDate = searchParams.get('end_date');
     const status = searchParams.get('status');
 
     let queryText = `
@@ -68,9 +70,13 @@ export async function GET(request: NextRequest) {
     `;
     const params: any[] = [tenantId];
 
-    // 日付フィルタ
-    if (date) {
-      // 日付が指定されている場合：その日付の予約を表示（過去でも可）
+    // 日付フィルタ（期間指定を優先、後方互換性のため単一のdateも対応）
+    if (startDate && endDate) {
+      // 期間指定がある場合：開始日から終了日までの予約を表示（過去でも可）
+      queryText += ` AND DATE(r.reservation_date) >= $${params.length + 1} AND DATE(r.reservation_date) <= $${params.length + 2}`;
+      params.push(startDate, endDate);
+    } else if (date) {
+      // 単一の日付が指定されている場合：その日付の予約を表示（過去でも可）
       queryText += ` AND DATE(r.reservation_date) = $${params.length + 1}`;
       params.push(date);
     } else {

@@ -874,7 +874,9 @@ export default function ReservationManagement() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
-  const [filterDate, setFilterDate] = useState('');
+  const [filterDate, setFilterDate] = useState(''); // 後方互換性のため残す
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [formData, setFormData] = useState({
     customer_id: '',
@@ -928,7 +930,7 @@ export default function ReservationManagement() {
 
   useEffect(() => {
     loadReservations();
-  }, [filterDate, filterStatus]);
+  }, [filterDate, filterStartDate, filterEndDate, filterStatus]);
 
   // メニュー、日付が選択されたら利用可能な時間を取得（スタッフは任意）
   useEffect(() => {
@@ -955,8 +957,11 @@ export default function ReservationManagement() {
       }
       let baseUrl = '/api/admin/reservations';
       const params = new URLSearchParams();
-      // filterDateが空文字列でない場合のみ日付パラメータを追加（全予約表示のため）
-      if (filterDate) {
+      // 期間指定を優先、後方互換性のため単一のdateも対応
+      if (filterStartDate && filterEndDate) {
+        params.append('start_date', filterStartDate);
+        params.append('end_date', filterEndDate);
+      } else if (filterDate) {
         params.append('date', filterDate);
       }
       if (filterStatus) params.append('status', filterStatus);
@@ -1487,25 +1492,41 @@ export default function ReservationManagement() {
           </div>
 
           {/* フィルタ */}
-          <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label htmlFor="filterDate" className="block text-sm font-medium text-gray-700 mb-1">
-                日付
+              <label htmlFor="filterStartDate" className="block text-sm font-medium text-gray-700 mb-1">
+                開始日
+              </label>
+              <input
+                type="date"
+                id="filterStartDate"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+              />
+            </div>
+            <div>
+              <label htmlFor="filterEndDate" className="block text-sm font-medium text-gray-700 mb-1">
+                終了日
               </label>
               <div className="flex gap-2">
                 <input
                   type="date"
-                  id="filterDate"
-                  value={filterDate}
-                  onChange={(e) => setFilterDate(e.target.value)}
+                  id="filterEndDate"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
                   className="block flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                 />
                 <button
                   type="button"
-                  onClick={() => setFilterDate('')}
+                  onClick={() => {
+                    setFilterStartDate('');
+                    setFilterEndDate('');
+                    setFilterDate('');
+                  }}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 whitespace-nowrap"
                 >
-                  すべて表示
+                  クリア
                 </button>
               </div>
             </div>
@@ -1525,6 +1546,15 @@ export default function ReservationManagement() {
                 <option value="cancelled">キャンセル</option>
               </select>
             </div>
+          </div>
+          {/* 後方互換性のため単一の日付フィルタも残す（非表示） */}
+          <div className="hidden">
+            <input
+              type="date"
+              id="filterDate"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
           </div>
 
           {error && (
