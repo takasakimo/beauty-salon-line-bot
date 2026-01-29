@@ -208,16 +208,36 @@ export default function SettingsPage() {
 
       const result = await response.json();
 
+      if (!response.ok) {
+        // エラーレスポンスの場合、詳細なエラーメッセージを表示
+        const errorMessage = result.error || `エラーが発生しました (ステータス: ${response.status})`;
+        setPasswordError(errorMessage);
+        console.error('パスワード変更エラー:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: result.error,
+          result
+        });
+        return;
+      }
+
       if (result.success) {
         setPasswordSuccess(true);
         setTimeout(() => {
           handleClosePasswordModal();
+          // フォームをリセット
+          setPasswordFormData({
+            currentPassword: '',
+            newPassword: '',
+            confirmPassword: ''
+          });
         }, 2000);
       } else {
         setPasswordError(result.error || 'パスワードの変更に失敗しました');
       }
     } catch (error: any) {
-      setPasswordError('パスワードの変更中にエラーが発生しました');
+      console.error('パスワード変更エラー:', error);
+      setPasswordError(`パスワードの変更中にエラーが発生しました: ${error.message || '不明なエラー'}`);
     } finally {
       setChangingPassword(false);
     }

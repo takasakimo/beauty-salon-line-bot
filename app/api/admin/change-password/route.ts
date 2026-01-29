@@ -108,22 +108,41 @@ export async function POST(request: NextRequest) {
 
     const admin = adminResult.rows[0];
     
+    console.log('パスワード変更処理:', {
+      adminId,
+      tenantId,
+      hasPasswordHash: !!admin.password_hash,
+      passwordHashLength: admin.password_hash?.length,
+      currentPasswordProvided: !!currentPassword,
+      currentPasswordLength: currentPassword?.length
+    });
+    
     // パスワードが設定されている場合は、現在のパスワードを確認
     // パスワードが設定されていない場合は、現在のパスワード欄が空白でも変更可能
     if (admin.password_hash) {
       if (!currentPassword) {
+        console.log('現在のパスワードが入力されていません');
         return NextResponse.json(
           { success: false, error: '現在のパスワードを入力してください' },
           { status: 400 }
         );
       }
       const currentPasswordHash = hashPassword(currentPassword);
+      console.log('パスワード検証:', {
+        providedHash: currentPasswordHash.substring(0, 20) + '...',
+        storedHash: admin.password_hash.substring(0, 20) + '...',
+        match: admin.password_hash === currentPasswordHash
+      });
+      
       if (admin.password_hash !== currentPasswordHash) {
+        console.log('現在のパスワードが一致しません');
         return NextResponse.json(
-          { success: false, error: '現在のパスワードが正しくありません' },
+          { success: false, error: '現在のパスワードが正しくありません。パスワードが設定されていない場合は空白のままにしてください。' },
           { status: 401 }
         );
       }
+    } else {
+      console.log('パスワードが設定されていないため、現在のパスワードチェックをスキップ');
     }
 
     // 新しいパスワードを設定
