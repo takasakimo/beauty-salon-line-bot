@@ -1279,6 +1279,16 @@ export default function ReservationManagement() {
       return;
     }
 
+    // 楽観的更新：即座にUIを更新
+    const previousReservations = [...reservations];
+    setReservations(prev => 
+      prev.map(r => 
+        r.reservation_id === reservationId 
+          ? { ...r, status: 'cancelled' }
+          : r
+      )
+    );
+
     try {
       const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}`);
       const response = await fetch(url, {
@@ -1287,11 +1297,13 @@ export default function ReservationManagement() {
       });
 
       if (!response.ok) {
+        // エラー時は元の状態に戻す
+        setReservations(previousReservations);
         const errorData = await response.json();
         throw new Error(errorData.error || 'キャンセルに失敗しました');
       }
 
-      loadReservations();
+      // 成功時は楽観的更新が既に反映されているので、追加の処理は不要
     } catch (error: any) {
       alert(error.message || 'キャンセルに失敗しました');
     }
@@ -1326,64 +1338,36 @@ export default function ReservationManagement() {
   };
 
   const handleStatusChange = async (reservationId: number, newStatus: string) => {
+    // 楽観的更新：即座にUIを更新
+    const previousReservations = [...reservations];
+    setReservations(prev => 
+      prev.map(r => 
+        r.reservation_id === reservationId 
+          ? { ...r, status: newStatus }
+          : r
+      )
+    );
+
     try {
-      const reservation = reservations.find(r => r.reservation_id === reservationId);
-      if (!reservation) return;
-
-      // reservation_dateをJST時刻として取得（UTCに変換せず、JST形式を維持）
-      let dateStr = reservation.reservation_date;
-      let reservationDateTime: string;
-      
-      // reservation_dateは文字列として返される（APIレスポンスでYYYY-MM-DDTHH:mm:ss+09:00形式に変換済み）
-      // 既に+09:00が付いている場合はそのまま使用
-      if (dateStr.includes('+09:00')) {
-        reservationDateTime = dateStr;
-      } else {
-        // タイムゾーン情報を除去（+09:00以外のタイムゾーンやZを除去）
-        const dateStrWithoutTz = dateStr.replace(/[+-]\d{2}:\d{2}$/, '').replace(/Z$/, '');
-        
-        // Tをスペースに変換してから、再度Tに変換して+09:00を追加
-        // YYYY-MM-DD HH:mm:ss形式またはYYYY-MM-DDTHH:mm:ss形式をYYYY-MM-DDTHH:mm:ss+09:00形式に変換
-        if (dateStrWithoutTz.includes(' ')) {
-          // スペース区切りの場合
-          reservationDateTime = dateStrWithoutTz.replace(' ', 'T') + '+09:00';
-        } else if (dateStrWithoutTz.includes('T')) {
-          // T区切りの場合
-          reservationDateTime = dateStrWithoutTz + '+09:00';
-        } else {
-          // 日付のみの場合（通常は発生しないが念のため）
-          reservationDateTime = dateStrWithoutTz + 'T00:00:00+09:00';
-        }
-      }
-
-      // 複数メニューの場合はmenu_idsを配列で送信、そうでなければmenu_idを送信
-      const menuIds = reservation.menus && reservation.menus.length > 0
-        ? reservation.menus.map(m => m.menu_id)
-        : [reservation.menu_id];
-
-      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}`);
+      // ステータス変更専用の軽量APIを使用
+      const url = getApiUrlWithTenantId(`/api/admin/reservations/${reservationId}/status`);
       const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({
-          menu_ids: menuIds,
-          menu_id: reservation.menu_id, // 後方互換性のため
-          staff_id: reservation.staff_id,
-          reservation_date: reservationDateTime,
-          status: newStatus,
-          notes: reservation.notes
-        }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (!response.ok) {
+        // エラー時は元の状態に戻す
+        setReservations(previousReservations);
         const errorData = await response.json().catch(() => ({ error: 'ステータス変更に失敗しました' }));
         throw new Error(errorData.error || 'ステータス変更に失敗しました');
       }
 
-      loadReservations();
+      // 成功時は楽観的更新が既に反映されているので、追加の処理は不要
     } catch (error: any) {
       alert(error.message || 'ステータス変更に失敗しました');
     }
