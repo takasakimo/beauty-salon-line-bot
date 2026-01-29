@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
@@ -59,6 +59,135 @@ interface Staff {
   staff_id: number;
   name: string;
 }
+
+// 予約ブロックコンポーネント（メモ化でパフォーマンス改善）
+const ReservationBlock = memo(({ 
+  reservation, 
+  column, 
+  totalColumns, 
+  isDraggable, 
+  isDragging,
+  onEdit, 
+  onCancel, 
+  onDragStart, 
+  onDragEnd,
+  getReservationStyle,
+  formatTime
+}: {
+  reservation: Reservation;
+  column: number;
+  totalColumns: number;
+  isDraggable: boolean;
+  isDragging: boolean;
+  onEdit: (reservation: Reservation) => void;
+  onCancel: (id: number) => void;
+  onDragStart: (e: React.DragEvent, reservation: Reservation) => void;
+  onDragEnd: () => void;
+  getReservationStyle: (reservation: Reservation, column: number, totalColumns: number) => any;
+  formatTime: (dateString: string) => string;
+}) => {
+  const style = getReservationStyle(reservation, column, totalColumns);
+  const isCancelled = reservation.status === 'cancelled';
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isCancelled) {
+      onEdit(reservation);
+    }
+  };
+
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit(reservation);
+  };
+
+  const handleCancelClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCancel(reservation.reservation_id);
+  };
+
+  const handleDragStartLocal = (e: React.DragEvent) => {
+    if (isDraggable && !isCancelled) {
+      onDragStart(e, reservation);
+    }
+  };
+  
+  return (
+    <div
+      draggable={isDraggable && !isCancelled}
+      onDragStart={handleDragStartLocal}
+      onDragEnd={onDragEnd}
+      onClick={handleClick}
+      className={`absolute rounded p-1 shadow-sm border-l-2 ${
+        isDragging
+          ? 'opacity-50'
+          : isCancelled
+          ? 'bg-gray-100 border-gray-300 opacity-60'
+          : reservation.status === 'completed'
+          ? 'bg-green-50 border-green-400 cursor-move hover:bg-green-100'
+          : 'bg-pink-50 border-pink-400 cursor-move hover:bg-pink-100'
+      } transition-colors ${isDraggable && !isCancelled ? 'hover:shadow-md' : ''}`}
+      style={{ ...style, marginLeft: column > 0 ? '2px' : '2px', marginRight: '2px' }}
+      title={isDraggable && !isCancelled ? 'ドラッグしてスタッフに割り当て' : ''}
+    >
+      <div className="text-xs font-semibold text-gray-900 mb-0.5 leading-tight">
+        {formatTime(reservation.reservation_date)}
+      </div>
+      <div className="text-xs text-gray-700 font-medium mb-0.5 leading-tight truncate">
+        {reservation.customer_name}
+      </div>
+      <div className="text-xs text-gray-600 leading-tight">
+        {reservation.menus && reservation.menus.length > 1 ? (
+          <div>
+            {reservation.menus.map((menu, idx) => (
+              <div key={menu.menu_id} className="truncate">
+                {idx > 0 && ' + '}
+                {menu.menu_name}
+              </div>
+            ))}
+            <div className="mt-0.5 font-semibold text-xs">
+              ¥{(reservation.total_price || reservation.price || 0).toLocaleString()}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="truncate">{reservation.menu_name}</div>
+            <div className="mt-0.5 text-xs">
+              ¥{(reservation.total_price || reservation.menu_price || reservation.price || 0).toLocaleString()}
+            </div>
+          </div>
+        )}
+      </div>
+      {reservation.staff_name && (
+        <div className="text-xs text-gray-500 mt-0.5 leading-tight truncate">
+          {reservation.staff_name}
+        </div>
+      )}
+      <div className="flex items-center space-x-0.5 mt-1">
+        {!isCancelled && (
+          <>
+            <button
+              onClick={handleEditClick}
+              className="p-0.5 text-gray-400 hover:text-gray-600"
+              title="編集"
+            >
+              <PencilIcon className="h-2.5 w-2.5" />
+            </button>
+            <button
+              onClick={handleCancelClick}
+              className="p-0.5 text-gray-400 hover:text-red-600"
+              title="キャンセル"
+            >
+              <XMarkIcon className="h-2.5 w-2.5" />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
+
+ReservationBlock.displayName = 'ReservationBlock';
 
 // タイムスケジュール表示コンポーネント
 function TimelineScheduleView({ 
@@ -195,8 +324,8 @@ function TimelineScheduleView({
     setDragOverStoreDate(null);
   };
 
-  // 時間をフォーマット（HH:MM）
-  const formatTime = (dateString: string) => {
+  // 時間をフォーマット（HH:MM）（メモ化でパフォーマンス改善）
+  const formatTime = useCallback((dateString: string) => {
     // reservation_dateをJSTとして解釈
     let dateStr = dateString;
     // タイムゾーン情報がない場合は+09:00を付与
@@ -210,7 +339,7 @@ function TimelineScheduleView({
       hour12: false,
       timeZone: 'Asia/Tokyo'
     });
-  };
+  }, []);
 
   // 1週間分の日付を生成（選択された日付を含む週、または今日から7日後まで）
   const getWeekDates = () => {
@@ -228,49 +357,78 @@ function TimelineScheduleView({
 
   const weekDates = getWeekDates();
   
-  // 各日付のシフトデータを取得
+  // 各日付のシフトデータを一括取得（パフォーマンス改善）
   useEffect(() => {
     const loadShifts = async () => {
-      const shiftsMap: Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>> = {};
+      if (weekDates.length === 0) return;
       
-      for (const date of weekDates) {
-        const dateKey = date.toISOString().split('T')[0];
-        try {
-          const url = getApiUrlWithTenantId(`/api/admin/shifts?start_date=${dateKey}&end_date=${dateKey}`);
-          const response = await fetch(url, {
-            credentials: 'include',
+      const startDate = weekDates[0].toISOString().split('T')[0];
+      const endDate = weekDates[weekDates.length - 1].toISOString().split('T')[0];
+      
+      try {
+        // 1回のAPIリクエストで全期間分のシフトを取得
+        const url = getApiUrlWithTenantId(`/api/admin/shifts?start_date=${startDate}&end_date=${endDate}`);
+        const response = await fetch(url, {
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          const shiftsMap: Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>> = {};
+          
+          // 日付ごとにグループ化
+          data.forEach((shift: any) => {
+            const shiftDate = shift.shift_date || shift.date;
+            if (shiftDate) {
+              const dateKey = shiftDate.split('T')[0];
+              if (!shiftsMap[dateKey]) {
+                shiftsMap[dateKey] = [];
+              }
+              shiftsMap[dateKey].push({
+                staff_id: shift.staff_id,
+                start_time: shift.start_time,
+                end_time: shift.end_time,
+                is_off: shift.is_off
+              });
+            }
           });
           
-          if (response.ok) {
-            const data = await response.json();
-            shiftsMap[dateKey] = data.map((shift: any) => ({
-              staff_id: shift.staff_id,
-              start_time: shift.start_time,
-              end_time: shift.end_time,
-              is_off: shift.is_off
-            }));
-          }
-        } catch (error) {
-          console.error(`シフト取得エラー (${dateKey}):`, error);
-          shiftsMap[dateKey] = [];
+          // 日付がない場合は空配列を設定
+          weekDates.forEach(date => {
+            const dateKey = date.toISOString().split('T')[0];
+            if (!shiftsMap[dateKey]) {
+              shiftsMap[dateKey] = [];
+            }
+          });
+          
+          setShiftsByDate(shiftsMap);
         }
+      } catch (error) {
+        console.error('シフト取得エラー:', error);
+        // エラー時は空のマップを設定
+        const emptyMap: Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>> = {};
+        weekDates.forEach(date => {
+          const dateKey = date.toISOString().split('T')[0];
+          emptyMap[dateKey] = [];
+        });
+        setShiftsByDate(emptyMap);
       }
-      
-      setShiftsByDate(shiftsMap);
     };
     
     loadShifts();
-  }, [weekDates, reservations]);
+  }, [weekDates]);
   
-  // 各日付で出勤しているスタッフをフィルタリング
-  const getWorkingStaffForDate = (dateKey: string): Staff[] => {
+  // 各日付で出勤しているスタッフをフィルタリング（メモ化でパフォーマンス改善）
+  const getWorkingStaffForDate = useCallback((dateKey: string): Staff[] => {
     const shifts = shiftsByDate[dateKey] || [];
-    const workingStaffIds = shifts
-      .filter(shift => !shift.is_off && shift.start_time && shift.end_time)
-      .map(shift => shift.staff_id);
+    const workingStaffIds = new Set(
+      shifts
+        .filter(shift => !shift.is_off && shift.start_time && shift.end_time)
+        .map(shift => shift.staff_id)
+    );
     
-    return staff.filter(s => workingStaffIds.includes(s.staff_id));
-  };
+    return staff.filter(s => workingStaffIds.has(s.staff_id));
+  }, [shiftsByDate, staff]);
   
   // 時間スロット（9:00-20:00、30分間隔）
   const timeSlots: string[] = [];
@@ -279,54 +437,55 @@ function TimelineScheduleView({
     timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
   }
 
-  // 日付とスタッフをキーとして予約をグループ化
-  const reservationsByDateAndStaff = weekDates.reduce((acc, date) => {
-    const dateKey = date.toISOString().split('T')[0];
-    acc[dateKey] = {
-      // 店舗全体（スタッフ未指定）
-      all: reservations.filter(r => {
-        // reservation_dateをJSTとして解釈
-        let dateStr = r.reservation_date;
-        if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
-          dateStr = dateStr.replace(' ', 'T') + '+09:00';
-        }
-        const reservationDate = new Date(dateStr);
-        const year = reservationDate.getFullYear();
-        const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
-        const day = String(reservationDate.getDate()).padStart(2, '0');
-        const reservationDateKey = `${year}-${month}-${day}`;
-        // スタッフが指定されていない予約のみ
-        return reservationDateKey === dateKey && (!r.staff_id || r.staff_id === null);
-      }),
-      // 各スタッフごと
-      byStaff: staff.reduce((staffAcc, s) => {
-        staffAcc[s.staff_id] = reservations.filter(r => {
-          let dateStr = r.reservation_date;
-          if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
-            dateStr = dateStr.replace(' ', 'T') + '+09:00';
-          }
-          const reservationDate = new Date(dateStr);
-          const year = reservationDate.getFullYear();
-          const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
-          const day = String(reservationDate.getDate()).padStart(2, '0');
-          const reservationDateKey = `${year}-${month}-${day}`;
-          // 該当スタッフの予約のみ
-          return reservationDateKey === dateKey && r.staff_id === s.staff_id;
-        });
-        return staffAcc;
-      }, {} as Record<number, Reservation[]>)
-    };
-    return acc;
-  }, {} as Record<string, { all: Reservation[]; byStaff: Record<number, Reservation[]> }>);
+  // 日付文字列を正規化する関数（メモ化用）
+  const normalizeDateStr = useCallback((dateStr: string): string => {
+    if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
+      return dateStr.replace(' ', 'T') + '+09:00';
+    }
+    return dateStr;
+  }, []);
 
-  // 時間を分に変換
-  const timeToMinutes = (time: string) => {
+  // 予約の日付キーを取得する関数（メモ化用）
+  const getReservationDateKey = useCallback((reservation: Reservation): string => {
+    const dateStr = normalizeDateStr(reservation.reservation_date);
+    const reservationDate = new Date(dateStr);
+    const year = reservationDate.getFullYear();
+    const month = String(reservationDate.getMonth() + 1).padStart(2, '0');
+    const day = String(reservationDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, [normalizeDateStr]);
+
+  // 日付とスタッフをキーとして予約をグループ化（メモ化でパフォーマンス改善）
+  const reservationsByDateAndStaff = useMemo(() => {
+    return weekDates.reduce((acc, date) => {
+      const dateKey = date.toISOString().split('T')[0];
+      acc[dateKey] = {
+        // 店舗全体（スタッフ未指定）
+        all: reservations.filter(r => {
+          const reservationDateKey = getReservationDateKey(r);
+          return reservationDateKey === dateKey && (!r.staff_id || r.staff_id === null);
+        }),
+        // 各スタッフごと
+        byStaff: staff.reduce((staffAcc, s) => {
+          staffAcc[s.staff_id] = reservations.filter(r => {
+            const reservationDateKey = getReservationDateKey(r);
+            return reservationDateKey === dateKey && r.staff_id === s.staff_id;
+          });
+          return staffAcc;
+        }, {} as Record<number, Reservation[]>)
+      };
+      return acc;
+    }, {} as Record<string, { all: Reservation[]; byStaff: Record<number, Reservation[]> }>);
+  }, [weekDates, reservations, staff, getReservationDateKey]);
+
+  // 時間を分に変換（メモ化でパフォーマンス改善）
+  const timeToMinutes = useCallback((time: string) => {
     const [hour, minute] = time.split(':').map(Number);
     return hour * 60 + minute;
-  };
+  }, []);
 
-  // 予約の開始時間と終了時間を取得
-  const getReservationTimeRange = (reservation: Reservation) => {
+  // 予約の開始時間と終了時間を取得（メモ化でパフォーマンス改善）
+  const getReservationTimeRange = useCallback((reservation: Reservation) => {
     // reservation_dateをJSTとして解釈
     let dateStr = reservation.reservation_date;
     // タイムゾーン情報がない場合は+09:00を付与
@@ -339,10 +498,10 @@ function TimelineScheduleView({
     const duration = reservation.total_duration || reservation.menu_duration || 60;
     const endMinutes = startMinutes + duration;
     return { startMinutes, endMinutes, start, duration };
-  };
+  }, []);
 
-  // 同じ時間帯の予約をグループ化して列を割り当てる
-  const assignColumnsToReservations = (reservations: Reservation[]) => {
+  // 同じ時間帯の予約をグループ化して列を割り当てる（メモ化でパフォーマンス改善）
+  const assignColumnsToReservations = useCallback((reservations: Reservation[]) => {
     if (reservations.length === 0) return [];
     
     // 予約を開始時間でソート
@@ -384,10 +543,10 @@ function TimelineScheduleView({
     }
     
     return assigned;
-  };
+  }, [getReservationTimeRange]);
 
-  // 予約の位置と高さを計算
-  const getReservationStyle = (reservation: Reservation, column: number, totalColumns: number) => {
+  // 予約の位置と高さを計算（メモ化でパフォーマンス改善）
+  const getReservationStyle = useCallback((reservation: Reservation, column: number, totalColumns: number) => {
     const { startMinutes, duration } = getReservationTimeRange(reservation);
     const slotHeight = 40; // 各時間スロットの高さ（px）
     const minutesPerSlot = 30;
@@ -406,7 +565,7 @@ function TimelineScheduleView({
       left: `${left}%`,
       width: `${columnWidth}%`
     };
-  };
+  }, []);
 
   const formatDate = (date: Date) => {
     const month = date.getMonth() + 1;
@@ -492,91 +651,25 @@ function TimelineScheduleView({
             // 店舗全体の予約を列に割り当て
             const storeReservationsWithColumns = assignColumnsToReservations(dayData.all);
             
-            // 予約ブロックをレンダリングする関数
+            // 予約ブロックをレンダリングする関数（最適化版）
             const renderReservationBlock = (reservation: Reservation, column: number = 0, totalColumns: number = 1, isDraggable: boolean = false) => {
-              const style = getReservationStyle(reservation, column, totalColumns);
-              const isCancelled = reservation.status === 'cancelled';
               const isDragging = draggedReservation?.reservation_id === reservation.reservation_id;
               
               return (
-                <div
+                <ReservationBlock
                   key={reservation.reservation_id}
-                  draggable={isDraggable && !isCancelled}
-                  onDragStart={(e) => isDraggable && !isCancelled && handleDragStart(e, reservation)}
+                  reservation={reservation}
+                  column={column}
+                  totalColumns={totalColumns}
+                  isDraggable={isDraggable}
+                  isDragging={isDragging}
+                  onEdit={onEdit}
+                  onCancel={onCancel}
+                  onDragStart={handleDragStart}
                   onDragEnd={handleDragEnd}
-                  onClick={() => !isCancelled && onEdit(reservation)}
-                  className={`absolute rounded p-1 shadow-sm border-l-2 ${
-                    isDragging
-                      ? 'opacity-50'
-                      : isCancelled
-                      ? 'bg-gray-100 border-gray-300 opacity-60'
-                      : reservation.status === 'completed'
-                      ? 'bg-green-50 border-green-400 cursor-move hover:bg-green-100'
-                      : 'bg-pink-50 border-pink-400 cursor-move hover:bg-pink-100'
-                  } transition-colors ${isDraggable && !isCancelled ? 'hover:shadow-md' : ''}`}
-                  style={{ ...style, marginLeft: column > 0 ? '2px' : '2px', marginRight: '2px' }}
-                  title={isDraggable && !isCancelled ? 'ドラッグしてスタッフに割り当て' : ''}
-                >
-                  <div className="text-xs font-semibold text-gray-900 mb-0.5 leading-tight">
-                    {formatTime(reservation.reservation_date)}
-                  </div>
-                  <div className="text-xs text-gray-700 font-medium mb-0.5 leading-tight truncate">
-                    {reservation.customer_name}
-                  </div>
-                  <div className="text-xs text-gray-600 leading-tight">
-                    {reservation.menus && reservation.menus.length > 1 ? (
-                      <div>
-                        {reservation.menus.map((menu, idx) => (
-                          <div key={menu.menu_id} className="truncate">
-                            {idx > 0 && ' + '}
-                            {menu.menu_name}
-                          </div>
-                        ))}
-                        <div className="mt-0.5 font-semibold text-xs">
-                          ¥{(reservation.total_price || reservation.price || 0).toLocaleString()}
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="truncate">{reservation.menu_name}</div>
-                        <div className="mt-0.5 text-xs">
-                          ¥{(reservation.total_price || reservation.menu_price || reservation.price || 0).toLocaleString()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {reservation.staff_name && (
-                    <div className="text-xs text-gray-500 mt-0.5 leading-tight truncate">
-                      {reservation.staff_name}
-                    </div>
-                  )}
-                  <div className="flex items-center space-x-0.5 mt-1">
-                    {!isCancelled && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit(reservation);
-                          }}
-                          className="p-0.5 text-gray-400 hover:text-gray-600"
-                          title="編集"
-                        >
-                          <PencilIcon className="h-2.5 w-2.5" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onCancel(reservation.reservation_id);
-                          }}
-                          className="p-0.5 text-gray-400 hover:text-red-600"
-                          title="キャンセル"
-                        >
-                          <XMarkIcon className="h-2.5 w-2.5" />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
+                  getReservationStyle={getReservationStyle}
+                  formatTime={formatTime}
+                />
               );
             };
             
