@@ -91,8 +91,8 @@ function CustomerLoginContent() {
 
       // 店舗が1つの場合は直接ログイン
       if (tenantList.length === 1) {
-        console.log('店舗が1つのため直接ログイン:', tenantList[0].tenant_code);
-        await performLogin(tenantList[0].tenant_code, tenantList[0].needs_password);
+        console.log('店舗が1つのため直接ログイン:', tenantList[0].tenant_code, 'isAdmin:', tenantList[0].has_admin);
+        await performLogin(tenantList[0].tenant_code, tenantList[0].needs_password, tenantList[0].has_admin);
       } else {
         // 複数の店舗がある場合は選択画面を表示
         console.log('複数店舗のため選択画面を表示:', tenantList.length);
@@ -108,7 +108,7 @@ function CustomerLoginContent() {
     }
   };
 
-  const performLogin = async (selectedTenantCode: string, needsPassword?: boolean) => {
+  const performLogin = async (selectedTenantCode: string, needsPassword?: boolean, hasAdmin?: boolean) => {
     setLoading(true);
     setError('');
 
@@ -144,7 +144,15 @@ function CustomerLoginContent() {
           if (redirect) {
             router.push(`${redirect}?tenant=${selectedTenantCode}`);
           } else {
-            router.push(`/mypage?tenant=${selectedTenantCode}`);
+            // 管理者の場合は管理画面に、顧客の場合はマイページにリダイレクト
+            // result.isAdminまたはhasAdminフラグで判定
+            const isAdmin = result.isAdmin || hasAdmin;
+            console.log('ログイン成功、リダイレクト判定:', { isAdmin, resultIsAdmin: result.isAdmin, hasAdmin });
+            if (isAdmin) {
+              router.push(`/admin/dashboard?tenant=${selectedTenantCode}`);
+            } else {
+              router.push(`/mypage?tenant=${selectedTenantCode}`);
+            }
           }
         }, 500);
       } else {
@@ -163,7 +171,7 @@ function CustomerLoginContent() {
   };
 
   const handleTenantSelect = (tenant: Tenant) => {
-    performLogin(tenant.tenant_code, tenant.needs_password);
+    performLogin(tenant.tenant_code, tenant.needs_password, tenant.has_admin);
   };
 
   return (
