@@ -92,13 +92,43 @@ export async function PUT(
     }
 
     // 予約日時を計算（合計時間を使用）
-    // reservation_dateはJST（+09:00）形式で送られてくるので、タイムゾーン情報を除去してJST時刻として保存
-    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, ''); // +09:00を除去
-    const reservationDateTimeLocal = new Date(dateStr);
-    const reservationEndTime = new Date(reservationDateTimeLocal.getTime() + totalDuration * 60000);
+    // reservation_dateはJST（+09:00）形式で送られてくるので、JST時刻として直接処理
+    // タイムゾーン情報を除去してJST時刻として扱う
+    const dateStr = reservation_date.replace(/[+-]\d{2}:\d{2}$/, '').replace('T', ' '); // +09:00を除去し、Tをスペースに変換
+    // 日付と時刻を直接抽出（JST時刻として扱う）
+    const dateTimeMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+    let reservationYear: number, reservationMonth: number, reservationDay: number;
+    let reservationHour: number, reservationMinute: number, reservationSecond: number;
+    
+    if (dateTimeMatch) {
+      const [, datePart, hour, minute, second] = dateTimeMatch;
+      const [year, month, day] = datePart.split('-').map(Number);
+      reservationYear = year;
+      reservationMonth = month;
+      reservationDay = day;
+      reservationHour = parseInt(hour, 10);
+      reservationMinute = parseInt(minute, 10);
+      reservationSecond = parseInt(second, 10);
+    } else {
+      // フォールバック: Dateオブジェクトから取得（ただし、JST時刻として扱う）
+      const tempDate = new Date(reservation_date);
+      // JST時刻として扱うため、UTC時刻に9時間を加算
+      reservationYear = tempDate.getUTCFullYear();
+      reservationMonth = tempDate.getUTCMonth() + 1;
+      reservationDay = tempDate.getUTCDate();
+      reservationHour = tempDate.getUTCHours();
+      reservationMinute = tempDate.getUTCMinutes();
+      reservationSecond = tempDate.getUTCSeconds();
+    }
+    
+    // 予約終了時間を計算（JST時刻として）
+    const reservationEndMinute = reservationMinute + totalDuration;
+    const reservationEndHour = reservationHour + Math.floor(reservationEndMinute / 60);
+    const reservationEndMinuteFinal = reservationEndMinute % 60;
     
     // 選択された日付の曜日を取得（0=日曜日、1=月曜日、...、6=土曜日）
-    const dayOfWeek = reservationDateTimeLocal.getDay();
+    const tempDateForDayOfWeek = new Date(reservationYear, reservationMonth - 1, reservationDay);
+    const dayOfWeek = tempDateForDayOfWeek.getDay();
     
     // その曜日の営業時間を取得（デフォルト: 10:00-19:00）
     const dayBusinessHours = businessHours[dayOfWeek] || businessHours['default'] || { open: '10:00', close: '19:00' };
@@ -108,10 +138,8 @@ export async function PUT(
     const [closeHour, closeMinute] = closeTime.split(':').map(Number);
     const closeTimeInMinutes = closeHour * 60 + closeMinute;
     
-    // 予約終了時間を分単位に変換
-    const reservationEndHour = reservationEndTime.getHours();
-    const reservationEndMinute = reservationEndTime.getMinutes();
-    const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinute;
+    // 予約終了時間を分単位に変換（JST時刻として）
+    const reservationEndTimeInMinutes = reservationEndHour * 60 + reservationEndMinuteFinal;
     
     // 閉店時間を超える場合はエラー
     if (reservationEndTimeInMinutes > closeTimeInMinutes) {
@@ -146,7 +174,7 @@ export async function PUT(
            AND r.status = 'confirmed'
            AND DATE(r.reservation_date) = DATE($3)
            AND r.reservation_id != $4`,
-          [tenantId, staff_id, dateStr ? dateStr.replace('T', ' ') : reservation_date.replace(/[+-]\d{2}:\d{2}$/, '').replace('T', ' '), reservationId]
+          [tenantId, staff_id, dateStr, reservationId]
         );
       } catch (error: any) {
         // reservation_menusテーブルが存在しない場合はフォールバック
@@ -160,7 +188,7 @@ export async function PUT(
              AND r.status = 'confirmed'
              AND DATE(r.reservation_date) = DATE($3)
              AND r.reservation_id != $4`,
-            [tenantId, staff_id, dateStr ? dateStr.replace('T', ' ') : reservation_date.replace(/[+-]\d{2}:\d{2}$/, '').replace('T', ' '), reservationId]
+            [tenantId, staff_id, dateStr, reservationId]
           );
         } else {
           throw error;
@@ -168,19 +196,9 @@ export async function PUT(
       }
 
       // 新しい予約の時間を分単位に変換（JSTとして扱う）
-      // dateStrから直接時間を抽出
-      let newReservationHour: number;
-      let newReservationMinute: number;
-      
-      const timeMatchForNew = dateStr.match(/T(\d{2}):(\d{2})/);
-      if (timeMatchForNew) {
-        newReservationHour = parseInt(timeMatchForNew[1], 10);
-        newReservationMinute = parseInt(timeMatchForNew[2], 10);
-      } else {
-        // フォールバック: Dateオブジェクトから取得（ローカル時間として）
-        newReservationHour = reservationDateTimeLocal.getHours();
-        newReservationMinute = reservationDateTimeLocal.getMinutes();
-      }
+      // 既に抽出したJST時刻を使用
+      const newReservationHour = reservationHour;
+      const newReservationMinute = reservationMinute;
       
       const newReservationStartTimeInMinutes = newReservationHour * 60 + newReservationMinute;
       const newReservationEndTimeInMinutes = newReservationStartTimeInMinutes + totalDuration;
@@ -267,7 +285,7 @@ export async function PUT(
              AND r.status = 'confirmed'
              AND DATE(r.reservation_date) = DATE($2)
              AND r.reservation_id != $3`,
-            [tenantId, dateStr ? dateStr.replace('T', ' ') : reservation_date.replace(/[+-]\d{2}:\d{2}$/, '').replace('T', ' '), reservationId]
+            [tenantId, dateStr, reservationId]
           );
         } else {
           throw error;
@@ -275,19 +293,9 @@ export async function PUT(
       }
 
       // 新しい予約の時間を分単位に変換（JSTとして扱う）
-      // dateStrから直接時間を抽出
-      let newReservationHour: number;
-      let newReservationMinute: number;
-      
-      const timeMatch = dateStr.match(/T(\d{2}):(\d{2})/);
-      if (timeMatch) {
-        newReservationHour = parseInt(timeMatch[1], 10);
-        newReservationMinute = parseInt(timeMatch[2], 10);
-      } else {
-        // フォールバック: Dateオブジェクトから取得（ローカル時間として）
-        newReservationHour = reservationDateTimeLocal.getHours();
-        newReservationMinute = reservationDateTimeLocal.getMinutes();
-      }
+      // 既に抽出したJST時刻を使用
+      const newReservationHour = reservationHour;
+      const newReservationMinute = reservationMinute;
       
       const newReservationStartTimeInMinutes = newReservationHour * 60 + newReservationMinute;
       const newReservationEndTimeInMinutes = newReservationStartTimeInMinutes + totalDuration;
@@ -358,7 +366,8 @@ export async function PUT(
       const updateStatus = status !== undefined ? status : 'confirmed';
       
       // JST時刻をそのまま保存（YYYY-MM-DD HH:mm:ss形式）
-      const dateStrForDb = dateStr.replace('T', ' '); // Tをスペースに変換
+      // 既に抽出したJST時刻から文字列を作成
+      const dateStrForDb = `${reservationYear}-${String(reservationMonth).padStart(2, '0')}-${String(reservationDay).padStart(2, '0')} ${String(reservationHour).padStart(2, '0')}:${String(reservationMinute).padStart(2, '0')}:${String(reservationSecond).padStart(2, '0')}`;
       const result = await client.query(
         `UPDATE reservations 
          SET 

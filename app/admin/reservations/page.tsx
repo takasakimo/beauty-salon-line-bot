@@ -1112,13 +1112,37 @@ export default function ReservationManagement() {
       markReservationAsViewed(reservation.reservation_id);
       
       setEditingReservation(reservation);
-      // reservation_dateをJSTとして解釈
+      // reservation_dateをJSTとして解釈（タイムゾーン変換を行わない）
       let dateStr = reservation.reservation_date;
-      // タイムゾーン情報がない場合は+09:00を付与
-      if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
-        dateStr = dateStr.replace(' ', 'T') + '+09:00';
+      
+      // 日付と時刻を直接抽出（JST時刻として扱う）
+      let reservationDate = '';
+      let reservationTime = '';
+      
+      if (typeof dateStr === 'string') {
+        // YYYY-MM-DDTHH:mm:ss+09:00形式またはYYYY-MM-DD HH:mm:ss形式から日付と時刻を抽出
+        const dateTimeMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2}):/);
+        if (dateTimeMatch) {
+          reservationDate = dateTimeMatch[1]; // YYYY-MM-DD
+          reservationTime = `${dateTimeMatch[2]}:${dateTimeMatch[3]}`; // HH:mm
+        } else {
+          // フォールバック: Dateオブジェクトから取得（ただし、タイムゾーン変換を行わない）
+          // タイムゾーン情報がない場合は+09:00を付与してからDateオブジェクトを作成
+          if (!dateStr.includes('+') && !dateStr.includes('Z')) {
+            dateStr = dateStr.replace(' ', 'T') + '+09:00';
+          }
+          const dateTime = new Date(dateStr);
+          // JST時刻として扱うため、UTC時刻に9時間を加算してから日付と時刻を取得
+          const jstYear = dateTime.getUTCFullYear();
+          const jstMonth = String(dateTime.getUTCMonth() + 1).padStart(2, '0');
+          const jstDay = String(dateTime.getUTCDate()).padStart(2, '0');
+          const jstHour = String(dateTime.getUTCHours()).padStart(2, '0');
+          const jstMinute = String(dateTime.getUTCMinutes()).padStart(2, '0');
+          reservationDate = `${jstYear}-${jstMonth}-${jstDay}`;
+          reservationTime = `${jstHour}:${jstMinute}`;
+        }
       }
-      const dateTime = new Date(dateStr);
+      
       // 複数メニューの場合はmenus配列から取得、そうでなければmenu_idから
       const menuIds = reservation.menus && reservation.menus.length > 0
         ? reservation.menus.map(m => m.menu_id)
@@ -1130,8 +1154,8 @@ export default function ReservationManagement() {
         customer_phone: reservation.customer_phone || '',
         selectedMenuIds: menuIds,
         staff_id: reservation.staff_id ? reservation.staff_id.toString() : '',
-        reservation_date: dateTime.toISOString().split('T')[0],
-        reservation_time: dateTime.toTimeString().slice(0, 5),
+        reservation_date: reservationDate,
+        reservation_time: reservationTime,
         status: reservation.status || 'confirmed',
         notes: reservation.notes || ''
       });
