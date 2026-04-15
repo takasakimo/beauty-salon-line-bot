@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { query } from '@/lib/db';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 export interface SessionData {
   adminId?: number;
@@ -125,9 +126,41 @@ export async function cleanupExpiredSessions(): Promise<void> {
   }
 }
 
-// パスワードハッシュの生成
-export function hashPassword(password: string): string {
+// パスワードハッシュの生成（bcryptjs使用）
+const BCRYPT_SALT_ROUNDS = 10;
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+}
+
+// レガシーSHA256ハッシュ（既存パスワードの検証用、新規作成には使用しない）
+function legacyHashPassword(password: string): string {
   return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+// bcryptハッシュかどうかを判定
+function isBcryptHash(hash: string): boolean {
+  return hash.startsWith('$2a$') || hash.startsWith('$2b$') || hash.startsWith('$2y$');
+}
+
+// パスワード検証（bcryptとレガシーSHA256の両方に対応）
+export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  if (isBcryptHash(storedHash)) {
+    return bcrypt.compare(password, storedHash);
+  }
+  // レガシーSHA256ハッシュとの比較
+  return storedHash === legacyHashPassword(password);
+}
+
+// ログイン成功時にレガシーハッシュをbcryptに移行
+async function migratePasswordIfNeeded(password: string, storedHash: string, tableName: string, idColumn: string, id: number): Promise<void> {
+  if (!isBcryptHash(storedHash)) {
+    const newHash = await hashPassword(password);
+    await query(
+      `UPDATE ${tableName} SET password_hash = $1 WHERE ${idColumn} = $2`,
+      [newHash, id]
+    );
+  }
 }
 
 // メールアドレスまたはユーザー名で管理者を検索して認証（店舗コード不要）
@@ -136,11 +169,7 @@ export async function authenticateAdminByEmail(
   password: string
 ): Promise<{ success: boolean; sessionToken?: string; admin?: any; tenant?: any; error?: string }> {
   try {
-    console.log('メールアドレス/ユーザー名で管理者認証開始:', { emailOrUsername });
-    
-    // パスワードハッシュの生成
-    const passwordHash = hashPassword(password);
-    console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
+    // パスワードハッシュの生成は不要（verifyPasswordで検証）
     
     // メールアドレスまたはユーザー名で管理者を検索（テナント情報も同時に取得）
     // 大文字小文字を区別せず、トリム処理も行う
@@ -170,7 +199,7 @@ export async function authenticateAdminByEmail(
     );
 
     if (adminResult.rows.length === 0) {
-      console.error('管理者が見つかりません:', { emailOrUsername });
+      // 管理者が見つからない
       return { success: false, error: 'メールアドレスまたはパスワードが正しくありません' };
     }
 
@@ -193,15 +222,6 @@ export async function authenticateAdminByEmail(
       tenant_code: row.tenant_code
     };
 
-    console.log('管理者情報取得:', { 
-      adminId: admin.admin_id, 
-      username: admin.username,
-      email: admin.email,
-      tenantId: tenant.tenant_id,
-      tenantCode: tenant.tenant_code,
-      isActive: admin.is_active 
-    });
-
     if (!admin.is_active) {
       return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
     }
@@ -210,18 +230,16 @@ export async function authenticateAdminByEmail(
       return { success: false, error: 'ログイン失敗：この店舗は無効です' };
     }
 
-    // パスワードの検証
+    // パスワードの検証（bcryptとレガシーSHA256の両方に対応）
     const storedHash = admin.password_hash || '';
-    const passwordMatch = storedHash === passwordHash;
-    console.log('パスワード検証:', { 
-      storedHash: storedHash.substring(0, 20) + '...', 
-      providedHash: passwordHash.substring(0, 20) + '...',
-      match: passwordMatch 
-    });
+    const passwordMatch = await verifyPassword(password, storedHash);
 
     if (!passwordMatch) {
       return { success: false, error: 'メールアドレスまたはパスワードが正しくありません' };
     }
+
+    // レガシーハッシュの場合はbcryptに移行
+    await migratePasswordIfNeeded(password, storedHash, 'tenant_admins', 'admin_id', admin.admin_id);
 
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
@@ -256,8 +274,7 @@ export async function authenticateAdminByEmail(
     };
   } catch (error: any) {
     console.error('認証エラー:', error);
-    const errorMessage = error?.message || String(error);
-    return { success: false, error: `サーバーエラー: ${errorMessage}` };
+    return { success: false, error: 'サーバーエラー' };
   }
 }
 
@@ -270,7 +287,7 @@ export async function authenticateAdmin(
   try {
     const actualTenantCode = tenantCode || 'beauty-salon-001';
     
-    console.log('管理者認証開始:', { username, tenantCode: actualTenantCode });
+    // 管理者認証（店舗コード指定版）
     
     // テナント情報を取得
     const tenantResult = await query(
@@ -279,53 +296,43 @@ export async function authenticateAdmin(
     );
 
     if (tenantResult.rows.length === 0) {
-      console.error('テナントが見つかりません:', actualTenantCode);
       return { success: false, error: 'ログイン失敗：テナントが見つかりません' };
     }
 
     const tenant = tenantResult.rows[0];
-    console.log('テナント情報取得:', { tenantId: tenant.tenant_id, salonName: tenant.salon_name });
-    
+
     if (!tenant.is_active) {
       return { success: false, error: 'このテナントは無効です' };
     }
 
-    // パスワードハッシュの生成
-    const passwordHash = hashPassword(password);
-    console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
-    
     // 管理者認証（まずユーザー名とテナントIDで検索）
     const adminCheckResult = await query(
       `SELECT admin_id, full_name, role, password_hash, is_active
-       FROM tenant_admins 
+       FROM tenant_admins
        WHERE tenant_id = $1 AND username = $2`,
       [tenant.tenant_id, username]
     );
 
     if (adminCheckResult.rows.length === 0) {
-      console.error('管理者が見つかりません:', { tenantId: tenant.tenant_id, username });
       return { success: false, error: 'ログイン失敗：ユーザー名またはテナントが正しくありません' };
     }
 
     const admin = adminCheckResult.rows[0];
-    console.log('管理者情報取得:', { adminId: admin.admin_id, username, isActive: admin.is_active });
 
     if (!admin.is_active) {
       return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
     }
 
-    // パスワードの検証
+    // パスワードの検証（bcryptとレガシーSHA256の両方に対応）
     const storedHash = admin.password_hash || '';
-    const passwordMatch = storedHash === passwordHash;
-    console.log('パスワード検証:', { 
-      storedHash: storedHash.substring(0, 20) + '...', 
-      providedHash: passwordHash.substring(0, 20) + '...',
-      match: passwordMatch 
-    });
+    const passwordMatch = await verifyPassword(password, storedHash);
 
     if (!passwordMatch) {
       return { success: false, error: 'ログイン失敗：パスワードが正しくありません' };
     }
+
+    // レガシーハッシュの場合はbcryptに移行
+    await migratePasswordIfNeeded(password, storedHash, 'tenant_admins', 'admin_id', admin.admin_id);
 
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
@@ -360,8 +367,7 @@ export async function authenticateAdmin(
     };
   } catch (error: any) {
     console.error('認証エラー:', error);
-    const errorMessage = error?.message || String(error);
-    return { success: false, error: `サーバーエラー: ${errorMessage}` };
+    return { success: false, error: 'サーバーエラー' };
   }
 }
 
@@ -371,37 +377,34 @@ export async function authenticateSuperAdmin(
   password: string
 ): Promise<{ success: boolean; sessionToken?: string; superAdmin?: any; error?: string }> {
   try {
-    console.log('スーパー管理者認証開始:', { username });
-    
-    // パスワードハッシュの生成
-    const passwordHash = hashPassword(password);
-    
     // スーパー管理者認証
     const adminResult = await query(
       `SELECT super_admin_id, full_name, email, password_hash, is_active
-       FROM super_admins 
+       FROM super_admins
        WHERE username = $1`,
       [username]
     );
 
     if (adminResult.rows.length === 0) {
-      console.error('スーパー管理者が見つかりません:', username);
       return { success: false, error: 'ログイン失敗：ユーザー名またはパスワードが正しくありません' };
     }
 
     const admin = adminResult.rows[0];
-    
+
     if (!admin.is_active) {
       return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
     }
 
-    // パスワードの検証
+    // パスワードの検証（bcryptとレガシーSHA256の両方に対応）
     const storedHash = admin.password_hash || '';
-    const passwordMatch = storedHash === passwordHash;
+    const passwordMatch = await verifyPassword(password, storedHash);
 
     if (!passwordMatch) {
       return { success: false, error: 'ログイン失敗：パスワードが正しくありません' };
     }
+
+    // レガシーハッシュの場合はbcryptに移行
+    await migratePasswordIfNeeded(password, storedHash, 'super_admins', 'super_admin_id', admin.super_admin_id);
 
     // セッショントークンの生成
     const sessionToken = generateSessionToken();
@@ -431,42 +434,27 @@ export async function authenticateSuperAdmin(
       }
     };
   } catch (error: any) {
-    console.error('スーパー管理者認証エラー:', error);
-    const errorMessage = error?.message || String(error);
-    return { success: false, error: `サーバーエラー: ${errorMessage}` };
+    console.error('スーパー管理者認証エラー');
+    return { success: false, error: 'サーバーエラー' };
   }
 }
 
 // 認証ミドルウェア（管理者用）
 export async function getAuthFromRequest(request: NextRequest): Promise<SessionData | null> {
-  const sessionToken = request.cookies.get('session_token')?.value || 
+  const sessionToken = request.cookies.get('session_token')?.value ||
                       request.headers.get('x-session-token');
-  
-  console.log('セッション認証チェック:', {
-    hasCookie: !!request.cookies.get('session_token'),
-    hasHeader: !!request.headers.get('x-session-token'),
-    sessionToken: sessionToken ? sessionToken.substring(0, 10) + '...' : null
-  });
-  
+
   if (!sessionToken) {
-    console.log('セッショントークンが見つかりません');
     return null;
   }
 
   const session = await getSession(sessionToken);
-  console.log('セッション取得結果:', {
-    found: !!session,
-    hasAdminId: !!session?.adminId,
-    adminId: session?.adminId,
-    role: session?.role
-  });
-  
+
   // 管理者セッションかどうか確認（adminIdが存在する、またはroleが'super_admin'）
   if (session && (session.adminId || session.role === 'super_admin')) {
     return session;
   }
-  
-  console.log('管理者セッションが見つかりません');
+
   return null;
 }
 
@@ -496,27 +484,17 @@ export function getTenantIdFromRequest(request: NextRequest, session: SessionDat
   if (tenantIdParam) {
     const tenantId = parseInt(tenantIdParam);
     if (!isNaN(tenantId)) {
-      console.log('クエリパラメータからtenantIdを取得:', tenantId);
       return tenantId;
     }
   }
-  
+
   // スーパー管理者の場合、クエリパラメータのtenantIdを優先（既にチェック済み）
   if (session && session.role === 'super_admin') {
-    console.log('スーパー管理者のtenantId取得:', {
-      hasSession: !!session,
-      role: session.role,
-      tenantIdParam,
-      allParams: Object.fromEntries(request.nextUrl.searchParams.entries())
-    });
-    // クエリパラメータにtenantIdがない場合はnullを返す
     return null;
   }
-  
+
   // 通常の管理者の場合はセッションのtenantIdを使用
-  const sessionTenantId = session?.tenantId || null;
-  console.log('セッションからtenantIdを取得:', sessionTenantId);
-  return sessionTenantId;
+  return session?.tenantId || null;
 }
 
 // テナントIDを取得（非同期版、デフォルトテナントコードからも取得可能）
@@ -536,9 +514,7 @@ export async function getTenantIdFromRequestAsync(request: NextRequest, session:
       [tenantCode]
     );
     if (tenantResult.rows.length > 0) {
-      const defaultTenantId = tenantResult.rows[0].tenant_id;
-      console.log('デフォルトテナントコードからtenantIdを取得:', defaultTenantId);
-      return defaultTenantId;
+      return tenantResult.rows[0].tenant_id;
     }
   } catch (error) {
     console.error('テナントID取得エラー:', error);
@@ -572,79 +548,72 @@ export async function authenticateCustomer(
       return { success: false, error: 'このテナントは無効です' };
     }
 
-    // パスワードハッシュの生成
-    const passwordHash = hashPassword(password);
-    
-    // まず顧客テーブルで認証を試みる（パスワードが設定されている場合）
+    // まず顧客テーブルで認証を試みる（メールアドレスで検索）
     const customerResult = await query(
       `SELECT customer_id, real_name, email, phone_number, password_hash
-       FROM customers 
-       WHERE tenant_id = $1 AND email = $2 AND (password_hash = $3 OR password_hash IS NULL)`,
-      [tenant.tenant_id, email, passwordHash]
+       FROM customers
+       WHERE tenant_id = $1 AND email = $2`,
+      [tenant.tenant_id, email]
     );
 
     let customer: any = null;
     let isAdmin = false;
-    let needsPassword = false;
 
     if (customerResult.rows.length > 0) {
       const row = customerResult.rows[0];
       // パスワードが設定されていない場合は、入力されたパスワードを設定してログインを許可
       if (!row.password_hash) {
-        // パスワードハッシュを設定
-        const newPasswordHash = hashPassword(password);
+        const newPasswordHash = await hashPassword(password);
         await query(
           'UPDATE customers SET password_hash = $1 WHERE customer_id = $2',
           [newPasswordHash, row.customer_id]
         );
-        // パスワードを設定したので、そのまま認証を続行
         customer = {
           customer_id: row.customer_id,
           real_name: row.real_name,
           email: row.email,
           phone_number: row.phone_number
         };
-      }
-      // パスワードが一致する場合のみ顧客として認証
-      if (row.password_hash === passwordHash) {
-        customer = {
-          customer_id: row.customer_id,
-          real_name: row.real_name,
-          email: row.email,
-          phone_number: row.phone_number
-        };
+      } else {
+        // パスワードが一致する場合のみ顧客として認証
+        const passwordMatch = await verifyPassword(password, row.password_hash);
+        if (passwordMatch) {
+          customer = {
+            customer_id: row.customer_id,
+            real_name: row.real_name,
+            email: row.email,
+            phone_number: row.phone_number
+          };
+          // レガシーハッシュの場合はbcryptに移行
+          await migratePasswordIfNeeded(password, row.password_hash, 'customers', 'customer_id', row.customer_id);
+        }
       }
     }
-    
+
     if (!customer) {
       // 顧客として見つからない場合、管理者テーブルをチェック
-      // 管理者テーブルをチェック
-      // メールアドレスまたはユーザー名で検索
       const adminResult = await query(
         `SELECT admin_id, full_name, username, email, password_hash, is_active
-         FROM tenant_admins 
-         WHERE tenant_id = $1 
-         AND (email = $2 OR username = $2)
-         AND (password_hash = $3 OR password_hash IS NULL)`,
-        [tenant.tenant_id, email, passwordHash]
+         FROM tenant_admins
+         WHERE tenant_id = $1
+         AND (email = $2 OR username = $2)`,
+        [tenant.tenant_id, email]
       );
 
       if (adminResult.rows.length > 0) {
         const admin = adminResult.rows[0];
-        
+
         if (!admin.is_active) {
           return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
         }
 
         // パスワードが設定されていない場合は、入力されたパスワードを設定してログインを許可
         if (!admin.password_hash) {
-          // パスワードハッシュを設定
-          const newPasswordHash = hashPassword(password);
+          const newPasswordHash = await hashPassword(password);
           await query(
             'UPDATE tenant_admins SET password_hash = $1 WHERE admin_id = $2',
             [newPasswordHash, admin.admin_id]
           );
-          // パスワードを設定したので、そのまま認証を続行
           isAdmin = true;
           customer = {
             customer_id: null,
@@ -653,19 +622,21 @@ export async function authenticateCustomer(
             phone_number: null,
             admin_id: admin.admin_id
           };
-        }
-
-        // パスワードが一致する場合のみ管理者として認証
-        if (admin.password_hash === passwordHash) {
-          // 管理者情報を顧客情報として扱う
-          isAdmin = true;
-          customer = {
-            customer_id: null, // 管理者は顧客IDを持たない
-            real_name: admin.full_name || admin.username,
-            email: admin.email || admin.username,
-            phone_number: null,
-            admin_id: admin.admin_id // 管理者IDを保持
-          };
+        } else {
+          // パスワードが一致する場合のみ管理者として認証
+          const passwordMatch = await verifyPassword(password, admin.password_hash);
+          if (passwordMatch) {
+            isAdmin = true;
+            customer = {
+              customer_id: null,
+              real_name: admin.full_name || admin.username,
+              email: admin.email || admin.username,
+              phone_number: null,
+              admin_id: admin.admin_id
+            };
+            // レガシーハッシュの場合はbcryptに移行
+            await migratePasswordIfNeeded(password, admin.password_hash, 'tenant_admins', 'admin_id', admin.admin_id);
+          }
         }
       }
     }

@@ -72,7 +72,7 @@ export async function PUT(
           { status: 400 }
         );
       }
-      const passwordHash = hashPassword(password);
+      const passwordHash = await hashPassword(password);
       updateQuery = `
         UPDATE tenant_admins 
         SET username = $1, password_hash = $2, full_name = $3, email = $4, is_active = $5

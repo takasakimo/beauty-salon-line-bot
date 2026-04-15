@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getAuthFromRequest, getTenantIdFromRequest, hashPassword } from '@/lib/auth';
+import { getAuthFromRequest, getTenantIdFromRequest, hashPassword, verifyPassword } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,24 +53,15 @@ export async function POST(request: NextRequest) {
     let adminId: number | null = null;
     
     if (session.role === 'super_admin') {
-      console.log('スーパー管理者のパスワード変更:', { tenantId, sessionRole: session.role });
-      
-      // スーパー管理者の場合、tenantIdから管理者IDを取得（is_activeの条件を外して検索）
-      // まず、is_active = trueで検索
+      // スーパー管理者の場合、tenantIdから管理者IDを取得
       let adminListResult = await query(
         `SELECT admin_id, is_active
-         FROM tenant_admins 
+         FROM tenant_admins
          WHERE tenant_id = $1
          ORDER BY is_active DESC, admin_id ASC
          LIMIT 1`,
         [tenantId]
       );
-      
-      console.log('管理者アカウント検索結果:', { 
-        tenantId, 
-        count: adminListResult.rows.length,
-        admins: adminListResult.rows.map(r => ({ admin_id: r.admin_id, is_active: r.is_active }))
-      });
       
       if (adminListResult.rows.length === 0) {
         return NextResponse.json(
@@ -80,10 +71,8 @@ export async function POST(request: NextRequest) {
       }
       
       adminId = adminListResult.rows[0].admin_id;
-      console.log('使用する管理者ID:', adminId);
     } else if (session.adminId) {
       adminId = session.adminId;
-      console.log('通常の管理者のパスワード変更:', { adminId, tenantId });
     } else {
       return NextResponse.json(
         { success: false, error: '管理者情報が見つかりません' },
@@ -108,45 +97,27 @@ export async function POST(request: NextRequest) {
 
     const admin = adminResult.rows[0];
     
-    console.log('パスワード変更処理:', {
-      adminId,
-      tenantId,
-      hasPasswordHash: !!admin.password_hash,
-      passwordHashLength: admin.password_hash?.length,
-      currentPasswordProvided: !!currentPassword,
-      currentPasswordLength: currentPassword?.length
-    });
-    
     // パスワードが設定されている場合は、現在のパスワードを確認
     // パスワードが設定されていない場合は、現在のパスワード欄が空白でも変更可能
     if (admin.password_hash) {
       if (!currentPassword) {
-        console.log('現在のパスワードが入力されていません');
         return NextResponse.json(
           { success: false, error: '現在のパスワードを入力してください' },
           { status: 400 }
         );
       }
-      const currentPasswordHash = hashPassword(currentPassword);
-      console.log('パスワード検証:', {
-        providedHash: currentPasswordHash.substring(0, 20) + '...',
-        storedHash: admin.password_hash.substring(0, 20) + '...',
-        match: admin.password_hash === currentPasswordHash
-      });
-      
-      if (admin.password_hash !== currentPasswordHash) {
-        console.log('現在のパスワードが一致しません');
+      const passwordMatch = await verifyPassword(currentPassword, admin.password_hash);
+
+      if (!passwordMatch) {
         return NextResponse.json(
           { success: false, error: '現在のパスワードが正しくありません。パスワードが設定されていない場合は空白のままにしてください。' },
           { status: 401 }
         );
       }
-    } else {
-      console.log('パスワードが設定されていないため、現在のパスワードチェックをスキップ');
     }
 
-    // 新しいパスワードを設定
-    const newPasswordHash = hashPassword(newPassword);
+    // 新しいパスワードを設定（bcryptで保存）
+    const newPasswordHash = await hashPassword(newPassword);
     await query(
       `UPDATE tenant_admins 
        SET password_hash = $1, updated_at = CURRENT_TIMESTAMP 

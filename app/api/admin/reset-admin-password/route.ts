@@ -16,9 +16,15 @@ export async function POST(request: NextRequest) {
       secretKey 
     } = body;
 
-    // シークレットキーの検証（環境変数から取得）
-    const expectedSecretKey = process.env.ADMIN_RESET_SECRET_KEY || 'CHANGE_THIS_SECRET_KEY_IN_PRODUCTION';
-    
+    // シークレットキーの検証（環境変数から取得、未設定の場合はエンドポイントを無効化）
+    const expectedSecretKey = process.env.ADMIN_RESET_SECRET_KEY;
+    if (!expectedSecretKey) {
+      return NextResponse.json(
+        { error: 'This endpoint is disabled. Set ADMIN_RESET_SECRET_KEY environment variable.' },
+        { status: 403 }
+      );
+    }
+
     if (secretKey !== expectedSecretKey) {
       return NextResponse.json(
         { error: 'Unauthorized: Invalid secret key' },
@@ -65,7 +71,7 @@ export async function POST(request: NextRequest) {
       [tenantId]
     );
 
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
     const fullName = username.split('@')[0] || '管理者';
 
     if (existingAdmin.rows.length > 0) {
@@ -105,7 +111,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin password reset error:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

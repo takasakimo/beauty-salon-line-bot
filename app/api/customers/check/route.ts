@@ -34,9 +34,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ exists: false });
     }
 
+    // セキュリティ上、必要最小限の情報のみ返す（全顧客情報は返さない）
+    const row = result.rows[0];
     return NextResponse.json({
       exists: true,
-      customer: result.rows[0]
+      customer: {
+        customer_id: row.customer_id,
+        has_password: !!row.password_hash
+      }
     });
   } catch (error: any) {
     console.error('顧客確認エラー:', error);

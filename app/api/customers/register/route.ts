@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     if (checkResult.rows.length > 0) {
       // すでに登録済み - 情報を更新（パスワードも更新する場合）
-      const passwordHash = password ? hashPassword(password) : null;
+      const passwordHash = password ? await hashPassword(password) : null;
       const updateQuery = passwordHash
         ? `
           UPDATE customers 
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // パスワードハッシュの生成（パスワードが提供されている場合）
-    const passwordHash = password ? hashPassword(password) : null;
+    const passwordHash = password ? await hashPassword(password) : null;
 
     // 新規登録
     const insertQuery = `

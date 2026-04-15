@@ -6,9 +6,16 @@ export const dynamic = 'force-dynamic';
 // セキュリティのため、本番環境では無効化するか、認証を追加してください
 export async function POST(request: NextRequest) {
   try {
-    // 簡単な認証チェック（本番環境では削除または強化してください）
+    // 認証チェック（環境変数未設定の場合はエンドポイントを無効化）
+    const migrationSecret = process.env.MIGRATION_SECRET;
+    if (!migrationSecret) {
+      return NextResponse.json(
+        { error: 'This endpoint is disabled. Set MIGRATION_SECRET environment variable.' },
+        { status: 403 }
+      );
+    }
     const authHeader = request.headers.get('authorization');
-    if (authHeader !== `Bearer ${process.env.MIGRATION_SECRET || 'temporary-secret'}`) {
+    if (authHeader !== `Bearer ${migrationSecret}`) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

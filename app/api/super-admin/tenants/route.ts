@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       const tenantId = tenantResult.rows[0].tenant_id;
 
       // 管理者アカウントを作成
-      const passwordHash = hashPassword(adminPassword);
+      const passwordHash = await hashPassword(adminPassword);
       await client.query(
         `INSERT INTO tenant_admins (tenant_id, username, password_hash, full_name, role, is_active)
          VALUES ($1, $2, $3, $4, 'admin', true)`,

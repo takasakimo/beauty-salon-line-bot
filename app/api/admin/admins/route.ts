@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // パスワードハッシュの生成
-    const passwordHash = hashPassword(password);
+    // パスワードハッシュの生成（bcrypt）
+    const passwordHash = await hashPassword(password);
 
     // 管理者を追加
     const result = await query(
