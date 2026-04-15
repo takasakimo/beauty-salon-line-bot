@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: 'マイグレーションに失敗しました', details: error.message },
+      { error: 'マイグレーションに失敗しました' },
       { status: 500 }
     );
   }

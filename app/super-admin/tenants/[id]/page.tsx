@@ -45,6 +45,7 @@ export default function TenantDetailPage() {
 
   const [tenant, setTenant] = useState<TenantDetail | null>(null);
   const [statistics, setStatistics] = useState<Statistics | null>(null);
+  const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
@@ -58,6 +59,10 @@ export default function TenantDetailPage() {
   useEffect(() => {
     if (tenantId) {
       loadTenantDetail();
+      fetch('/api/admin/session', { credentials: 'include' })
+        .then((r) => r.ok ? r.json() as Promise<{ isCompanyAdmin?: boolean }> : Promise.resolve({ isCompanyAdmin: false }))
+        .then((d: { isCompanyAdmin?: boolean }) => setIsCompanyAdmin(!!d.isCompanyAdmin))
+        .catch(() => {});
     }
   }, [tenantId]);
 
@@ -68,7 +73,11 @@ export default function TenantDetailPage() {
       });
 
       if (response.status === 401) {
-        router.push('/super-admin/login');
+        router.push('/');
+        return;
+      }
+      if (response.status === 403) {
+        router.push('/company-admin/dashboard');
         return;
       }
 
@@ -146,8 +155,11 @@ export default function TenantDetailPage() {
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">店舗情報の取得に失敗しました</p>
-          <Link href="/super-admin/dashboard" className="text-indigo-600 hover:text-indigo-900">
-            ダッシュボードに戻る
+          <Link
+            href={isCompanyAdmin ? '/company-admin/dashboard' : '/super-admin/dashboard'}
+            className="text-indigo-600 hover:text-indigo-900"
+          >
+            {isCompanyAdmin ? '店舗一覧に戻る' : 'ダッシュボードに戻る'}
           </Link>
         </div>
       </div>
@@ -161,8 +173,9 @@ export default function TenantDetailPage() {
           <div className="flex items-center justify-between py-6">
             <div className="flex items-center">
               <Link
-                href="/super-admin/dashboard"
+                href={isCompanyAdmin ? '/company-admin/dashboard' : '/super-admin/dashboard'}
                 className="mr-4 text-gray-600 hover:text-gray-900"
+                title={isCompanyAdmin ? '店舗一覧に戻る' : 'ダッシュボードに戻る'}
               >
                 <ArrowLeftIcon className="h-6 w-6" />
               </Link>

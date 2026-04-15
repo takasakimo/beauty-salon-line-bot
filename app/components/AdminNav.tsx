@@ -25,6 +25,7 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isCompanyAdmin, setIsCompanyAdmin] = useState(false);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [showTenantSelector, setShowTenantSelector] = useState(false);
   const [currentTenantId, setCurrentTenantId] = useState<number | null>(null);
@@ -48,13 +49,23 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
         if (sessionResponse.ok) {
           const sessionData = await sessionResponse.json();
           setIsSuperAdmin(sessionData.isSuperAdmin || false);
+          setIsCompanyAdmin(sessionData.isCompanyAdmin || false);
 
-          // スーパー管理者の場合、店舗一覧を取得
+          // スーパー管理者の場合、全店舗一覧を取得
           if (sessionData.isSuperAdmin) {
             const tenantsResponse = await fetch('/api/super-admin/tenants', {
               credentials: 'include',
             });
-
+            if (tenantsResponse.ok) {
+              const tenantsData = await tenantsResponse.json();
+              setTenants(tenantsData.tenants || []);
+            }
+          }
+          // 企業管理者の場合、自企業の店舗一覧を取得
+          if (sessionData.isCompanyAdmin) {
+            const tenantsResponse = await fetch('/api/company-admin/tenants', {
+              credentials: 'include',
+            });
             if (tenantsResponse.ok) {
               const tenantsData = await tenantsResponse.json();
               setTenants(tenantsData.tenants || []);
@@ -89,7 +100,7 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
         method: 'POST',
         credentials: 'include',
       });
-      router.push('/admin/login');
+      router.push('/');
     } catch (error) {
       console.error('ログアウトエラー:', error);
       if (isDemoMode) {
@@ -184,8 +195,17 @@ export default function AdminNav({ currentPath, title, tenantName }: AdminNavPro
                   )}
                 </button>
               )}
-              {/* スーパー管理者の場合のみ店舗切り替えボタンを表示 */}
-              {isSuperAdmin && !isDemoMode && tenants.length > 0 && (
+              {/* 企業管理者: 店舗一覧に戻るリンク */}
+              {isCompanyAdmin && !isDemoMode && (
+                <Link
+                  href="/company-admin/dashboard"
+                  className="hidden sm:inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  店舗一覧に戻る
+                </Link>
+              )}
+              {/* スーパー管理者・企業管理者で店舗切り替えボタンを表示 */}
+              {(isSuperAdmin || isCompanyAdmin) && !isDemoMode && tenants.length > 0 && (
                 <div className="hidden sm:block relative">
                   <button
                     onClick={() => setShowTenantSelector(!showTenantSelector)}

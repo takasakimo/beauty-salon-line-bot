@@ -41,6 +41,13 @@ interface Admin {
   created_at: string;
 }
 
+interface KintaiEmployee {
+  employeeId: number;
+  employeeName: string;
+  employeeEmail: string;
+  employeeNumber: string;
+}
+
 export default function StaffManagement() {
   const router = useRouter();
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -70,6 +77,8 @@ export default function StaffManagement() {
   const [staffImageFile, setStaffImageFile] = useState<File | null>(null);
   const [staffImagePreview, setStaffImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [kintaiEmployees, setKintaiEmployees] = useState<KintaiEmployee[]>([]);
+  const [loadingKintaiEmployees, setLoadingKintaiEmployees] = useState(false);
 
   useEffect(() => {
     loadStaff();
@@ -85,7 +94,7 @@ export default function StaffManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -109,7 +118,7 @@ export default function StaffManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -132,7 +141,7 @@ export default function StaffManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -208,6 +217,26 @@ export default function StaffManagement() {
     }
     setStaffError('');
     setShowStaffModal(true);
+    if (!staffMember && !adminMember) {
+      loadKintaiEmployees();
+    }
+  };
+
+  const loadKintaiEmployees = async () => {
+    setLoadingKintaiEmployees(true);
+    setKintaiEmployees([]);
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/integration/kintai/employees');
+      const res = await fetch(url, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setKintaiEmployees(data.employees ?? []);
+      }
+    } catch {
+      setKintaiEmployees([]);
+    } finally {
+      setLoadingKintaiEmployees(false);
+    }
   };
 
   const handleCloseStaffModal = () => {
@@ -834,6 +863,37 @@ export default function StaffManagement() {
                       </>
                     ) : (
                       <>
+                        {!editingStaff && kintaiEmployees.length > 0 && (
+                          <div className="pb-3 border-b border-gray-200">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              らくっぽ勤怠から選択（名前・メールを自動入力）
+                            </label>
+                            <select
+                                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                                value=""
+                                onChange={(e) => {
+                                  const id = e.target.value;
+                                  if (!id) return;
+                                  const emp = kintaiEmployees.find((x) => String(x.employeeId) === id);
+                                  if (emp) {
+                                    setStaffFormData((prev) => ({
+                                      ...prev,
+                                      name: emp.employeeName || prev.name,
+                                      email: emp.employeeEmail || prev.email,
+                                    }));
+                                  }
+                                }}
+                              >
+                                <option value="">-- 勤怠の従業員を選ぶ --</option>
+                                {kintaiEmployees.map((emp) => (
+                                  <option key={emp.employeeId} value={emp.employeeId}>
+                                    {emp.employeeName || emp.employeeEmail || `従業員#${emp.employeeId}`}
+                                    {emp.employeeEmail ? ` (${emp.employeeEmail})` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                          </div>
+                        )}
                         <div>
                           <label htmlFor="staff_name" className="block text-sm font-medium text-gray-700 mb-1">
                             名前 <span className="text-red-500">*</span>

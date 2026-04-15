@@ -5,6 +5,8 @@ import crypto from 'crypto';
 export interface SessionData {
   adminId?: number;
   superAdminId?: number;
+  companyId?: number;
+  companyAdminId?: number;
   customerId?: number;
   tenantId?: number;
   username?: string;
@@ -32,10 +34,12 @@ export async function setSession(token: string, data: SessionData): Promise<void
         username, 
         email, 
         role, 
+        company_id,
+        company_admin_id,
         created_at, 
         expires_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)
       ON CONFLICT (session_token) 
       DO UPDATE SET 
         admin_id = EXCLUDED.admin_id,
@@ -44,15 +48,19 @@ export async function setSession(token: string, data: SessionData): Promise<void
         username = EXCLUDED.username,
         email = EXCLUDED.email,
         role = EXCLUDED.role,
+        company_id = EXCLUDED.company_id,
+        company_admin_id = EXCLUDED.company_admin_id,
         expires_at = EXCLUDED.expires_at`,
       [
         token,
         data.adminId || null,
         data.customerId || null,
-        data.tenantId || null, // スーパー管理者の場合はnull
+        data.tenantId || null,
         data.username || null,
         data.email || null,
         data.role || null,
+        data.companyId ?? null,
+        data.companyAdminId ?? null,
         expiresAt
       ]
     );
@@ -73,13 +81,13 @@ export async function getSession(token: string): Promise<SessionData | undefined
         username, 
         email, 
         role, 
+        company_id,
+        company_admin_id,
         EXTRACT(EPOCH FROM created_at) * 1000 as created_at
        FROM sessions 
        WHERE session_token = $1 AND expires_at > CURRENT_TIMESTAMP`,
       [token]
     );
-    
-    // スーパー管理者の場合はroleで判定（super_adminというroleを持つセッション）
 
     if (result.rows.length === 0) {
       return undefined;
@@ -89,6 +97,8 @@ export async function getSession(token: string): Promise<SessionData | undefined
     return {
       adminId: row.admin_id || undefined,
       superAdminId: row.super_admin_id || undefined,
+      companyId: row.company_id ?? undefined,
+      companyAdminId: row.company_admin_id ?? undefined,
       customerId: row.customer_id || undefined,
       tenantId: row.tenant_id || undefined,
       username: row.username || undefined,
@@ -136,11 +146,12 @@ export async function authenticateAdminByEmail(
   password: string
 ): Promise<{ success: boolean; sessionToken?: string; admin?: any; tenant?: any; error?: string }> {
   try {
-    console.log('メールアドレス/ユーザー名で管理者認証開始:', { emailOrUsername });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('メールアドレス/ユーザー名で管理者認証開始');
+    }
     
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
-    console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
     
     // メールアドレスまたはユーザー名で管理者を検索（テナント情報も同時に取得）
     // 大文字小文字を区別せず、トリム処理も行う
@@ -193,14 +204,6 @@ export async function authenticateAdminByEmail(
       tenant_code: row.tenant_code
     };
 
-    console.log('管理者情報取得:', { 
-      adminId: admin.admin_id, 
-      username: admin.username,
-      email: admin.email,
-      tenantId: tenant.tenant_id,
-      tenantCode: tenant.tenant_code,
-      isActive: admin.is_active 
-    });
 
     if (!admin.is_active) {
       return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
@@ -213,11 +216,6 @@ export async function authenticateAdminByEmail(
     // パスワードの検証
     const storedHash = admin.password_hash || '';
     const passwordMatch = storedHash === passwordHash;
-    console.log('パスワード検証:', { 
-      storedHash: storedHash.substring(0, 20) + '...', 
-      providedHash: passwordHash.substring(0, 20) + '...',
-      match: passwordMatch 
-    });
 
     if (!passwordMatch) {
       return { success: false, error: 'メールアドレスまたはパスワードが正しくありません' };
@@ -270,7 +268,6 @@ export async function authenticateAdmin(
   try {
     const actualTenantCode = tenantCode || 'beauty-salon-001';
     
-    console.log('管理者認証開始:', { username, tenantCode: actualTenantCode });
     
     // テナント情報を取得
     const tenantResult = await query(
@@ -284,7 +281,6 @@ export async function authenticateAdmin(
     }
 
     const tenant = tenantResult.rows[0];
-    console.log('テナント情報取得:', { tenantId: tenant.tenant_id, salonName: tenant.salon_name });
     
     if (!tenant.is_active) {
       return { success: false, error: 'このテナントは無効です' };
@@ -292,7 +288,6 @@ export async function authenticateAdmin(
 
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
-    console.log('パスワードハッシュ生成:', passwordHash.substring(0, 20) + '...');
     
     // 管理者認証（まずユーザー名とテナントIDで検索）
     const adminCheckResult = await query(
@@ -308,7 +303,6 @@ export async function authenticateAdmin(
     }
 
     const admin = adminCheckResult.rows[0];
-    console.log('管理者情報取得:', { adminId: admin.admin_id, username, isActive: admin.is_active });
 
     if (!admin.is_active) {
       return { success: false, error: 'ログイン失敗：このアカウントは無効です' };
@@ -317,11 +311,6 @@ export async function authenticateAdmin(
     // パスワードの検証
     const storedHash = admin.password_hash || '';
     const passwordMatch = storedHash === passwordHash;
-    console.log('パスワード検証:', { 
-      storedHash: storedHash.substring(0, 20) + '...', 
-      providedHash: passwordHash.substring(0, 20) + '...',
-      match: passwordMatch 
-    });
 
     if (!passwordMatch) {
       return { success: false, error: 'ログイン失敗：パスワードが正しくありません' };
@@ -365,13 +354,73 @@ export async function authenticateAdmin(
   }
 }
 
+// 企業管理者認証
+export async function authenticateCompanyAdmin(
+  usernameOrEmail: string,
+  password: string
+): Promise<{ success: boolean; sessionToken?: string; company?: any; error?: string }> {
+  try {
+    const trimmed = usernameOrEmail.trim().toLowerCase();
+    const passwordHash = hashPassword(password);
+
+    const result = await query(
+      `SELECT ca.company_admin_id, ca.company_id, ca.username, ca.full_name, ca.email, ca.password_hash, ca.is_active,
+              c.company_name, c.company_code, c.is_active as company_is_active
+       FROM company_admins ca
+       INNER JOIN companies c ON ca.company_id = c.company_id
+       WHERE (LOWER(TRIM(ca.username)) = $1 OR LOWER(TRIM(ca.email)) = $1)`,
+      [trimmed]
+    );
+
+    if (result.rows.length === 0) {
+      return { success: false, error: 'ユーザー名またはパスワードが正しくありません' };
+    }
+
+    const row = result.rows[0];
+    if (!row.is_active || !row.company_is_active) {
+      return { success: false, error: 'このアカウントは無効です' };
+    }
+
+    if (row.password_hash !== passwordHash) {
+      return { success: false, error: 'ユーザー名またはパスワードが正しくありません' };
+    }
+
+    const sessionToken = generateSessionToken();
+    await setSession(sessionToken, {
+      role: 'company_admin',
+      companyId: row.company_id,
+      companyAdminId: row.company_admin_id,
+      username: row.username,
+      email: row.email ?? undefined,
+      createdAt: Date.now()
+    });
+
+    await query(
+      'UPDATE company_admins SET last_login = CURRENT_TIMESTAMP WHERE company_admin_id = $1',
+      [row.company_admin_id]
+    );
+
+    return {
+      success: true,
+      sessionToken,
+      company: {
+        companyId: row.company_id,
+        companyName: row.company_name,
+        companyCode: row.company_code
+      }
+    };
+  } catch (error: any) {
+    console.error('企業管理者認証エラー:', error);
+    return { success: false, error: 'サーバーエラー' };
+  }
+}
+
 // スーパー管理者認証
 export async function authenticateSuperAdmin(
   username: string,
   password: string
 ): Promise<{ success: boolean; sessionToken?: string; superAdmin?: any; error?: string }> {
   try {
-    console.log('スーパー管理者認証開始:', { username });
     
     // パスワードハッシュの生成
     const passwordHash = hashPassword(password);
@@ -432,8 +481,7 @@ export async function authenticateSuperAdmin(
     };
   } catch (error: any) {
     console.error('スーパー管理者認証エラー:', error);
-    const errorMessage = error?.message || String(error);
-    return { success: false, error: `サーバーエラー: ${errorMessage}` };
+    return { success: false, error: 'サーバーエラー' };
   }
 }
 
@@ -442,50 +490,64 @@ export async function getAuthFromRequest(request: NextRequest): Promise<SessionD
   const sessionToken = request.cookies.get('session_token')?.value || 
                       request.headers.get('x-session-token');
   
-  console.log('セッション認証チェック:', {
-    hasCookie: !!request.cookies.get('session_token'),
-    hasHeader: !!request.headers.get('x-session-token'),
-    sessionToken: sessionToken ? sessionToken.substring(0, 10) + '...' : null
-  });
-  
   if (!sessionToken) {
-    console.log('セッショントークンが見つかりません');
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('セッショントークンが見つかりません');
+    }
     return null;
   }
 
   const session = await getSession(sessionToken);
-  console.log('セッション取得結果:', {
-    found: !!session,
-    hasAdminId: !!session?.adminId,
-    adminId: session?.adminId,
-    role: session?.role
-  });
   
-  // 管理者セッションかどうか確認（adminIdが存在する、またはroleが'super_admin'）
-  if (session && (session.adminId || session.role === 'super_admin')) {
+  // 管理者セッションかどうか確認（adminId / company_admin / super_admin）
+  if (session && (session.adminId || session.role === 'super_admin' || session.role === 'company_admin')) {
     return session;
   }
   
-  console.log('管理者セッションが見つかりません');
   return null;
 }
 
 // 認証ミドルウェア（スーパー管理者用）
 export async function getSuperAdminAuthFromRequest(request: NextRequest): Promise<SessionData | null> {
-  const sessionToken = request.cookies.get('session_token')?.value || 
+  const sessionToken = request.cookies.get('session_token')?.value ||
                       request.headers.get('x-session-token');
-  
+
   if (!sessionToken) {
     return null;
   }
 
   const session = await getSession(sessionToken);
-  
+
   // スーパー管理者セッションかどうか確認（roleが'super_admin'）
   if (session && session.role === 'super_admin') {
     return session;
   }
-  
+
+  return null;
+}
+
+/**
+ * 店舗詳細・編集用：スーパー管理者、または当該店舗が自企業に属する企業管理者のみ許可。
+ */
+export async function getSuperAdminOrCompanyAdminTenantAuth(
+  request: NextRequest,
+  tenantId: number
+): Promise<SessionData | null> {
+  const session = await getAuthFromRequest(request);
+  if (!session) return null;
+
+  if (session.role === 'super_admin') return session;
+
+  if (session.role === 'company_admin' && session.companyId != null) {
+    const result = await query(
+      'SELECT company_id FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    if (result.rows.length === 0) return null;
+    if (Number(result.rows[0].company_id) !== session.companyId) return null;
+    return session;
+  }
+
   return null;
 }
 
@@ -496,26 +558,20 @@ export function getTenantIdFromRequest(request: NextRequest, session: SessionDat
   if (tenantIdParam) {
     const tenantId = parseInt(tenantIdParam);
     if (!isNaN(tenantId)) {
-      console.log('クエリパラメータからtenantIdを取得:', tenantId);
       return tenantId;
     }
   }
   
-  // スーパー管理者の場合、クエリパラメータのtenantIdを優先（既にチェック済み）
-  if (session && session.role === 'super_admin') {
-    console.log('スーパー管理者のtenantId取得:', {
-      hasSession: !!session,
-      role: session.role,
-      tenantIdParam,
-      allParams: Object.fromEntries(request.nextUrl.searchParams.entries())
-    });
-    // クエリパラメータにtenantIdがない場合はnullを返す
+  // スーパー管理者・企業管理者の場合、クエリパラメータのtenantIdを優先（企業管理者は別途検証が必要）
+  if (session && (session.role === 'super_admin' || session.role === 'company_admin')) {
+    if (tenantIdParam) {
+      return parseInt(tenantIdParam, 10);
+    }
     return null;
   }
-  
+
   // 通常の管理者の場合はセッションのtenantIdを使用
   const sessionTenantId = session?.tenantId || null;
-  console.log('セッションからtenantIdを取得:', sessionTenantId);
   return sessionTenantId;
 }
 
@@ -526,7 +582,7 @@ export async function getTenantIdFromRequestAsync(request: NextRequest, session:
   if (tenantId) {
     return tenantId;
   }
-  
+
   // セッションがない場合、デフォルトのテナントコード（beauty-salon-001）から取得を試みる
   const tenantCode = request.nextUrl.searchParams.get('tenant') || 'beauty-salon-001';
   try {
@@ -537,14 +593,44 @@ export async function getTenantIdFromRequestAsync(request: NextRequest, session:
     );
     if (tenantResult.rows.length > 0) {
       const defaultTenantId = tenantResult.rows[0].tenant_id;
-      console.log('デフォルトテナントコードからtenantIdを取得:', defaultTenantId);
       return defaultTenantId;
     }
   } catch (error) {
     console.error('テナントID取得エラー:', error);
   }
-  
+
   return null;
+}
+
+/**
+ * テナントIDを取得し、企業管理者の場合は自企業に属するテナントのみ許可する。
+ * APIルートで使用し、null の場合は 403 を返す。
+ */
+export async function getTenantIdFromRequestValidated(
+  request: NextRequest,
+  session: SessionData | null
+): Promise<number | null> {
+  let tenantId = getTenantIdFromRequest(request, session);
+  if (!tenantId) {
+    const tenantCode = request.nextUrl.searchParams.get('tenant') || 'beauty-salon-001';
+    const tenantResult = await query(
+      'SELECT tenant_id FROM tenants WHERE tenant_code = $1 AND is_active = true',
+      [tenantCode]
+    );
+    tenantId = tenantResult.rows.length > 0 ? tenantResult.rows[0].tenant_id : null;
+  }
+  if (!tenantId) return null;
+
+  if (session?.role === 'company_admin' && session.companyId != null) {
+    const result = await query(
+      'SELECT company_id FROM tenants WHERE tenant_id = $1',
+      [tenantId]
+    );
+    if (result.rows.length === 0) return null;
+    if (result.rows[0].company_id !== session.companyId) return null;
+  }
+
+  return tenantId;
 }
 
 // 顧客認証

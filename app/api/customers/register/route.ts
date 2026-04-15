@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error registering customer:', error);
     return NextResponse.json(
-      { success: false, error: 'Registration failed', details: error.message },
+      { success: false, error: '登録に失敗しました' },
       { status: 500 }
     );
   }

@@ -55,40 +55,75 @@ async function createAdmin() {
     // 管理者アカウント情報
     const username = process.argv[2] || 'admin';
     const password = process.argv[3] || 'admin123';
-    const fullName = process.argv[4] || '管理者';
+    const fullName = process.argv[4] || username.split('@')[0] || '管理者';
+    const email = process.argv[5] || username;
 
-    console.log(`\n管理者アカウントを作成します:`);
+    console.log(`\n管理者アカウントを作成/更新します:`);
     console.log(`  ユーザー名: ${username}`);
     console.log(`  パスワード: ${password}`);
-    console.log(`  名前: ${fullName}\n`);
+    console.log(`  名前: ${fullName}`);
+    console.log(`  メールアドレス: ${email}\n`);
 
-    // 既存の管理者を確認
+    // 既存の管理者を確認（usernameまたはemailで検索）
     const existingAdmin = await client.query(
-      'SELECT admin_id FROM tenant_admins WHERE tenant_id = $1 AND username = $2',
-      [tenantId, username]
+      `SELECT admin_id, username, email FROM tenant_admins 
+       WHERE tenant_id = $1 
+       AND (username = $2 OR email = $2 OR username = $3 OR email = $3)
+       ORDER BY admin_id ASC
+       LIMIT 1`,
+      [tenantId, username, email]
     );
 
     if (existingAdmin.rows.length > 0) {
-      console.log('⚠️  既に同じユーザー名の管理者が存在します');
-      console.log('パスワードを更新します...');
+      const admin = existingAdmin.rows[0];
+      console.log(`⚠️  既存の管理者が見つかりました (admin_id: ${admin.admin_id})`);
+      console.log(`  現在のユーザー名: ${admin.username || '(なし)'}`);
+      console.log(`  現在のメールアドレス: ${admin.email || '(なし)'}`);
+      console.log('パスワードとユーザー名を更新します...');
       
       const passwordHash = hashPassword(password);
       await client.query(
         `UPDATE tenant_admins 
-         SET password_hash = $1, full_name = $2, is_active = true
-         WHERE tenant_id = $3 AND username = $4`,
-        [passwordHash, fullName, tenantId, username]
+         SET username = $1, password_hash = $2, full_name = $3, email = $4, is_active = true, updated_at = CURRENT_TIMESTAMP
+         WHERE admin_id = $5 AND tenant_id = $6`,
+        [username, passwordHash, fullName, email, admin.admin_id, tenantId]
       );
-      console.log('✅ 管理者アカウントのパスワードを更新しました');
+      console.log('✅ 管理者アカウントを更新しました');
     } else {
-      // 新しい管理者を作成
-      const passwordHash = hashPassword(password);
-      await client.query(
-        `INSERT INTO tenant_admins (tenant_id, username, password_hash, full_name, role, is_active)
-         VALUES ($1, $2, $3, $4, 'admin', true)`,
-        [tenantId, username, passwordHash, fullName]
+      // 既存の管理者がいない場合、最初の管理者を更新または新規作成
+      const allAdmins = await client.query(
+        `SELECT admin_id, username, email FROM tenant_admins 
+         WHERE tenant_id = $1 
+         ORDER BY admin_id ASC
+         LIMIT 1`,
+        [tenantId]
       );
-      console.log('✅ 管理者アカウントを作成しました');
+
+      if (allAdmins.rows.length > 0) {
+        const admin = allAdmins.rows[0];
+        console.log(`⚠️  既存の管理者が見つかりました (admin_id: ${admin.admin_id})`);
+        console.log(`  現在のユーザー名: ${admin.username || '(なし)'}`);
+        console.log(`  現在のメールアドレス: ${admin.email || '(なし)'}`);
+        console.log('パスワードとユーザー名を更新します...');
+        
+        const passwordHash = hashPassword(password);
+        await client.query(
+          `UPDATE tenant_admins 
+           SET username = $1, password_hash = $2, full_name = $3, email = $4, is_active = true, updated_at = CURRENT_TIMESTAMP
+           WHERE admin_id = $5 AND tenant_id = $6`,
+          [username, passwordHash, fullName, email, admin.admin_id, tenantId]
+        );
+        console.log('✅ 管理者アカウントを更新しました');
+      } else {
+        // 新しい管理者を作成
+        const passwordHash = hashPassword(password);
+        await client.query(
+          `INSERT INTO tenant_admins (tenant_id, username, password_hash, full_name, email, role, is_active)
+           VALUES ($1, $2, $3, $4, $5, 'admin', true)`,
+          [tenantId, username, passwordHash, fullName, email]
+        );
+        console.log('✅ 管理者アカウントを作成しました');
+      }
     }
 
     console.log('\n========================================');
@@ -97,6 +132,7 @@ async function createAdmin() {
     console.log(`店舗コード: beauty-salon-001`);
     console.log(`ユーザー名: ${username}`);
     console.log(`パスワード: ${password}`);
+    console.log(`メールアドレス: ${email}`);
     console.log('========================================\n');
 
   } catch (error) {

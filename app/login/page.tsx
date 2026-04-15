@@ -78,6 +78,16 @@ function CustomerLoginContent() {
         return;
       }
 
+      if (tenantsResult.isSuperAdmin) {
+        await performSuperAdminLogin();
+        return;
+      }
+
+      if (tenantsResult.isCompanyAdmin) {
+        await performCompanyAdminLogin();
+        return;
+      }
+
       const tenantList: Tenant[] = tenantsResult.tenants || [];
       console.log('店舗リスト:', { count: tenantList.length, tenants: tenantList });
 
@@ -172,6 +182,58 @@ function CustomerLoginContent() {
 
   const handleTenantSelect = (tenant: Tenant) => {
     performLogin(tenant.tenant_code, tenant.needs_password, tenant.has_admin);
+  };
+
+  const performSuperAdminLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/super-admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: email.trim(), password }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSuccess(true);
+        setTimeout(() => router.push('/super-admin/dashboard'), 500);
+      } else {
+        setError(result.error || 'ログインに失敗しました');
+        setPassword('');
+      }
+    } catch {
+      setError('ログイン処理中にエラーが発生しました。');
+      setPassword('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const performCompanyAdminLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/company-admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: email.trim(), email: email.trim(), password }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setSuccess(true);
+        setTimeout(() => router.push('/company-admin/dashboard'), 500);
+      } else {
+        setError(result.error || 'ログインに失敗しました');
+        setPassword('');
+      }
+    } catch {
+      setError('ログイン処理中にエラーが発生しました。');
+      setPassword('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -364,13 +426,13 @@ function CustomerLoginContent() {
               </p>
               <div className="pt-3 border-t border-gray-200">
                 <Link 
-                  href={`/?tenant=${defaultTenantCode}`} 
+                  href="/lp" 
                   className="text-sm text-gray-500 hover:text-gray-700 inline-flex items-center"
                 >
                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
-                  ホームに戻る
+                  ランディングページへ
                 </Link>
               </div>
             </div>

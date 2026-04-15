@@ -875,7 +875,6 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: '予約の作成に失敗しました',
-        details: error.message
       },
       { status: 500 }
     );

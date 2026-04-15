@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query, getTenantIdFromRequest } from '@/lib/db';
+import { query, getTenantIdFromRequest as getTenantIdFromRequestDb } from '@/lib/db';
+import { getAuthFromRequest, getTenantIdFromRequestAsync } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
+/** 休憩時間を安全にパース。{start,end}形式に対応。Kintaiの{minutes}形式はスキップしてnullを返す */
+function parseBreakTime(breakTime: any): { startMin: number; endMin: number } | null {
+  if (!breakTime) return null;
+  const startStr = breakTime.start ?? breakTime.start_time;
+  const endStr = breakTime.end ?? breakTime.end_time;
+  if (typeof startStr !== 'string' || typeof endStr !== 'string') return null;
+  const [sh, sm] = startStr.split(':').map(Number);
+  const [eh, em] = endStr.split(':').map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return null;
+  return { startMin: sh * 60 + sm, endMin: eh * 60 + em };
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const tenantId = await getTenantIdFromRequest(request);
+    // 管理画面からの呼び出し時はセッションのtenantIdを使用（シフト・スタッフと正しく連動するため）
+    const session = await getAuthFromRequest(request);
+    let tenantId: number | null = null;
+    if (session) {
+      tenantId = await getTenantIdFromRequestAsync(request, session);
+    }
+    // セッションがない場合（顧客予約ページ等）はtenant codeから取得
+    if (!tenantId) {
+      tenantId = await getTenantIdFromRequestDb(request);
+    }
     if (!tenantId) {
       return NextResponse.json(
         { error: 'テナントが見つかりません' },
@@ -280,20 +302,9 @@ export async function GET(request: NextRequest) {
             });
           }
         } else {
-          console.log('シフトが設定されていません。デフォルトの勤務時間を使用します:', { staffId, date });
-          // シフトが設定されていない場合は、デフォルトの勤務時間を使用
-          const staffResult = await query(
-            'SELECT working_hours FROM staff WHERE staff_id = $1 AND tenant_id = $2',
-            [staffId, tenantId]
-          );
-          if (staffResult.rows.length > 0 && staffResult.rows[0].working_hours) {
-            const workingHoursStr = staffResult.rows[0].working_hours;
-            const match = workingHoursStr.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-            if (match) {
-              staffWorkingHours = { start: match[1], end: match[2] };
-              console.log('デフォルトの勤務時間を使用:', staffWorkingHours);
-            }
-          }
+          // シフトが設定されていない日は予約枠を表示しない（working_hoursへのフォールバックは行わない）
+          console.log('この日付にシフトが設定されていません。空のスロットを返します:', { staffId, date });
+          isStaffOff = true; // 勤務していない扱い
         }
       } catch (error: any) {
         console.error('スタッフシフト/勤務時間取得エラー:', error);
@@ -303,25 +314,22 @@ export async function GET(request: NextRequest) {
       // スタッフが指定されていない場合：その日付に勤務している全スタッフのシフト終了時間と休憩時間を取得
       // 各スタッフの情報を保持（スロットフィルタリング時に使用）
       try {
-        // LEFT JOINに変更して、シフトが設定されていないスタッフも含める
+        // INNER JOIN: その日付にシフトが入っているスタッフのみを取得
+        // シフトがない日は予約枠を表示しない（working_hoursへのフォールバックは行わない）
         const allStaffShiftsResult = await query(
           `SELECT 
             ss.start_time as shift_start_time,
             ss.end_time as shift_end_time,
             COALESCE(ss.is_off, false) as is_off,
             COALESCE(ss.break_times, '[]'::jsonb) as break_times,
-            s.working_hours,
             s.staff_id
           FROM staff s
-          LEFT JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
+          INNER JOIN staff_shifts ss ON s.staff_id = ss.staff_id 
             AND ss.tenant_id = $1 
             AND ss.shift_date = $2
-          WHERE s.tenant_id = $1
-          AND (ss.is_off = false OR ss.is_off IS NULL)
-          AND (
-            (ss.start_time IS NOT NULL AND ss.end_time IS NOT NULL)
-            OR (ss.start_time IS NULL AND ss.end_time IS NULL AND s.working_hours IS NOT NULL)
-          )`,
+            AND (ss.is_off = false OR ss.is_off IS NULL)
+            AND ss.start_time IS NOT NULL AND ss.end_time IS NOT NULL
+          WHERE s.tenant_id = $1`,
           [tenantId, date]
         );
         
@@ -333,7 +341,6 @@ export async function GET(request: NextRequest) {
             shiftEnd: row.shift_end_time,
             isOff: row.is_off,
             breakTimes: row.break_times,
-            workingHours: row.working_hours,
             breakTimesType: typeof row.break_times
           }))
         });
@@ -372,14 +379,8 @@ export async function GET(request: NextRequest) {
                 staffId: row.staff_id
               });
             }
-          } else if (row.working_hours) {
-            // シフトが設定されていない場合はデフォルトの勤務時間を使用
-            const match = row.working_hours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-            if (match) {
-              startTime = match[1];
-              endTime = match[2];
-            }
           }
+          // シフトがない場合はスキップ（working_hoursへのフォールバックは行わない）
           
           if (startTime && endTime) {
             allStaffShiftsInfo.push({
@@ -414,17 +415,10 @@ export async function GET(request: NextRequest) {
           let startTime: string | null = null;
           let endTime: string | null = null;
           
-          // シフトが設定されている場合はシフト時間を優先
+          // シフトが設定されている場合のみ（INNER JOINのため必ず存在）
           if (row.shift_start_time && row.shift_end_time) {
             startTime = row.shift_start_time.substring(0, 5);
             endTime = row.shift_end_time.substring(0, 5);
-          } else if (row.working_hours) {
-            // シフトが設定されていない場合はデフォルトの勤務時間を使用
-            const match = row.working_hours.match(/(\d{2}:\d{2})-(\d{2}:\d{2})/);
-            if (match) {
-              startTime = match[1];
-              endTime = match[2];
-            }
           }
           
           if (startTime) {
@@ -452,11 +446,12 @@ export async function GET(request: NextRequest) {
             staffCount: allStaffShiftsResult.rows.length 
           });
         } else {
-          console.log('スタッフ未指定時: シフト時間が設定されませんでした（店舗の営業時間を使用）', {
-            earliestStartTime,
-            latestEndTime,
+          // その日にシフトが入っているスタッフがいない場合は予約枠を表示しない
+          console.log('スタッフ未指定時: その日にシフトが入っているスタッフがいないため、空のスロットを返します', {
+            date,
             staffCount: allStaffShiftsResult.rows.length
           });
+          return NextResponse.json([]);
         }
       } catch (error: any) {
         console.error('全スタッフシフト取得エラー:', error);
@@ -577,7 +572,7 @@ export async function GET(request: NextRequest) {
           ) as duration
         FROM reservations r
         LEFT JOIN menus m ON r.menu_id = m.menu_id
-        WHERE r.reservation_date::date = $1::date
+        WHERE DATE(r.reservation_date) = $1
         AND r.status = 'confirmed'
         AND r.tenant_id = $2
         AND r.staff_id = $3
@@ -600,7 +595,7 @@ export async function GET(request: NextRequest) {
           ) as duration
         FROM reservations r
         LEFT JOIN menus m ON r.menu_id = m.menu_id
-        WHERE r.reservation_date::date = $1::date
+        WHERE DATE(r.reservation_date) = $1
         AND r.status = 'confirmed'
         AND r.tenant_id = $2
       `;
@@ -815,14 +810,10 @@ export async function GET(request: NextRequest) {
           if (isWorkingDuringSlot) {
             // このスタッフの休憩時間と重複していないかチェック
             let hasBreakConflict = false;
-            for (const breakTime of staffShift.break_times) {
-              const [breakStartHour, breakStartMinute] = breakTime.start.split(':').map(Number);
-              const [breakEndHour, breakEndMinute] = breakTime.end.split(':').map(Number);
-              const breakStartTimeInMinutes = breakStartHour * 60 + breakStartMinute;
-              const breakEndTimeInMinutes = breakEndHour * 60 + breakEndMinute;
-              
-              // スロットの時間帯が休憩時間と重複しているかチェック
-              const overlapsWithBreak = slotTime < breakEndTimeInMinutes && slotEndTime > breakStartTimeInMinutes;
+            for (const bt of staffShift.break_times || []) {
+              const parsed = parseBreakTime(bt);
+              if (!parsed) continue;
+              const overlapsWithBreak = slotTime < parsed.endMin && slotEndTime > parsed.startMin;
               if (overlapsWithBreak) {
                 hasBreakConflict = true;
                 break;
@@ -1014,6 +1005,7 @@ export async function GET(request: NextRequest) {
         
         // 各スタッフの予約チェックで、staff_idがNULLの予約も各スタッフの予約として扱った
         // 利用可能なスタッフがいない場合、スロットを除外
+        // シフトに誰もいない日は予約不可
         if (!hasAvailableStaff) {
           console.log('利用可能なスタッフがいないため、スロットを除外:', {
             slot,
@@ -1172,24 +1164,17 @@ export async function GET(request: NextRequest) {
       // スタッフが指定されている場合：そのスタッフの休憩時間をチェック
       if (staffId) {
         // 休憩時間と重複する場合は除外
-        for (const breakTime of staffBreakTimes) {
-          const [breakStartHour, breakStartMinute] = breakTime.start.split(':').map(Number);
-          const [breakEndHour, breakEndMinute] = breakTime.end.split(':').map(Number);
-          const breakStartTimeInMinutes = breakStartHour * 60 + breakStartMinute;
-          const breakEndTimeInMinutes = breakEndHour * 60 + breakEndMinute;
-          
-          // スロットの時間帯が休憩時間と重複しているかチェック
-          // スロット開始時間 < 休憩終了時間 && スロット終了時間 > 休憩開始時間
-          // 注意: 休憩終了時刻ちょうど（例: 19:00）のスロットは予約可能とする
-          const overlapsWithBreak = slotTimeInMinutes < breakEndTimeInMinutes && slotEndTimeInMinutes > breakStartTimeInMinutes;
+        for (const bt of staffBreakTimes) {
+          const parsed = parseBreakTime(bt);
+          if (!parsed) continue;
+          const overlapsWithBreak = slotTimeInMinutes < parsed.endMin && slotEndTimeInMinutes > parsed.startMin;
           if (overlapsWithBreak) {
             console.log('スロットが休憩時間と重複（除外）:', {
               slot,
               slotTimeInMinutes,
               slotEndTimeInMinutes,
-              breakTime: `${breakTime.start}-${breakTime.end}`,
-              breakStartTimeInMinutes,
-              breakEndTimeInMinutes
+              breakStart: parsed.startMin,
+              breakEnd: parsed.endMin
             });
             return false;
           }
@@ -1197,6 +1182,7 @@ export async function GET(request: NextRequest) {
         return true;
       } else {
         // スタッフ未指定の場合：少なくとも1人のスタッフがその時間帯に稼働していて休憩時間外である必要がある
+        // シフトに誰もいない日は予約不可
         let hasAvailableStaff = false;
         
         for (const staffShift of allStaffShiftsInfo) {
@@ -1212,14 +1198,10 @@ export async function GET(request: NextRequest) {
           if (isWorkingDuringSlot) {
             // このスタッフの休憩時間と重複していないかチェック
             let hasBreakConflict = false;
-            for (const breakTime of staffShift.break_times) {
-              const [breakStartHour, breakStartMinute] = breakTime.start.split(':').map(Number);
-              const [breakEndHour, breakEndMinute] = breakTime.end.split(':').map(Number);
-              const breakStartTimeInMinutes = breakStartHour * 60 + breakStartMinute;
-              const breakEndTimeInMinutes = breakEndHour * 60 + breakEndMinute;
-              
-              // スロットの時間帯が休憩時間と重複しているかチェック
-              const overlapsWithBreak = slotTimeInMinutes < breakEndTimeInMinutes && slotEndTimeInMinutes > breakStartTimeInMinutes;
+            for (const bt of staffShift.break_times || []) {
+              const parsed = parseBreakTime(bt);
+              if (!parsed) continue;
+              const overlapsWithBreak = slotTimeInMinutes < parsed.endMin && slotEndTimeInMinutes > parsed.startMin;
               if (overlapsWithBreak) {
                 hasBreakConflict = true;
                 break;

@@ -1,28 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { getSuperAdminAuthFromRequest } from '@/lib/auth';
+import { getSuperAdminOrCompanyAdminTenantAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-// 店舗更新
+// 店舗更新（スーパー管理者 or 当該店舗が自企業の企業管理者）
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getSuperAdminAuthFromRequest(request);
-    if (!session) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
-
     const tenantId = parseInt(params.id);
     if (isNaN(tenantId)) {
       return NextResponse.json(
         { error: '無効な店舗IDです' },
         { status: 400 }
+      );
+    }
+
+    const session = await getSuperAdminOrCompanyAdminTenantAuth(request, tenantId);
+    if (!session) {
+      return NextResponse.json(
+        { error: '認証が必要です。またはこの店舗を操作する権限がありません。' },
+        { status: 403 }
       );
     }
 
@@ -88,25 +88,25 @@ export async function PUT(
   }
 }
 
-// 店舗削除
+// 店舗削除（スーパー管理者 or 当該店舗が自企業の企業管理者）
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await getSuperAdminAuthFromRequest(request);
-    if (!session) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
-
     const tenantId = parseInt(params.id);
     if (isNaN(tenantId)) {
       return NextResponse.json(
         { error: '無効な店舗IDです' },
         { status: 400 }
+      );
+    }
+
+    const session = await getSuperAdminOrCompanyAdminTenantAuth(request, tenantId);
+    if (!session) {
+      return NextResponse.json(
+        { error: '認証が必要です。またはこの店舗を操作する権限がありません。' },
+        { status: 403 }
       );
     }
 

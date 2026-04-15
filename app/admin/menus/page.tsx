@@ -75,7 +75,7 @@ export default function MenuManagement() {
 
       if (response.status === 401) {
         console.error('認証エラー: 401 Unauthorized');
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 

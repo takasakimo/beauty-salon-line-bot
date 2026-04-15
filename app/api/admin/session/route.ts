@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
       role: session.role,
       tenantId: session.tenantId,
       username: session.username,
-      isSuperAdmin: session.role === 'super_admin'
+      companyId: session.companyId ?? null,
+      isSuperAdmin: session.role === 'super_admin',
+      isCompanyAdmin: session.role === 'company_admin'
     });
   } catch (error: any) {
     console.error('セッション情報取得エラー:', error);

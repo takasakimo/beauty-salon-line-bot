@@ -3,26 +3,39 @@
 /**
  * クエリパラメータからtenantIdを取得し、API URLに追加
  * スーパー管理者が店舗管理画面にアクセスする際に使用
+ * @param baseUrl - APIのベースURL
+ * @param sessionTenantId - セッションから取得したtenantId（指定時はURLパラメータより優先）
  */
-export function getApiUrlWithTenantId(baseUrl: string): string {
+export function getApiUrlWithTenantId(baseUrl: string, sessionTenantId?: number | null): string {
   if (typeof window === 'undefined') {
     return baseUrl;
   }
-  
-  const urlParams = new URLSearchParams(window.location.search);
-  const tenantId = urlParams.get('tenantId');
-  
+
   // 既にtenantIdがURLに含まれている場合は追加しない
   if (baseUrl.includes('tenantId=')) {
     return baseUrl;
   }
-  
-  if (tenantId) {
-    const separator = baseUrl.includes('?') ? '&' : '?';
-    const url = `${baseUrl}${separator}tenantId=${tenantId}`;
-    return url;
+
+  const params = new URLSearchParams();
+  // セッションのtenantIdを優先（店舗管理者がURLパラメータなしでアクセスする場合に必須）
+  if (sessionTenantId) {
+    params.set('tenantId', String(sessionTenantId));
+  } else {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantId = urlParams.get('tenantId');
+    const tenantCode = urlParams.get('tenant');
+    if (tenantId) {
+      params.set('tenantId', tenantId);
+    } else if (tenantCode) {
+      params.set('tenant', tenantCode);
+    }
   }
-  
+
+  if (params.toString()) {
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    return `${baseUrl}${separator}${params.toString()}`;
+  }
+
   return baseUrl;
 }
 

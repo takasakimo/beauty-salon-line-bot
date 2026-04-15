@@ -51,7 +51,7 @@ export default function SuperAdminDashboard() {
       });
 
       if (response.status === 401) {
-        router.push('/super-admin/login');
+        router.push('/');
         return;
       }
 
@@ -157,7 +157,7 @@ export default function SuperAdminDashboard() {
         method: 'POST',
         credentials: 'include',
       });
-      router.push('/super-admin/login');
+      router.push('/');
     } catch (error) {
       console.error('ログアウトエラー:', error);
     }
@@ -178,6 +178,12 @@ export default function SuperAdminDashboard() {
           <div className="flex justify-between items-center py-6">
             <h1 className="text-2xl font-bold text-gray-900">店舗管理</h1>
             <div className="flex gap-4">
+              <Link
+                href="/super-admin/companies"
+                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                企業管理
+              </Link>
               <button
                 onClick={handleAdd}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"

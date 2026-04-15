@@ -12,7 +12,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password } = body;
 
-    console.log('店舗一覧取得リクエスト:', { email: email?.trim(), hasPassword: !!password });
 
     if (!email || !password) {
       return NextResponse.json(
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
     const passwordHash = hashPassword(password);
     const trimmedEmail = email.trim().toLowerCase();
 
-    console.log('パスワードハッシュ生成完了:', { email: trimmedEmail, hashPreview: passwordHash.substring(0, 20) + '...' });
 
     // まずemailで顧客を検索（パスワードは後で検証）
     const customerSearchResult = await query(
@@ -45,16 +43,6 @@ export async function POST(request: NextRequest) {
       [trimmedEmail]
     );
 
-    console.log('顧客検索結果（emailのみ）:', { 
-      count: customerSearchResult.rows.length,
-      details: customerSearchResult.rows.map(r => ({
-        tenant_id: r.tenant_id,
-        salon_name: r.salon_name,
-        tenant_code: r.tenant_code,
-        has_password_hash: !!r.password_hash,
-        password_hash_preview: r.password_hash ? r.password_hash.substring(0, 20) + '...' : 'NULL'
-      }))
-    });
 
     // 管理者としても登録されている可能性があるので、管理者テーブルもチェック
     const adminSearchResult = await query(
@@ -76,45 +64,16 @@ export async function POST(request: NextRequest) {
       [trimmedEmail]
     );
 
-    console.log('管理者検索結果（emailのみ）:', { 
-      count: adminSearchResult.rows.length,
-      details: adminSearchResult.rows.map(r => ({
-        tenant_id: r.tenant_id,
-        salon_name: r.salon_name,
-        tenant_code: r.tenant_code,
-        has_password_hash: !!r.password_hash,
-        password_hash_preview: r.password_hash ? r.password_hash.substring(0, 20) + '...' : 'NULL'
-      }))
-    });
 
     const tenants: any[] = [];
     const tenantMap = new Map<number, any>();
 
-    console.log('入力パスワードハッシュ:', { hashPreview: passwordHash.substring(0, 20) + '...', fullLength: passwordHash.length });
 
     // 顧客として登録されている店舗を追加（パスワード検証）
     for (const row of customerSearchResult.rows) {
       const hasPassword = !!row.password_hash;
       const passwordMatch = hasPassword && row.password_hash === passwordHash;
-      
-      console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) パスワード検証:`, {
-        has_password: hasPassword,
-        match: passwordMatch,
-        stored_hash_preview: row.password_hash ? row.password_hash.substring(0, 20) + '...' : 'NULL',
-        input_hash_preview: passwordHash.substring(0, 20) + '...',
-        stored_hash_length: row.password_hash ? row.password_hash.length : 0,
-        input_hash_length: passwordHash.length
-      });
-
-      // パスワードが一致するか、パスワードが設定されていない場合は店舗を追加
-      // パスワードが設定されていない場合は、後でパスワード設定を促す
       const shouldAddTenant = passwordMatch || !hasPassword;
-      console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) 追加判定:`, {
-        shouldAdd: shouldAddTenant,
-        passwordMatch,
-        hasPassword,
-        reason: !hasPassword ? 'パスワード未設定のため追加' : passwordMatch ? 'パスワード一致のため追加' : 'パスワード不一致のため除外'
-      });
       
       if (shouldAddTenant) {
         const tenantData = {
@@ -131,36 +90,16 @@ export async function POST(request: NextRequest) {
         };
         tenants.push(tenantData);
         tenantMap.set(row.tenant_id, tenantData);
-        console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました。needs_password: ${tenantData.needs_password} (hasPassword: ${hasPassword}, passwordMatch: ${passwordMatch})`);
-      } else {
-        console.log(`顧客店舗 ${row.salon_name} (${row.tenant_code}) をリストから除外しました`);
       }
     }
-
-    console.log('パスワード検証後の顧客店舗:', { count: tenants.length });
 
     // 管理者として登録されている店舗を追加（パスワード検証、重複チェック）
     for (const row of adminSearchResult.rows) {
       const hasPassword = !!row.password_hash;
       const passwordMatch = hasPassword && row.password_hash === passwordHash;
       
-      console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) パスワード検証:`, {
-        has_password: hasPassword,
-        match: passwordMatch,
-        stored_hash_preview: row.password_hash ? row.password_hash.substring(0, 20) + '...' : 'NULL',
-        input_hash_preview: passwordHash.substring(0, 20) + '...',
-        stored_hash_length: row.password_hash ? row.password_hash.length : 0,
-        input_hash_length: passwordHash.length
-      });
-
       // パスワードが一致するか、パスワードが設定されていない場合は店舗を追加
       const shouldAddTenant = passwordMatch || !hasPassword;
-      console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) 追加判定:`, {
-        shouldAdd: shouldAddTenant,
-        passwordMatch,
-        hasPassword,
-        reason: !hasPassword ? 'パスワード未設定のため追加' : passwordMatch ? 'パスワード一致のため追加' : 'パスワード不一致のため除外'
-      });
       
       if (shouldAddTenant) {
         const existing = tenantMap.get(row.tenant_id);
@@ -181,7 +120,6 @@ export async function POST(request: NextRequest) {
           };
           tenants.push(tenantData);
           tenantMap.set(row.tenant_id, tenantData);
-          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストに追加しました。needs_password: ${tenantData.needs_password}`);
         } else {
           // 既に顧客として存在する場合は、管理者情報も追加
           existing.admin_id = row.admin_id;
@@ -201,66 +139,55 @@ export async function POST(request: NextRequest) {
             // 顧客側でパスワードが必要な場合、または管理者側でパスワードが必要な場合はtrue
             existing.needs_password = customerNeedsPassword || adminNeedsPassword;
           }
-          console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) の情報を既存の顧客店舗に追加しました。needs_password: ${existing.needs_password} (顧客: ${customerNeedsPassword}, 管理者: ${adminNeedsPassword}, passwordMatch: ${passwordMatch})`);
         }
-      } else {
-        console.log(`管理者店舗 ${row.salon_name} (${row.tenant_code}) をリストから除外しました`);
       }
     }
 
-    console.log('パスワード検証後の管理者店舗:', { count: tenants.length });
-
-    // スーパー管理者もチェック
-    const trimmedInput = email.trim();
+    // スーパー管理者をチェック
+    const trimmedInput = email.trim().toLowerCase();
     const superAdminResult = await query(
       `SELECT super_admin_id, full_name, username, password_hash, is_active
        FROM super_admins 
-       WHERE username = $1`,
+       WHERE LOWER(TRIM(username)) = $1`,
       [trimmedInput]
     );
 
-    console.log('スーパー管理者検索結果:', { 
-      count: superAdminResult.rows.length,
-      details: superAdminResult.rows.map(r => ({
-        super_admin_id: r.super_admin_id,
-        username: r.username,
-        has_password_hash: !!r.password_hash,
-        is_active: r.is_active
-      }))
-    });
-
-    // スーパー管理者が見つかった場合
     if (superAdminResult.rows.length > 0) {
       const superAdmin = superAdminResult.rows[0];
       const hasPassword = !!superAdmin.password_hash;
       const passwordMatch = hasPassword && superAdmin.password_hash === passwordHash;
 
-      console.log(`スーパー管理者 ${superAdmin.username} パスワード検証:`, {
-        has_password: hasPassword,
-        match: passwordMatch,
-        is_active: superAdmin.is_active
-      });
-
       if (superAdmin.is_active && (passwordMatch || !hasPassword)) {
-        // スーパー管理者の場合は特別なフラグを返す
         return NextResponse.json({
           success: true,
           isSuperAdmin: true,
-          tenants: [] // スーパー管理者は店舗選択不要
+          tenants: []
         });
       }
     }
 
-    console.log('最終的な店舗リスト:', { 
-      count: tenants.length, 
-      tenants: tenants.map(t => ({ 
-        tenant_id: t.tenant_id, 
-        salon_name: t.salon_name, 
-        tenant_code: t.tenant_code,
-        has_customer: t.has_customer,
-        has_admin: t.has_admin
-      })) 
-    });
+    // 企業管理者をチェック
+    const companyAdminResult = await query(
+      `SELECT ca.company_admin_id, ca.company_id, ca.username, ca.email, ca.password_hash, ca.is_active
+       FROM company_admins ca
+       WHERE (LOWER(TRIM(ca.username)) = $1 OR LOWER(TRIM(ca.email)) = $1)
+       AND ca.is_active = true`,
+      [trimmedInput]
+    );
+
+    if (companyAdminResult.rows.length > 0) {
+      const companyAdmin = companyAdminResult.rows[0];
+      const hasPassword = !!companyAdmin.password_hash;
+      const passwordMatch = hasPassword && companyAdmin.password_hash === passwordHash;
+
+      if (passwordMatch || !hasPassword) {
+        return NextResponse.json({
+          success: true,
+          isCompanyAdmin: true,
+          tenants: []
+        });
+      }
+    }
 
     if (tenants.length === 0) {
       console.log('店舗が見つかりませんでした');

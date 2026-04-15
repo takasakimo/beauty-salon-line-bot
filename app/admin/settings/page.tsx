@@ -7,7 +7,9 @@ import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
 import AdminNav from '@/app/components/AdminNav';
 import { 
   Cog6ToothIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowPathIcon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 
 
@@ -57,6 +59,17 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
+  // 勤怠連携（らくっぽ勤怠 ↔ リザーブ シフト連携）
+  const [kintaiBaseUrl, setKintaiBaseUrl] = useState('');
+  const [kintaiCompanyCode, setKintaiCompanyCode] = useState('');
+  const [kintaiApiKey, setKintaiApiKey] = useState('');
+  const [kintaiApiKeyMasked, setKintaiApiKeyMasked] = useState<string | null>(null);
+  const [kintaiSaving, setKintaiSaving] = useState(false);
+  const [kintaiSyncLoading, setKintaiSyncLoading] = useState(false);
+  const [kintaiSyncResult, setKintaiSyncResult] = useState<{ synced: number; skipped: number; totalFromKintai: number; startDate: string; endDate: string } | null>(null);
+  const [kintaiError, setKintaiError] = useState('');
+  const [kintaiSuccess, setKintaiSuccess] = useState(false);
+
   useEffect(() => {
     // スーパー管理者の場合、tenantIdがURLに含まれているか確認
     if (typeof window !== 'undefined') {
@@ -71,7 +84,29 @@ export default function SettingsPage() {
     }
     
     loadSettings();
+    loadKintaiSettings();
   }, []);
+
+  const loadKintaiSettings = async () => {
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/integration/kintai/settings');
+      const response = await fetch(url, { credentials: 'include' });
+      if (response.status === 401) {
+        router.push('/');
+        return;
+      }
+      if (response.ok) {
+        const data = await response.json();
+        if (data.settings) {
+          setKintaiBaseUrl(data.settings.kintaiBaseUrl || '');
+          setKintaiCompanyCode(data.settings.kintaiCompanyCode || '');
+          setKintaiApiKeyMasked(data.settings.kintaiApiKeyMasked || null);
+        }
+      }
+    } catch (err) {
+      console.error('勤怠連携設定取得エラー:', err);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -86,7 +121,7 @@ export default function SettingsPage() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -146,7 +181,7 @@ export default function SettingsPage() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -240,6 +275,94 @@ export default function SettingsPage() {
       setPasswordError(`パスワードの変更中にエラーが発生しました: ${error.message || '不明なエラー'}`);
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const handleKintaiSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setKintaiSaving(true);
+    setKintaiError('');
+    setKintaiSuccess(false);
+    try {
+      const url = getApiUrlWithTenantId('/api/admin/integration/kintai/settings');
+      const body: { kintaiBaseUrl: string; kintaiCompanyCode: string; kintaiApiKey?: string } = {
+        kintaiBaseUrl: kintaiBaseUrl.trim(),
+        kintaiCompanyCode: kintaiCompanyCode.trim(),
+      };
+      if (kintaiApiKey.trim()) body.kintaiApiKey = kintaiApiKey.trim();
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      if (response.status === 401) {
+        router.push('/');
+        return;
+      }
+      const data = await response.json();
+      if (response.ok) {
+        setKintaiSuccess(true);
+        setKintaiApiKey('');
+        if (data.settings?.kintaiApiKeyMasked) setKintaiApiKeyMasked(data.settings.kintaiApiKeyMasked);
+        setTimeout(() => setKintaiSuccess(false), 3000);
+      } else {
+        setKintaiError(data.error || '設定の保存に失敗しました');
+      }
+    } catch (err: unknown) {
+      console.error('勤怠連携保存エラー:', err);
+      setKintaiError('設定の保存に失敗しました');
+    } finally {
+      setKintaiSaving(false);
+    }
+  };
+
+  const handleKintaiSync = async (period: 'month' | 'all' = 'month') => {
+    setKintaiSyncLoading(true);
+    setKintaiError('');
+    setKintaiSyncResult(null);
+    try {
+      let url = getApiUrlWithTenantId('/api/admin/integration/kintai/sync');
+      const sep = url.includes('?') ? '&' : '?';
+      url += `${sep}_t=${Date.now()}`;
+      if (period === 'all') {
+        const y = new Date().getFullYear();
+        url += `&start_date=${y - 1}-01-01&end_date=${y + 1}-12-31`;
+      }
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      if (response.status === 401 || response.status === 403) {
+        router.push('/');
+        return;
+      }
+      let data: { synced?: number; skipped?: number; totalFromKintai?: number; startDate?: string; endDate?: string; error?: string } = {};
+      try {
+        const text = await response.text();
+        data = (text ? JSON.parse(text) : {}) as typeof data;
+      } catch {
+        setKintaiError('レスポンスの解析に失敗しました。しばらく待ってから再度お試しください。');
+        return;
+      }
+      if (response.ok) {
+        setKintaiSyncResult({
+          synced: data.synced ?? 0,
+          skipped: data.skipped ?? 0,
+          totalFromKintai: data.totalFromKintai ?? 0,
+          startDate: data.startDate ?? '',
+          endDate: data.endDate ?? '',
+        });
+      } else {
+        setKintaiError(data.error || '同期に失敗しました');
+      }
+    } catch (err: unknown) {
+      console.error('勤怠同期エラー:', err);
+      setKintaiError('同期に失敗しました');
+    } finally {
+      setKintaiSyncLoading(false);
     }
   };
 
@@ -566,6 +689,112 @@ export default function SettingsPage() {
             <p className="text-sm text-gray-600">
               ログインに使用するパスワードを変更できます。定期的なパスワード変更をお勧めします。
             </p>
+          </div>
+
+          {/* らくっぽ勤怠連携セクション */}
+          <div className="bg-white shadow rounded-lg p-6 mt-6">
+            <div className="flex items-center mb-6">
+              <LinkIcon className="h-6 w-6 text-pink-600 mr-2" />
+              <h2 className="text-2xl font-bold text-gray-900">らくっぽ勤怠連携</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              らくっぽ勤怠で入力したシフトを、この店舗のスタッフシフトに反映します。勤怠の企業コード・APIキーを設定し、「同期」で取り込みます。スタッフはメールアドレスで照合されます。
+            </p>
+
+            {kintaiError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                {kintaiError}
+              </div>
+            )}
+            {kintaiSuccess && (
+              <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+                勤怠連携の設定を保存しました
+              </div>
+            )}
+            {kintaiSyncResult && (
+              <div className="mb-4 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
+                同期完了: {kintaiSyncResult.startDate} 〜 {kintaiSyncResult.endDate} … 勤怠から {kintaiSyncResult.totalFromKintai} 件取得、{kintaiSyncResult.synced} 件反映・{kintaiSyncResult.skipped} 件スキップ（メール未一致）
+              </div>
+            )}
+
+            <form onSubmit={handleKintaiSave} className="space-y-4">
+              <div>
+                <label htmlFor="kintai_base_url" className="block text-sm font-medium text-gray-700 mb-1">
+                  勤怠のベースURL <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="url"
+                  id="kintai_base_url"
+                  required
+                  value={kintaiBaseUrl}
+                  onChange={(e) => setKintaiBaseUrl(e.target.value)}
+                  placeholder="https://rakupochi-kintai.vercel.app"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">らくっぽ勤怠のURL（末尾のスラッシュなし）</p>
+              </div>
+              <div>
+                <label htmlFor="kintai_company_code" className="block text-sm font-medium text-gray-700 mb-1">
+                  勤怠の企業コード <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  id="kintai_company_code"
+                  required
+                  value={kintaiCompanyCode}
+                  onChange={(e) => setKintaiCompanyCode(e.target.value)}
+                  placeholder="例: COMPANY01"
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">勤怠の企業設定で表示されている企業コード</p>
+              </div>
+              <div>
+                <label htmlFor="kintai_api_key" className="block text-sm font-medium text-gray-700 mb-1">
+                  APIキー {kintaiApiKeyMasked ? '(変更時のみ入力)' : ''}
+                </label>
+                <input
+                  type="password"
+                  id="kintai_api_key"
+                  value={kintaiApiKey}
+                  onChange={(e) => setKintaiApiKey(e.target.value)}
+                  placeholder={kintaiApiKeyMasked ? `現在: ${kintaiApiKeyMasked}` : '勤怠側で発行した連携用APIキー'}
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                />
+                {kintaiApiKeyMasked && (
+                  <p className="mt-1 text-xs text-gray-500">登録済み。変更する場合のみ新しいキーを入力してください</p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={kintaiSaving}
+                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-pink-600 hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {kintaiSaving ? '保存中...' : '設定を保存'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleKintaiSync('month')}
+                  disabled={kintaiSyncLoading || !kintaiBaseUrl || !kintaiCompanyCode}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowPathIcon className={`h-5 w-5 mr-2 ${kintaiSyncLoading ? 'animate-spin' : ''}`} />
+                  {kintaiSyncLoading ? '同期中...' : '今月のシフトを同期'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleKintaiSync('all')}
+                  disabled={kintaiSyncLoading || !kintaiBaseUrl || !kintaiCompanyCode}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowPathIcon className={`h-5 w-5 mr-2 ${kintaiSyncLoading ? 'animate-spin' : ''}`} />
+                  {kintaiSyncLoading ? '同期中...' : '登録されているシフトをまとめて同期'}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                「今月のシフトを同期」は当月のみ。「まとめて同期」は前年1月〜翌年12月の範囲で勤怠に登録されているシフトを一括取り込みます。
+              </p>
+            </form>
           </div>
 
               </div>

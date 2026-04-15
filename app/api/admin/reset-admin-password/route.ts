@@ -16,10 +16,19 @@ export async function POST(request: NextRequest) {
       secretKey 
     } = body;
 
-    // シークレットキーの検証（環境変数から取得）
-    const expectedSecretKey = process.env.ADMIN_RESET_SECRET_KEY || 'CHANGE_THIS_SECRET_KEY_IN_PRODUCTION';
-    
-    if (secretKey !== expectedSecretKey) {
+    // シークレットキーの検証（環境変数から取得、本番では必須）
+    const expectedSecretKey = process.env.ADMIN_RESET_SECRET_KEY;
+    const isDefaultSecret = !expectedSecretKey || expectedSecretKey === 'CHANGE_THIS_SECRET_KEY_IN_PRODUCTION';
+
+    if (isDefaultSecret && process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: 'This endpoint is disabled: ADMIN_RESET_SECRET_KEY must be set in production' },
+        { status: 503 }
+      );
+    }
+
+    const secretToUse = expectedSecretKey || 'CHANGE_THIS_SECRET_KEY_IN_PRODUCTION';
+    if (secretKey !== secretToUse) {
       return NextResponse.json(
         { error: 'Unauthorized: Invalid secret key' },
         { status: 401 }
@@ -105,7 +114,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Admin password reset error:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

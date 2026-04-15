@@ -640,7 +640,7 @@ export default function CustomerManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -674,7 +674,7 @@ export default function CustomerManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 

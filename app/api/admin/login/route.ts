@@ -119,20 +119,13 @@ export async function POST(request: NextRequest) {
         maxAge: 60 * 60 * 24 * 7, // 7日間
         path: '/'
       });
-      console.log('セッションクッキー設定:', {
-        token: adminResult.sessionToken.substring(0, 10) + '...',
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7
-      });
     }
 
     return response;
   } catch (error: any) {
     console.error('ログインエラー:', error);
-    const errorMessage = error?.message || String(error);
     return NextResponse.json(
-      { success: false, error: `サーバーエラー: ${errorMessage}` },
+      { success: false, error: 'サーバーエラー' },
       { status: 500 }
     );
   }

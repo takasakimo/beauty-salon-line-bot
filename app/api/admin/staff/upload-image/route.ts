@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error uploading image:', error);
     return NextResponse.json(
-      { error: '画像のアップロードに失敗しました', details: error.message },
+      { error: '画像のアップロードに失敗しました' },
       { status: 500 }
     );
   }

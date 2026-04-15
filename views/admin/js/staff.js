@@ -430,7 +430,7 @@ function editShifts() {
     showToast('シフト編集機能は現在開発中です', 'info');
 }
 
-// らくポチ勤怠連携
+// らくっぽ勤怠連携
 function connectRakupochiKintai() {
     document.getElementById('rakupochiModal').style.display = 'block';
 }
@@ -449,7 +449,7 @@ function saveRakupochiSettings() {
     }
     
     // TODO: 実際のAPI連携処理を実装
-    showToast('らくポチ勤怠との連携設定を保存しました。\n今後自動的にシフト情報が同期されます。', 'success');
+    showToast('らくっぽ勤怠との連携設定を保存しました。\n今後自動的にシフト情報が同期されます。', 'success');
     closeRakupochiModal();
     
     // デモ用：シフトデータを更新

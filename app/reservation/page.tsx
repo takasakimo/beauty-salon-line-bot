@@ -857,7 +857,7 @@ function ReservationPageContent() {
                                     }
                                     
                                     const dayOfWeek = date.getDay();
-                                    const isClosed = availableSlots.length === 0 && (closedDaysInfo.closedDays.includes(dayOfWeek) || closedDaysInfo.temporaryClosedDays.includes(dateStr));
+                                    // 定休日以外（シフトなし等）はバツで表示。定休日・臨時休業日も同様にバツで統一（休業日オーバーレイは表示しない）
                                     
                                     // 日付の背景色を決定（土曜日=薄い青、日曜日/祝日=薄い赤）
                                     const isSaturday = dayOfWeek === 6;
@@ -957,21 +957,6 @@ function ReservationPageContent() {
                                               </div>
                                             );
                                           })}
-                                          
-                                          {/* 休業日の表示（縦書き） */}
-                                          {isClosed && (
-                                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 bg-opacity-80 pointer-events-none">
-                                              <span 
-                                                className="text-xs text-gray-600 font-semibold"
-                                                style={{ 
-                                                  writingMode: 'vertical-rl',
-                                                  textOrientation: 'upright'
-                                                }}
-                                              >
-                                                休業日
-                                              </span>
-                                            </div>
-                                          )}
                                         </div>
                                       </div>
                                     );

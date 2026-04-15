@@ -101,7 +101,7 @@ export default function SalesManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -133,7 +133,7 @@ export default function SalesManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -165,7 +165,7 @@ export default function SalesManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -208,7 +208,7 @@ export default function SalesManagement() {
         });
 
         if (response.status === 401) {
-          router.push('/admin/login');
+          router.push('/');
           return;
         }
 
@@ -244,7 +244,7 @@ export default function SalesManagement() {
         });
 
         if (response.status === 401) {
-          router.push('/admin/login');
+          router.push('/');
           return;
         }
 
@@ -287,7 +287,7 @@ export default function SalesManagement() {
       });
 
       if (response.status === 401) {
-        router.push('/admin/login');
+        router.push('/');
         return;
       }
 
@@ -565,7 +565,7 @@ export default function SalesManagement() {
         method: 'POST',
         credentials: 'include',
       });
-      router.push('/admin/login');
+      router.push('/');
     } catch (error) {
       console.error('ログアウトエラー:', error);
     }

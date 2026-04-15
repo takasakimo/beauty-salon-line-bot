@@ -40,7 +40,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Error deleting shift:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

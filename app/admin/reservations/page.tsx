@@ -896,6 +896,9 @@ export default function ReservationManagement() {
   const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list');
   const [showCancelled, setShowCancelled] = useState(false);
   const [highlightedReservationId, setHighlightedReservationId] = useState<number | null>(null);
+  const [sessionTenantId, setSessionTenantId] = useState<number | null>(null);
+  /** 日付ごとのシフト入りスタッフID一覧（予約フォームのスタッフ選択を制限） */
+  const [staffIdsWithShiftByDate, setStaffIdsWithShiftByDate] = useState<Record<string, Set<number>>>({});
 
   useEffect(() => {
     // URLパラメータから日付を取得
@@ -921,6 +924,11 @@ export default function ReservationManagement() {
         }, 3000);
       }
     }
+    // セッションからtenantIdを取得（available-slots等で正しいテナントを指定するため）
+    fetch('/api/admin/session', { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data?.tenantId != null && setSessionTenantId(data.tenantId))
+      .catch(() => {});
     // 他のデータ（顧客、メニュー、スタッフ）を読み込む
     loadCustomers();
     loadMenus();
@@ -933,13 +941,50 @@ export default function ReservationManagement() {
   }, [filterDate, filterStartDate, filterEndDate, filterStatus]);
 
   // メニュー、日付が選択されたら利用可能な時間を取得（スタッフは任意）
+  // sessionTenantIdが取得された後も再実行（テナント確定後に正しい空き時間を表示）
   useEffect(() => {
     if (formData.selectedMenuIds.length > 0 && formData.reservation_date) {
       loadAvailableTimes();
     } else {
       setAvailableTimes([]);
     }
-  }, [formData.staff_id, formData.selectedMenuIds, formData.reservation_date]);
+  }, [formData.staff_id, formData.selectedMenuIds, formData.reservation_date, sessionTenantId]);
+
+  // 予約日が選択されたら、その日のシフト入りスタッフを取得（スタッフドロップダウンを制限）
+  useEffect(() => {
+    if (!showModal || !formData.reservation_date) return;
+    const dateKey = formData.reservation_date.split('T')[0];
+    const url = getApiUrlWithTenantId(`/api/admin/shifts?start_date=${dateKey}&end_date=${dateKey}`, sessionTenantId);
+    fetch(url, { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : [])
+      .then((shifts: Array<{ staff_id: number; is_off?: boolean; start_time: string | null; end_time: string | null }>) => {
+        const ids = new Set<number>();
+        shifts.forEach((s) => {
+          if (!s.is_off && s.start_time && s.end_time) ids.add(s.staff_id);
+        });
+        setStaffIdsWithShiftByDate((prev) => ({ ...prev, [dateKey]: ids }));
+      })
+      .catch(() => setStaffIdsWithShiftByDate((prev) => ({ ...prev, [dateKey]: new Set() })));
+  }, [showModal, formData.reservation_date, sessionTenantId]);
+
+  // 選択日にシフトがあるスタッフのみ表示（シフト未登録のスタッフは選択不可）
+  const selectableStaff = useMemo(() => {
+    if (!formData.reservation_date) return [];
+    const dateKey = formData.reservation_date.split('T')[0];
+    const ids = staffIdsWithShiftByDate[dateKey];
+    if (!ids) return []; // シフト情報取得前は空（ロード中）
+    return staff.filter((s) => ids.has(s.staff_id));
+  }, [staff, formData.reservation_date, staffIdsWithShiftByDate]);
+
+  // 選択中のスタッフが当日シフトに入っていない場合は選択をクリア
+  useEffect(() => {
+    if (!formData.staff_id || !formData.reservation_date) return;
+    const dateKey = formData.reservation_date.split('T')[0];
+    const ids = staffIdsWithShiftByDate[dateKey];
+    if (ids === undefined) return; // シフト取得中はクリアしない
+    if (ids.has(parseInt(formData.staff_id, 10))) return;
+    setFormData((prev) => ({ ...prev, staff_id: '', reservation_time: '' }));
+  }, [formData.staff_id, formData.reservation_date, staffIdsWithShiftByDate]);
 
   const loadData = async () => {
     await Promise.all([
@@ -1084,19 +1129,23 @@ export default function ReservationManagement() {
       const menuIdsParam = formData.selectedMenuIds.join(',');
       // スタッフが選択されている場合はstaff_idを渡す、そうでなければ渡さない
       const staffParam = formData.staff_id ? `&staff_id=${formData.staff_id}` : '';
-      const response = await fetch(
-        `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${menuIdsParam}${staffParam}`
-      );
+      const baseUrl = `/api/reservations/available-slots?date=${formData.reservation_date}&menu_id=${menuIdsParam}${staffParam}`;
+      const url = getApiUrlWithTenantId(baseUrl, sessionTenantId);
+      const response = await fetch(url, {
+        credentials: 'include',
+      });
       if (response.ok) {
         const data = await response.json();
         setAvailableTimes(data);
         // 利用可能な時間がない場合、選択されている時間をクリア
         if (data.length === 0) {
-          setFormData({ ...formData, reservation_time: '' });
+          setFormData((prev) => ({ ...prev, reservation_time: '' }));
         } else if (formData.reservation_time && !data.includes(formData.reservation_time)) {
           // 選択されている時間が利用不可になった場合、最初の利用可能な時間を設定
-          setFormData({ ...formData, reservation_time: data[0] });
+          setFormData((prev) => ({ ...prev, reservation_time: data[0] }));
         }
+      } else {
+        setAvailableTimes([]);
       }
     } catch (error) {
       console.error('利用可能時間取得エラー:', error);
@@ -1112,37 +1161,18 @@ export default function ReservationManagement() {
       markReservationAsViewed(reservation.reservation_id);
       
       setEditingReservation(reservation);
-      // reservation_dateをJSTとして解釈（タイムゾーン変換を行わない）
-      let dateStr = reservation.reservation_date;
-      
-      // 日付と時刻を直接抽出（JST時刻として扱う）
+      // reservation_dateをJSTとして解釈（正規表現で直接抽出してタイムゾーン変換を回避）
+      const dateStr = reservation.reservation_date;
       let reservationDate = '';
       let reservationTime = '';
-      
       if (typeof dateStr === 'string') {
-        // YYYY-MM-DDTHH:mm:ss+09:00形式またはYYYY-MM-DD HH:mm:ss形式から日付と時刻を抽出
-        const dateTimeMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2}):/);
+        // YYYY-MM-DDTHH:mm:ss+09:00 または YYYY-MM-DD HH:mm:ss 形式から日付・時刻を直接抽出
+        const dateTimeMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/);
         if (dateTimeMatch) {
-          reservationDate = dateTimeMatch[1]; // YYYY-MM-DD
-          reservationTime = `${dateTimeMatch[2]}:${dateTimeMatch[3]}`; // HH:mm
-        } else {
-          // フォールバック: Dateオブジェクトから取得（ただし、タイムゾーン変換を行わない）
-          // タイムゾーン情報がない場合は+09:00を付与してからDateオブジェクトを作成
-          if (!dateStr.includes('+') && !dateStr.includes('Z')) {
-            dateStr = dateStr.replace(' ', 'T') + '+09:00';
-          }
-          const dateTime = new Date(dateStr);
-          // JST時刻として扱うため、UTC時刻に9時間を加算してから日付と時刻を取得
-          const jstYear = dateTime.getUTCFullYear();
-          const jstMonth = String(dateTime.getUTCMonth() + 1).padStart(2, '0');
-          const jstDay = String(dateTime.getUTCDate()).padStart(2, '0');
-          const jstHour = String(dateTime.getUTCHours()).padStart(2, '0');
-          const jstMinute = String(dateTime.getUTCMinutes()).padStart(2, '0');
-          reservationDate = `${jstYear}-${jstMonth}-${jstDay}`;
-          reservationTime = `${jstHour}:${jstMinute}`;
+          reservationDate = dateTimeMatch[1];
+          reservationTime = `${dateTimeMatch[2]}:${dateTimeMatch[3]}`;
         }
       }
-      
       // 複数メニューの場合はmenus配列から取得、そうでなければmenu_idから
       const menuIds = reservation.menus && reservation.menus.length > 0
         ? reservation.menus.map(m => m.menu_id)
@@ -1956,15 +1986,19 @@ export default function ReservationManagement() {
                           onChange={(e) => {
                             setFormData({ ...formData, staff_id: e.target.value, reservation_time: '' });
                           }}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500"
+                          disabled={formData.reservation_date ? !staffIdsWithShiftByDate[formData.reservation_date.split('T')[0]] : false}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-pink-500 focus:border-pink-500 disabled:bg-gray-100 disabled:cursor-wait"
                         >
                           <option value="">スタッフ選択なし</option>
-                          {staff.map((s) => (
+                          {selectableStaff.map((s) => (
                             <option key={s.staff_id} value={s.staff_id}>
                               {s.name}
                             </option>
                           ))}
                         </select>
+                        {formData.reservation_date && staffIdsWithShiftByDate[formData.reservation_date.split('T')[0]] && selectableStaff.length === 0 && (
+                          <p className="mt-1 text-xs text-amber-600">この日にシフト登録があるスタッフがいません。シフト管理で登録してください。</p>
+                        )}
                       </div>
                     </div>
 

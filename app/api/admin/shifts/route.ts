@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching shifts:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error saving shifts:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error.message },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
