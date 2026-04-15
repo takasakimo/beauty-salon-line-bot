@@ -309,7 +309,7 @@ export default function CustomerManagement() {
         product_category: purchase.product_category || '',
         quantity: purchase.quantity.toString(),
         unit_price: purchase.unit_price.toString(),
-        purchase_date: purchaseDate.toISOString().split('T')[0],
+        purchase_date: purchaseDate.toLocaleDateString('sv-SE'),
         purchase_time: purchaseDate.toTimeString().slice(0, 5),
         staff_id: purchase.staff_id?.toString() || '',
         notes: purchase.notes || ''
@@ -323,7 +323,7 @@ export default function CustomerManagement() {
         product_category: '',
         quantity: '1',
         unit_price: '',
-        purchase_date: now.toISOString().split('T')[0],
+        purchase_date: now.toLocaleDateString('sv-SE'),
         purchase_time: now.toTimeString().slice(0, 5),
         staff_id: '',
         notes: ''
@@ -455,7 +455,7 @@ export default function CustomerManagement() {
     setHistoryFormData({
       menu_id: '',
       staff_id: '',
-      reservation_date: now.toISOString().split('T')[0],
+      reservation_date: now.toLocaleDateString('sv-SE'),
       reservation_time: now.toTimeString().slice(0, 5),
       price: '',
       notes: ''

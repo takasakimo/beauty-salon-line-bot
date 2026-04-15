@@ -242,14 +242,16 @@ export default function AdminDashboard() {
                     </label>
                   </div>
                   {stats.newReservations.map((reservation) => {
-                    // reservation_dateをJSTとして解釈
-                    let dateStr = reservation.reservation_date;
-                    // タイムゾーン情報がない場合は+09:00を付与
-                    if (typeof dateStr === 'string' && !dateStr.includes('+') && !dateStr.includes('Z')) {
-                      dateStr = dateStr.replace(' ', 'T') + '+09:00';
+                    // reservation_dateから正規表現で直接JST日付・時刻を抽出
+                    const dateStr = reservation.reservation_date;
+                    const dateMatch = typeof dateStr === 'string' ? dateStr.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/) : null;
+                    const reservationDateKey = dateMatch ? dateMatch[1] : '';
+                    // 表示用: toLocaleStringでJST表示
+                    let displayDateStr = dateStr;
+                    if (typeof displayDateStr === 'string' && !displayDateStr.includes('+') && !displayDateStr.includes('Z')) {
+                      displayDateStr = displayDateStr.replace(' ', 'T') + '+09:00';
                     }
-                    const reservationDate = new Date(dateStr);
-                    const formattedDate = reservationDate.toLocaleString('ja-JP', {
+                    const formattedDate = new Date(displayDateStr).toLocaleString('ja-JP', {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
@@ -257,7 +259,7 @@ export default function AdminDashboard() {
                       minute: '2-digit',
                       timeZone: 'Asia/Tokyo'
                     });
-                    
+
                     return (
                       <div
                         key={reservation.reservation_id}
@@ -271,7 +273,7 @@ export default function AdminDashboard() {
                           className="mt-1 h-4 w-4 text-pink-600 focus:ring-pink-500 border-gray-300 rounded flex-shrink-0"
                         />
                         <Link
-                          href={`${getAdminLinkUrl('/admin/reservations')}?date=${reservationDate.toISOString().split('T')[0]}&highlight=${reservation.reservation_id}`}
+                          href={`${getAdminLinkUrl('/admin/reservations')}?date=${reservationDateKey}&highlight=${reservation.reservation_id}`}
                           className="flex-1"
                           onClick={async () => {
                             // 予約を既読にする
@@ -345,7 +347,7 @@ export default function AdminDashboard() {
             </Link>
 
             <Link
-              href={`${getAdminLinkUrl('/admin/reservations')}?date=${new Date().toISOString().split('T')[0]}`}
+              href={`${getAdminLinkUrl('/admin/reservations')}?date=${new Date().toLocaleDateString('sv-SE')}`}
               className="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-100 hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="p-5">

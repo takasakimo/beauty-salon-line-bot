@@ -439,7 +439,7 @@ export default function ProductManagement() {
       customer_id: '',
       quantity: '1',
       staff_id: '',
-      purchase_date: now.toISOString().split('T')[0],
+      purchase_date: now.toLocaleDateString('sv-SE'),
       purchase_time: now.toTimeString().slice(0, 5),
       notes: ''
     });
@@ -555,7 +555,7 @@ export default function ProductManagement() {
     setBulkSaleFormData({
       customer_id: '',
       staff_id: '',
-      purchase_date: now.toISOString().split('T')[0],
+      purchase_date: now.toLocaleDateString('sv-SE'),
       purchase_time: now.toTimeString().slice(0, 5),
       notes: '',
       products: selectedProductsData

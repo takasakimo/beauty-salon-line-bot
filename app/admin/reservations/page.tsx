@@ -4,6 +4,11 @@ import { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getApiUrlWithTenantId, getAdminLinkUrl } from '@/lib/admin-utils';
+
+/** ローカルタイムゾーン（ブラウザのJST）でYYYY-MM-DDを返す。toISOString()はUTCを返すため使用禁止 */
+function toLocalDateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 import AdminNav from '@/app/components/AdminNav';
 import { 
   PlusIcon,
@@ -389,8 +394,8 @@ function TimelineScheduleView({
     const loadShifts = async () => {
       if (weekDates.length === 0) return;
       
-      const startDate = weekDates[0].toISOString().split('T')[0];
-      const endDate = weekDates[weekDates.length - 1].toISOString().split('T')[0];
+      const startDate = toLocalDateKey(weekDates[0]);
+      const endDate = toLocalDateKey(weekDates[weekDates.length - 1]);
       
       try {
         // 1回のAPIリクエストで全期間分のシフトを取得
@@ -422,7 +427,7 @@ function TimelineScheduleView({
           
           // 日付がない場合は空配列を設定
           weekDates.forEach(date => {
-            const dateKey = date.toISOString().split('T')[0];
+            const dateKey = toLocalDateKey(date);
             if (!shiftsMap[dateKey]) {
               shiftsMap[dateKey] = [];
             }
@@ -435,7 +440,7 @@ function TimelineScheduleView({
         // エラー時は空のマップを設定
         const emptyMap: Record<string, Array<{ staff_id: number; start_time: string | null; end_time: string | null; is_off: boolean }>> = {};
         weekDates.forEach(date => {
-          const dateKey = date.toISOString().split('T')[0];
+          const dateKey = toLocalDateKey(date);
           emptyMap[dateKey] = [];
         });
         setShiftsByDate(emptyMap);
@@ -485,7 +490,7 @@ function TimelineScheduleView({
   // 日付とスタッフをキーとして予約をグループ化（メモ化でパフォーマンス改善）
   const reservationsByDateAndStaff = useMemo(() => {
     return weekDates.reduce((acc, date) => {
-      const dateKey = date.toISOString().split('T')[0];
+      const dateKey = toLocalDateKey(date);
       acc[dateKey] = {
         // 店舗全体（スタッフ未指定）
         all: reservations.filter(r => {
@@ -662,7 +667,7 @@ function TimelineScheduleView({
           
           {/* 各日付のヘッダー（結合セル） */}
           {weekDates.map((date) => {
-            const dateKey = date.toISOString().split('T')[0];
+            const dateKey = toLocalDateKey(date);
             const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
             const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
             // 出勤しているスタッフを取得
@@ -720,7 +725,7 @@ function TimelineScheduleView({
           
           {/* 日付列 - 店舗全体と各スタッフを並べて表示 */}
           {weekDates.map((date) => {
-            const dateKey = date.toISOString().split('T')[0];
+            const dateKey = toLocalDateKey(date);
             const dayData = reservationsByDateAndStaff[dateKey] || { all: [], byStaff: {} };
             const totalCount = dayData.all.length + Object.values(dayData.byStaff).reduce((sum, arr) => sum + arr.length, 0);
             
@@ -1191,7 +1196,7 @@ export default function ReservationManagement() {
       });
     } else {
       setEditingReservation(null);
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalDateKey(new Date());
       setFormData({
         customer_id: '',
         customer_name: '',

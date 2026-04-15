@@ -273,9 +273,11 @@ function MyPageContent() {
       return;
     }
 
-    const dateTime = new Date(reservation.reservation_date);
-    const date = dateTime.toISOString().split('T')[0];
-    const time = dateTime.toTimeString().slice(0, 5);
+    // 正規表現で直接JST日時を抽出（toISOString/toTimeStringはUTC/ローカルTZ変換が発生するため使用禁止）
+    const dateStr = reservation.reservation_date;
+    const dtMatch = typeof dateStr === 'string' ? dateStr.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/) : null;
+    const date = dtMatch ? dtMatch[1] : '';
+    const time = dtMatch ? `${dtMatch[2]}:${dtMatch[3]}` : '';
 
     setEditFormData({
       menu_id: reservation.menu_id.toString(),

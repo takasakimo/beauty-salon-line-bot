@@ -90,7 +90,7 @@ export default function DailyTimeTable({
 
   // 選択された日付の営業時間を取得
   const getDayBusinessHours = () => {
-    const dateStr = selectedDate.toISOString().split('T')[0];
+    const dateStr = selectedDate.toLocaleDateString('sv-SE');
     const dayOfWeek = selectedDate.getDay();
     const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayName = dayNames[dayOfWeek];
@@ -149,7 +149,7 @@ export default function DailyTimeTable({
   const loadShifts = async () => {
     try {
       setLoading(true);
-      const dateStr = selectedDate.toISOString().split('T')[0];
+      const dateStr = selectedDate.toLocaleDateString('sv-SE');
       const startDate = dateStr;
       const endDate = dateStr;
 
@@ -667,7 +667,7 @@ export default function DailyTimeTable({
     }
 
     try {
-      const dateStr = selectedDate.toISOString().split('T')[0];
+      const dateStr = selectedDate.toLocaleDateString('sv-SE');
       const breakTimes = typeof currentShift.break_times === 'string' 
         ? JSON.parse(currentShift.break_times) 
         : (currentShift.break_times || []);
@@ -714,7 +714,7 @@ export default function DailyTimeTable({
   const handleCellClick = (staffId: number, time: string) => {
     const shift = shifts[staffId] || {
       staff_id: staffId,
-      shift_date: selectedDate.toISOString().split('T')[0],
+      shift_date: selectedDate.toLocaleDateString('sv-SE'),
       start_time: null,
       end_time: null,
       is_off: false,
@@ -812,7 +812,7 @@ export default function DailyTimeTable({
     saveShift(staffId);
   };
 
-  const dateStr = selectedDate.toISOString().split('T')[0];
+  const dateStr = selectedDate.toLocaleDateString('sv-SE');
   const dateObj = new Date(selectedDate);
   const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
   const registeredCount = Object.values(shifts).filter(s => s.start_time && s.end_time && !s.is_off).length;

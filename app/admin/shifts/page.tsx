@@ -525,7 +525,7 @@ export default function ShiftManagement() {
                         </label>
                         <input
                           type="date"
-                          value={selectedDailyDate.toISOString().split('T')[0]}
+                          value={selectedDailyDate.toLocaleDateString('sv-SE')}
                           onChange={(e) => setSelectedDailyDate(new Date(e.target.value))}
                           className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-pink-500 focus:border-pink-500"
                         />
@@ -547,7 +547,7 @@ export default function ShiftManagement() {
                       <p className="text-gray-600 mb-4">日付を選択してください</p>
                       <input
                         type="date"
-                        value={new Date().toISOString().split('T')[0]}
+                        value={new Date().toLocaleDateString('sv-SE')}
                         onChange={(e) => {
                           setSelectedDailyDate(new Date(e.target.value));
                           setViewMode('daily');
